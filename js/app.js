@@ -1,18 +1,20 @@
 // ═══════════════════════════════════════════════════════
-//  SAFECHECKS — Core App v5
-//  Department-aware: Kitchen · FOH · Management
+//  SAFECHECKS — Core App v5.2
+//  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.0.0';
+const APP_VERSION = '5.2.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
 const state = {
-  records:  [],
-  config:   {},
-  settings: {},
-  device:   null,
+  records:      [],
+  config:       {},
+  settings:     {},
+  device:       null,
   weeklyRating: '',
+  tabDept:      {},   // active dept per tab for management
+  equipChecks:  {},   // current equipment check UI state
 };
 
 // ── Init ──────────────────────────────────────────────
@@ -25,7 +27,6 @@ document.addEventListener('DOMContentLoaded', () => {
   checkConnectionStatus();
 
   if (!isDeviceSetup()) {
-    // First time — show setup screen
     showDeviceSetup(() => {
       applyDeviceIdentity();
       rebuildAllChecklists();
@@ -65,7 +66,7 @@ function bootSheets() {
     });
     pullAllRecords(true).then(() => {
       updateDashboard();
-      renderTempLog();
+      renderEquipmentLog();
       startAutoPoll();
     });
   }
@@ -79,14 +80,14 @@ function loadState() {
     const cfg = localStorage.getItem(CONFIG_KEY);
     state.config = cfg ? JSON.parse(cfg) : {};
   } catch(e) { state.records = []; state.config = {}; }
-  renderTempLog();
+  renderEquipmentLog();
 }
 function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.records)); }
 
 // ── Date helpers ──────────────────────────────────────
-function todayStr()    { return new Date().toISOString().split('T')[0]; }
-function nowTimestamp(){ return new Date().toLocaleString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}); }
-function nowISO()      { return new Date().toISOString(); }
+function todayStr()     { return new Date().toISOString().split('T')[0]; }
+function nowTimestamp() { return new Date().toLocaleString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}); }
+function nowISO()       { return new Date().toISOString(); }
 
 function renderTodayDate() {
   const el = document.getElementById('today-date');
@@ -118,28 +119,63 @@ function showTab(tabId) {
     if (state.config.sheetsUrl) pullAllRecords().then(updateDashboard);
     else updateDashboard();
   }
-  if (tabId === 'tasks') {
-    renderTasksTab();
+  if (tabId === 'tasks') renderTasksTab();
+  if (tabId === 'closing') renderUndoneTasksSection();
+
+  if (tabId === 'equipment') {
+    const dept = getFormDept('equipment');
+    buildEquipmentCheckUI(dept);
+    renderEquipmentLog(dept);
+    updateEquipDayStatus();
+    if (state.config.sheetsUrl) pullAllRecords().then(() => { renderEquipmentLog(dept); updateEquipDayStatus(); });
   }
-  if (tabId === 'closing') {
-    renderUndoneTasksSection();
-  }
-  if (tabId === 'temperature') {
-    applyFoodProbeVisibility();
+  if (tabId === 'probe') {
     renderFoodProbeLog();
     updateFoodProbeDayStatus();
-    renderTempLog();
-    if (state.config.sheetsUrl) {
-      pullAllRecords().then(() => {
-        renderTempLog();
-        renderFoodProbeLog();
-        updateFoodProbeDayStatus();
-      });
-    }
+    if (state.config.sheetsUrl) pullAllRecords().then(() => { renderFoodProbeLog(); updateFoodProbeDayStatus(); });
   }
   if (tabId === 'history') {
     if (state.config.sheetsUrl) pullAllRecords().then(loadHistory);
     else loadHistory();
+  }
+}
+
+// ── Form dept (management can switch per-form) ────────
+function getFormDept(type) {
+  if (!isManagement()) return currentDept();
+  return state.tabDept[type] || 'kitchen';
+}
+
+function setFormDept(type, dept) {
+  state.tabDept[type] = dept;
+  // Update selector button states
+  const selector = document.getElementById(`${type}-dept-selector`);
+  if (selector) {
+    selector.querySelectorAll('.dept-bar-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.dept === dept);
+    });
+  }
+  // Rebuild form content for new dept
+  if (['opening','closing','cleaning'].includes(type)) {
+    rebuildChecklist(type, dept);
+    const staff = getDeptStaff(dept);
+    const formEl = document.getElementById('form-' + type);
+    if (formEl) {
+      formEl.querySelectorAll('.signed-by-select').forEach(sel => {
+        sel.innerHTML = `<option value="">Select staff member...</option>` +
+          staff.map(s => `<option value="${s.name}">${s.name} — ${s.role}</option>`).join('');
+      });
+    }
+  } else if (type === 'equipment') {
+    const staff = getDeptStaff(dept);
+    const sel = document.getElementById('equip-staff');
+    if (sel) {
+      sel.innerHTML = `<option value="">Select staff member...</option>` +
+        staff.map(s => `<option value="${s.name}">${s.name} — ${s.role}</option>`).join('');
+    }
+    buildEquipmentCheckUI(dept);
+    renderEquipmentLog(dept);
+    updateEquipDayStatus();
   }
 }
 
@@ -150,7 +186,9 @@ function submitChecklist(type) {
   const signed   = signedEl?.value?.trim();
   if (!signed) { showToast('Please select a staff member to sign off', 'error'); return; }
 
-  const dept   = currentDept();
+  // Use active dept for this form (management may have switched)
+  const dept = getFormDept(type);
+
   const record = {
     id:        crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
     type, dept,
@@ -193,109 +231,256 @@ function submitChecklist(type) {
   setTimeout(() => showTab('dashboard'), 1200);
 }
 
-// ── Temperature logging ───────────────────────────────
-function logTemperature() {
-  const location = document.getElementById('temp-location').value;
-  const value    = document.getElementById('temp-value').value;
-  const probe    = document.getElementById('temp-probe').value;
-  const action   = document.getElementById('temp-action').value;
-  const staff    = document.getElementById('temp-staff').value;
-
-  if (!location)    { showToast('Please select a location', 'error'); return; }
-  if (value === '')  { showToast('Please enter a temperature', 'error'); return; }
-  if (!staff.trim()) { showToast('Please select a staff member', 'error'); return; }
-
-  const temp   = parseFloat(value);
-  const status = getTempStatus(location, temp);
-  const dept   = currentDept();
-
-  const record = {
-    id:        crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
-    type:      'temperature', dept,
-    date:      todayStr(),
-    timestamp: nowTimestamp(),
-    iso:       nowISO(),
-    fields: {
-      temp_location:          location,
-      temp_value:             temp.toString(),
-      temp_unit:              '°C',
-      temp_probe:             probe,
-      temp_status:            status,
-      temp_corrective_action: action || 'None required',
-      temp_logged_by:         staff,
-    },
-    summary: `${location}: ${temp}°C (${status}) · ${staff}`,
+// ── Equipment check thresholds ────────────────────────
+function getEquipThresholds(type) {
+  const t = {
+    fridge:  { label:'OK ≤5°C  ·  Alert 5–8°C  ·  Fail >8°C',            ok:v=>v<=5,    warn:v=>v>5&&v<=8,     fail:v=>v>8    },
+    freezer: { label:'OK ≤-18°C  ·  Alert -18 to -15°C  ·  Fail >-15°C',  ok:v=>v<=-18,  warn:v=>v>-18&&v<=-15, fail:v=>v>-15  },
+    hothold: { label:'OK ≥63°C  ·  Alert 55–63°C  ·  Fail <55°C',          ok:v=>v>=63,   warn:v=>v>=55&&v<63,   fail:v=>v<55   },
+    oven:    { label:'OK ≥75°C  ·  Alert 65–75°C  ·  Fail <65°C',          ok:v=>v>=75,   warn:v=>v>=65&&v<75,   fail:v=>v<65   },
+    other:   { label:'',                                                     ok:()=>true,   warn:()=>false,        fail:()=>false },
   };
+  return t[type] || t.other;
+}
 
-  state.records.push(record);
+// ── Build equipment check UI ──────────────────────────
+function buildEquipmentCheckUI(dept) {
+  const equipment = getDeptEquipment(dept);
+  const container = document.getElementById('equip-check-list');
+  if (!container) return;
+
+  if (!equipment.length) {
+    container.innerHTML = `<div class="empty-state" style="padding:30px 0 10px">No equipment configured for this department.<br>Add equipment in <strong>Settings → Equipment</strong>.</div>`;
+    return;
+  }
+
+  state.equipChecks = {};
+
+  // Group by type
+  const groups = {};
+  equipment.forEach(e => { if (!groups[e.type]) groups[e.type]=[]; groups[e.type].push(e); });
+
+  const ORDER  = ['fridge','freezer','hothold','oven','other'];
+  const ICONS  = { fridge:'🧊', freezer:'❄', hothold:'♨', oven:'🔥', other:'⊕' };
+  const LABELS = { fridge:'Fridges', freezer:'Freezers', hothold:'Hot Hold', oven:'Ovens & Grills', other:'Other' };
+
+  container.innerHTML = ORDER
+    .filter(t => groups[t]?.length)
+    .map(t => {
+      const th = getEquipThresholds(t);
+      return `
+        <div class="equip-group">
+          <div class="equip-group-header">${ICONS[t]} ${LABELS[t]}</div>
+          ${groups[t].map(e => `
+            <div class="equip-check-row" id="equip-row-${e.id}" data-equip-id="${e.id}" data-type="${t}">
+              <div class="equip-row-main">
+                <div class="equip-row-info">
+                  <div class="equip-row-name">${e.name}</div>
+                  ${th.label ? `<div class="equip-row-range">${th.label}</div>` : ''}
+                </div>
+                <div class="equip-status-buttons">
+                  <button class="equip-btn equip-ok"   onclick="selectEquipStatus('${e.id}','OK')">✓<span> OK</span></button>
+                  <button class="equip-btn equip-warn" onclick="selectEquipStatus('${e.id}','WARNING')">⚠<span> Alert</span></button>
+                  <button class="equip-btn equip-fail" onclick="selectEquipStatus('${e.id}','FAIL')">✗<span> Fail</span></button>
+                </div>
+              </div>
+              <div class="equip-row-detail hidden" id="equip-detail-${e.id}">
+                <input type="number" step="0.1" class="equip-temp-input"
+                  id="equip-temp-${e.id}" placeholder="Temperature °C (optional)"
+                  oninput="autoStatusFromTemp('${e.id}','${t}',this.value)"/>
+                <textarea class="equip-action-input hidden"
+                  id="equip-action-${e.id}"
+                  placeholder="Corrective action taken — e.g. Adjusted thermostat, moved stock to backup fridge..." rows="2"></textarea>
+              </div>
+            </div>`).join('')}
+        </div>`;
+    }).join('') +
+    `<div class="equip-submit-bar">
+      <button class="btn-submit" onclick="submitAllEquipment()">
+        <span>Submit All Checks</span><span class="btn-icon">→</span>
+      </button>
+    </div>`;
+}
+
+// ── Select status on an equipment row ─────────────────
+function selectEquipStatus(equipId, status) {
+  const row      = document.getElementById(`equip-row-${equipId}`);
+  const detail   = document.getElementById(`equip-detail-${equipId}`);
+  const actionEl = document.getElementById(`equip-action-${equipId}`);
+  if (!row) return;
+
+  // Button selected state
+  row.querySelectorAll('.equip-btn').forEach(b => b.classList.remove('selected'));
+  const cls = status === 'OK' ? '.equip-ok' : status === 'WARNING' ? '.equip-warn' : '.equip-fail';
+  row.querySelector(cls)?.classList.add('selected');
+
+  // Row border colour
+  row.classList.remove('status-ok','status-warn','status-fail','needs-action');
+  row.classList.add(status === 'OK' ? 'status-ok' : status === 'WARNING' ? 'status-warn' : 'status-fail');
+
+  // Show/hide detail section
+  detail?.classList.remove('hidden');
+  if (actionEl) {
+    actionEl.classList.toggle('hidden', status !== 'FAIL');
+    actionEl.required = status === 'FAIL';
+  }
+
+  if (!state.equipChecks[equipId]) state.equipChecks[equipId] = {};
+  state.equipChecks[equipId].status = status;
+}
+
+// ── Auto-set status when temperature is typed ─────────
+function autoStatusFromTemp(equipId, type, tempStr) {
+  if (tempStr === '' || tempStr === null) return;
+  const temp = parseFloat(tempStr);
+  if (isNaN(temp)) return;
+  const th = getEquipThresholds(type);
+  const status = th.fail(temp) ? 'FAIL' : th.warn(temp) ? 'WARNING' : 'OK';
+  selectEquipStatus(equipId, status);
+  if (!state.equipChecks[equipId]) state.equipChecks[equipId] = {};
+  state.equipChecks[equipId].temp = tempStr;
+}
+
+// ── Submit all equipment checks ───────────────────────
+function submitAllEquipment() {
+  const staff = document.getElementById('equip-staff')?.value?.trim();
+  const probe = document.getElementById('equip-probe')?.value || 'Digital Probe 1';
+  const dept  = getFormDept('equipment');
+
+  if (!staff) { showToast('Please select a staff member', 'error'); return; }
+
+  const rows = Array.from(document.querySelectorAll('.equip-check-row'));
+  if (!rows.length) { showToast('No equipment to check', 'error'); return; }
+
+  // All rows must have a status
+  const unchecked = rows.filter(r =>
+    !r.classList.contains('status-ok') &&
+    !r.classList.contains('status-warn') &&
+    !r.classList.contains('status-fail'));
+  if (unchecked.length) {
+    unchecked.forEach(r => r.classList.add('needs-action'));
+    showToast(`${unchecked.length} item${unchecked.length>1?'s':''} not yet checked`, 'error');
+    unchecked[0].scrollIntoView({ behavior:'smooth', block:'center' });
+    return;
+  }
+
+  // FAIL rows must have a corrective action
+  let missingAction = false;
+  rows.forEach(row => {
+    if (row.classList.contains('status-fail')) {
+      const id = row.dataset.equipId;
+      const action = document.getElementById(`equip-action-${id}`)?.value?.trim();
+      if (!action) { row.classList.add('needs-action'); missingAction = true; }
+      else row.classList.remove('needs-action');
+    }
+  });
+  if (missingAction) { showToast('Enter corrective actions for all failed items', 'error'); return; }
+
+  // Submit one record per row
+  let submitted = 0;
+  rows.forEach(row => {
+    const equipId = row.dataset.equipId;
+    const type    = row.dataset.type;
+    const equip   = (state.settings.equipment || []).find(e => e.id === equipId);
+    if (!equip) return;
+
+    const status  = row.classList.contains('status-ok')   ? 'OK'
+                  : row.classList.contains('status-warn')  ? 'WARNING' : 'FAIL';
+    const tempVal = document.getElementById(`equip-temp-${equipId}`)?.value?.trim() || '';
+    const action  = document.getElementById(`equip-action-${equipId}`)?.value?.trim() || '';
+
+    const record = {
+      id:        crypto.randomUUID ? crypto.randomUUID() : `eq_${Date.now()}_${submitted}`,
+      type:      'temperature',
+      dept,
+      date:      todayStr(),
+      timestamp: nowTimestamp(),
+      iso:       nowISO(),
+      fields: {
+        temp_location:          equip.name,
+        temp_value:             tempVal,
+        temp_status:            status,
+        temp_probe:             probe,
+        temp_corrective_action: action || (status === 'OK' ? 'None required' : 'See notes'),
+        temp_logged_by:         staff,
+      },
+      summary: `${equip.name}: ${tempVal ? tempVal+'°C ' : ''}${status} · ${staff}`,
+    };
+    state.records.push(record);
+    syncRecordToSheets(record);
+    submitted++;
+  });
+
   saveState();
-  syncRecordToSheets(record);
 
-  document.getElementById('temp-location').value = '';
-  document.getElementById('temp-value').value    = '';
-  document.getElementById('temp-action').value   = '';
+  // Reset form
+  rows.forEach(row => {
+    const id = row.dataset.equipId;
+    row.classList.remove('status-ok','status-warn','status-fail','needs-action');
+    row.querySelectorAll('.equip-btn').forEach(b => b.classList.remove('selected'));
+    document.getElementById(`equip-detail-${id}`)?.classList.add('hidden');
+    const tempEl   = document.getElementById(`equip-temp-${id}`);
+    const actionEl = document.getElementById(`equip-action-${id}`);
+    if (tempEl)   tempEl.value   = '';
+    if (actionEl) { actionEl.value = ''; actionEl.classList.add('hidden'); }
+  });
+  state.equipChecks = {};
 
-  renderTempLog();
+  renderEquipmentLog(dept);
+  updateEquipDayStatus();
   updateDashboard();
-  showToast(`${temp}°C logged ${status === 'FAIL' ? '⚠ OUT OF RANGE' : '✓'}`,
-    status === 'FAIL' ? 'error' : 'success');
+  showToast(`${submitted} equipment check${submitted!==1?'s':''} submitted ✓`, 'success');
 }
 
-function getTempStatus(location, temp) {
-  const loc = location.toLowerCase();
-  if (loc.includes('fridge')||loc.includes('display')||loc.includes('chilled')||loc.includes('bar')||loc.includes('wine')) {
-    return temp<=5 ? 'OK' : temp<=8 ? 'WARNING' : 'FAIL';
-  }
-  if (loc.includes('freezer')||loc.includes('frozen')) {
-    return temp<=-18 ? 'OK' : temp>-18&&temp<=-15 ? 'WARNING' : 'FAIL';
-  }
-  if (loc.includes('hot')||loc.includes('soup')||loc.includes('sauce')) {
-    return temp>=63 ? 'OK' : temp>=55 ? 'WARNING' : 'FAIL';
-  }
-  if (loc.includes('cooked')||loc.includes('oven')||loc.includes('grill')||loc.includes('fryer')) {
-    return temp>=75 ? 'OK' : temp>=65 ? 'WARNING' : 'FAIL';
-  }
-  return (temp<-30||temp>90) ? 'FAIL' : 'OK';
-}
-
-function renderTempLog() {
-  const list = document.getElementById('temp-log-list'); if (!list) return;
-  const dept    = currentDept();
-  const today   = todayStr();
-  // Management sees all, others see their dept
+// ── Equipment log (today's entries) ──────────────────
+function renderEquipmentLog(dept) {
+  const list = document.getElementById('equip-log-list'); if (!list) return;
+  const today = todayStr();
+  const d = dept || getFormDept('equipment');
   const entries = state.records
-    .filter(r => r.type==='temperature' && r.date===today && (isManagement() || !r.dept || r.dept===dept))
+    .filter(r => r.type==='temperature' && r.date===today &&
+      (isManagement() ? r.dept===d : (!r.dept || r.dept===currentDept())))
     .sort((a,b) => new Date(b.iso) - new Date(a.iso));
 
   if (!entries.length) {
-    list.innerHTML = '<p class="empty-state">No readings logged today yet.</p>'; return;
+    list.innerHTML = '<p class="empty-state">No equipment checks logged today yet.</p>';
+    return;
   }
   list.innerHTML = entries.map(r => {
-    const s = r.fields.temp_status||'OK';
-    const cls = s==='OK'?'ok':s==='WARNING'?'warn':'fail';
-    const deptBadge = isManagement() && r.dept ? ` <span style="font-size:10px;opacity:0.6">${DEPARTMENTS[r.dept]?.icon||''}</span>` : '';
+    const s   = r.fields.temp_status || 'OK';
+    const cls = s==='OK' ? 'ok' : s==='WARNING' ? 'warn' : 'fail';
+    const disp = r.fields.temp_value ? `${r.fields.temp_value}°C` : s;
+    const hasAction = r.fields.temp_corrective_action && r.fields.temp_corrective_action !== 'None required';
+    const deptBadge = isManagement() && r.dept ? `<span style="font-size:10px;opacity:0.6"> ${DEPARTMENTS[r.dept]?.icon||''}</span>` : '';
     return `
       <div class="temp-log-entry">
-        <div>
+        <div style="flex:1">
           <div class="temp-entry-location">${r.fields.temp_location}${deptBadge}</div>
-          <div class="temp-entry-detail">Probe: ${r.fields.temp_probe} · By: ${r.fields.temp_logged_by}
-            ${r.fields.temp_corrective_action!=='None required'?` · Action: ${r.fields.temp_corrective_action}`:''}
-          </div>
+          <div class="temp-entry-detail">${r.fields.temp_logged_by}${hasAction ? ` · <span style="color:var(--warning)">Action: ${r.fields.temp_corrective_action}</span>` : ''}</div>
         </div>
-        <div class="temp-value-badge ${cls}">${r.fields.temp_value}°C</div>
+        <div class="temp-value-badge ${cls}">${disp}</div>
         <div class="temp-entry-time">${r.timestamp.split(',')[1]?.trim()||''}</div>
       </div>`;
   }).join('');
 }
 
-// ── Food Probe (Kitchen only) ─────────────────────────
-function applyFoodProbeVisibility() {
-  const section = document.getElementById('food-probe-section');
-  if (!section) return;
-  const show = currentDept() === 'kitchen' || isManagement();
-  section.style.display = show ? 'block' : 'none';
+function updateEquipDayStatus() {
+  const el = document.getElementById('equip-day-status'); if (!el) return;
+  const today = todayStr();
+  const dept = getFormDept('equipment');
+  const checks = state.records.filter(r =>
+    r.type==='temperature' && r.date===today &&
+    (isManagement() ? r.dept===dept : (!r.dept || r.dept===currentDept())));
+  const fails = checks.filter(r => r.fields?.temp_status==='FAIL');
+  const warns = checks.filter(r => r.fields?.temp_status==='WARNING');
+
+  if (!checks.length)  el.innerHTML = `<span class="probe-status-badge probe-none">0 checks today</span>`;
+  else if (fails.length) el.innerHTML = `<span class="probe-status-badge probe-fail">${checks.length} logged · ${fails.length} FAIL</span>`;
+  else if (warns.length) el.innerHTML = `<span class="probe-status-badge probe-warn">${checks.length} logged · ${warns.length} Alert</span>`;
+  else                 el.innerHTML = `<span class="probe-status-badge probe-ok">${checks.length} checks ✓</span>`;
 }
 
+// ── Food Probe (Probe tab) ────────────────────────────
 function logFoodProbe() {
   const product = document.getElementById('probe-product')?.value.trim();
   const tempVal = document.getElementById('probe-temp')?.value;
@@ -303,7 +488,7 @@ function logFoodProbe() {
   const staff   = document.getElementById('probe-staff')?.value?.trim();
   const action  = document.getElementById('probe-action')?.value?.trim();
 
-  if (!product)    { showToast('Enter the product or dish name', 'error'); return; }
+  if (!product)    { showToast('Select a product / dish', 'error'); return; }
   if (tempVal === '') { showToast('Enter a temperature', 'error'); return; }
   if (!staff)      { showToast('Select a staff member', 'error'); return; }
 
@@ -319,12 +504,12 @@ function logFoodProbe() {
     timestamp: nowTimestamp(),
     iso:       nowISO(),
     fields: {
-      probe_product:  product,
-      probe_temp:     temp.toString(),
-      probe_status:   status,
-      probe_used:     probe,
-      probe_action:   action || (passed ? 'None required' : ''),
-      probe_staff:    staff,
+      probe_product: product,
+      probe_temp:    temp.toString(),
+      probe_status:  status,
+      probe_used:    probe,
+      probe_action:  action || (passed ? 'None required' : ''),
+      probe_staff:   staff,
     },
     summary: `${product}: ${temp}°C (${status}) · ${staff}`,
   };
@@ -333,41 +518,30 @@ function logFoodProbe() {
   saveState();
   syncRecordToSheets(record);
 
-  // Clear form
   document.getElementById('probe-product').value = '';
   document.getElementById('probe-temp').value    = '';
   document.getElementById('probe-action').value  = '';
 
+  const actionGroup = document.getElementById('probe-action-group');
+  if (actionGroup) actionGroup.style.display = passed ? 'none' : 'block';
+
   renderFoodProbeLog();
   updateFoodProbeDayStatus();
   updateDashboard();
-
-  showToast(
-    passed ? `${product}: ${temp}°C ✓ PASS` : `${product}: ${temp}°C ⚠ FAIL — below 75°C`,
-    passed ? 'success' : 'error'
-  );
-
-  // Show corrective action field if fail
-  const actionGroup = document.getElementById('probe-action-group');
-  if (actionGroup) actionGroup.style.display = passed ? 'none' : 'block';
+  showToast(passed ? `${product}: ${temp}°C ✓ PASS` : `${product}: ${temp}°C ⚠ FAIL — below 75°C`, passed ? 'success' : 'error');
 }
 
 function renderFoodProbeLog() {
-  const list = document.getElementById('food-probe-log-list');
-  if (!list) return;
-
-  const today   = todayStr();
-  const dept    = currentDept();
+  const list = document.getElementById('food-probe-log-list'); if (!list) return;
+  const today = todayStr();
   const entries = state.records
-    .filter(r => r.type === 'food_probe' && r.date === today &&
-      (isManagement() || r.dept === 'kitchen'))
-    .sort((a, b) => new Date(b.iso) - new Date(a.iso));
+    .filter(r => r.type==='food_probe' && r.date===today)
+    .sort((a,b) => new Date(b.iso) - new Date(a.iso));
 
   if (!entries.length) {
-    list.innerHTML = '<p class="empty-state" style="padding:20px 0">No food probe checks logged today yet.</p>';
+    list.innerHTML = '<p class="empty-state">No food probe checks logged today yet.</p>';
     return;
   }
-
   list.innerHTML = entries.map(r => {
     const passed = r.fields.probe_status === 'PASS';
     const cls    = passed ? 'ok' : 'fail';
@@ -376,36 +550,31 @@ function renderFoodProbeLog() {
       <div class="temp-log-entry">
         <div style="flex:1">
           <div class="temp-entry-location">${r.fields.probe_product}</div>
-          <div class="temp-entry-detail">
-            ${r.fields.probe_used} · ${r.fields.probe_staff}
-            ${hasAction ? ` · <span style="color:var(--warning)">Action: ${r.fields.probe_action}</span>` : ''}
-          </div>
+          <div class="temp-entry-detail">${r.fields.probe_used} · ${r.fields.probe_staff}${hasAction ? ` · <span style="color:var(--warning)">Action: ${r.fields.probe_action}</span>` : ''}</div>
         </div>
         <div class="temp-value-badge ${cls}">${r.fields.probe_temp}°C</div>
-        <div class="temp-entry-time">${r.timestamp.split(',')[1]?.trim() || ''}</div>
+        <div class="temp-entry-time">${r.timestamp.split(',')[1]?.trim()||''}</div>
       </div>`;
   }).join('');
 }
 
 function updateFoodProbeDayStatus() {
-  const el = document.getElementById('food-probe-day-status');
-  if (!el) return;
+  const el = document.getElementById('food-probe-day-status'); if (!el) return;
   const today  = todayStr();
-  const checks = state.records.filter(r => r.type === 'food_probe' && r.date === today);
-  const fails  = checks.filter(r => r.fields.probe_status === 'FAIL');
-
-  if (!checks.length) {
+  const checks = state.records.filter(r => r.type==='food_probe' && r.date===today);
+  const fails  = checks.filter(r => r.fields.probe_status==='FAIL');
+  if (!checks.length)
     el.innerHTML = `<span class="probe-status-badge probe-none">0 today — 1 required</span>`;
-  } else if (fails.length) {
+  else if (fails.length)
     el.innerHTML = `<span class="probe-status-badge probe-fail">${checks.length} logged · ${fails.length} FAIL</span>`;
-  } else {
+  else
     el.innerHTML = `<span class="probe-status-badge probe-ok">${checks.length} logged ✓</span>`;
-  }
 }
 
 function hasFoodProbeToday() {
-  return state.records.some(r => r.type === 'food_probe' && r.date === todayStr());
+  return state.records.some(r => r.type==='food_probe' && r.date===todayStr());
 }
+
 function setRating(value, btn) {
   state.weeklyRating = value;
   document.querySelectorAll('.rating-btn').forEach(b => b.classList.remove('selected'));
@@ -420,7 +589,7 @@ function updateDashboard() {
   updateLastRefreshed();
 }
 
-// Manager: 3-column grid, one column per department
+// Manager: 3-column grid, one column per dept
 function renderManagerDashboard() {
   const grid = document.getElementById('dashboard-grid');
   if (!grid) return;
@@ -433,7 +602,7 @@ function renderManagerDashboard() {
       ? [{ type:'weekly', label:'Weekly Review', icon:'▦', total:20 }]
       : [
           { type:'opening',     label:'Opening',     icon:'☀', total: getActiveChecks(deptId,'opening').length  || 12 },
-          { type:'temperature', label:'Temps',       icon:'⊕', total: null },
+          { type:'temperature', label:'Equipment',   icon:'🌡', total: null },
           { type:'cleaning',    label:'Cleaning',    icon:'◎', total: getActiveChecks(deptId,'cleaning').length || 14 },
           { type:'closing',     label:'Closing',     icon:'☽', total: getActiveChecks(deptId,'closing').length  || 10 },
           { type:'tasks',       label:'Tasks',       icon:'☑', total: null },
@@ -457,31 +626,29 @@ function renderManagerDashboard() {
         </div>`;
       }
       if (sec.type === 'temperature') {
-        const temps = deptRecords.filter(r => r.type==='temperature');
+        const temps   = deptRecords.filter(r => r.type==='temperature');
         const hasFail = temps.some(r => r.fields?.temp_status==='FAIL');
         const hasWarn = temps.some(r => r.fields?.temp_status==='WARNING');
         const status  = hasFail ? { text:'⚠ Breach', cls:'overdue' } : hasWarn ? { text:'! Warning', cls:'partial' } : temps.length > 0 ? { text:'✓ All OK', cls:'complete' } : { text:'—', cls:'' };
         const pct     = Math.min(100, temps.length * 12.5);
-        return `<div class="mgr-card" onclick="showTab('temperature')">
+        return `<div class="mgr-card" onclick="showTab('equipment')">
           <div class="mgr-card-header"><span class="mgr-card-icon" style="color:var(--temp)">${sec.icon}</span><span class="mgr-card-label">${sec.label}</span></div>
           <div class="pb"><div class="pf" style="width:${pct}%;background:var(--temp)"></div></div>
-          <div class="mgr-card-status ${status.cls}">${status.text} · ${temps.length} reading${temps.length!==1?'s':''}</div>
+          <div class="mgr-card-status ${status.cls}">${status.text} · ${temps.length} item${temps.length!==1?'s':''}</div>
         </div>`;
       }
-      const rec     = deptRecords.filter(r=>r.type===sec.type).sort((a,b)=>new Date(b.iso)-new Date(a.iso))[0];
-      const total   = sec.total || 10;
-      if (!rec) {
-        return `<div class="mgr-card" onclick="showTab('${sec.type}')">
-          <div class="mgr-card-header"><span class="mgr-card-icon">${sec.icon}</span><span class="mgr-card-label">${sec.label}</span></div>
-          <div class="pb"><div class="pf" style="width:0%"></div></div>
-          <div class="mgr-card-status">Not done</div>
-        </div>`;
-      }
-      const checks  = Object.values(rec.fields).filter(v=>v==='Yes'||v==='No');
-      const passed  = checks.filter(v=>v==='Yes').length;
-      const pct     = Math.round((passed/(checks.length||total))*100);
-      const signed  = rec.fields?.open_signed_by||rec.fields?.close_signed_by||rec.fields?.clean_signed_by||rec.fields?.weekly_signed_by||'';
-      const status  = pct===100 ? { text:`✓ ${signed||'Done'}`, cls:'complete' } : { text:`${pct}% · ${signed}`, cls:'partial' };
+      const rec   = deptRecords.filter(r=>r.type===sec.type).sort((a,b)=>new Date(b.iso)-new Date(a.iso))[0];
+      const total = sec.total || 10;
+      if (!rec) return `<div class="mgr-card" onclick="showTab('${sec.type === 'weekly' ? 'weekly' : sec.type}')">
+        <div class="mgr-card-header"><span class="mgr-card-icon">${sec.icon}</span><span class="mgr-card-label">${sec.label}</span></div>
+        <div class="pb"><div class="pf" style="width:0%"></div></div>
+        <div class="mgr-card-status">Not done</div>
+      </div>`;
+      const checks = Object.values(rec.fields).filter(v=>v==='Yes'||v==='No');
+      const passed = checks.filter(v=>v==='Yes').length;
+      const pct    = Math.round((passed/(checks.length||total))*100);
+      const signed = rec.fields?.open_signed_by||rec.fields?.close_signed_by||rec.fields?.clean_signed_by||rec.fields?.weekly_signed_by||'';
+      const status = pct===100 ? { text:`✓ ${signed||'Done'}`, cls:'complete' } : { text:`${pct}% · ${signed}`, cls:'partial' };
       return `<div class="mgr-card" onclick="showTab('${sec.type}')">
         <div class="mgr-card-header"><span class="mgr-card-icon">${sec.icon}</span><span class="mgr-card-label">${sec.label}</span></div>
         <div class="pb"><div class="pf" style="width:${pct}%;background:var(--success)"></div></div>
@@ -491,44 +658,63 @@ function renderManagerDashboard() {
 
     return `
       <div class="dept-column">
-        <div class="dept-col-header" style="color:${deptInfo.color}">
-          ${deptInfo.icon} ${deptInfo.label}
-        </div>
+        <div class="dept-col-header" style="color:${deptInfo.color}">${deptInfo.icon} ${deptInfo.label}</div>
         ${cards}
       </div>`;
   }).join('');
 }
 
-// Staff: simple 2x2 grid for their dept only
+// Staff: simple grid for their dept
 function renderStaffDashboard() {
   const dept  = currentDept();
   const today = todayStr();
-  const deptRecords = state.records.filter(r => r.date===today && (r.dept===dept || !r.dept));
+  const dr    = state.records.filter(r => r.date===today && (r.dept===dept || !r.dept));
 
-  const cards = [
-    { id:'opening',     label:'Opening Checks', icon:'☀', color:'var(--opening)', total: getActiveChecks(dept,'opening').length  || 12 },
-    { id:'temperature', label:'Temperature',    icon:'⊕', color:'var(--temp)',    total: null },
-    { id:'cleaning',    label:'Cleaning',       icon:'◎', color:'var(--clean)',   total: getActiveChecks(dept,'cleaning').length || 14 },
-    { id:'closing',     label:'Closing Checks', icon:'☽', color:'var(--closing)', total: getActiveChecks(dept,'closing').length  || 10 },
-    { id:'tasks',       label:'Weekly Tasks',   icon:'☑', color:'#a78bfa',        total: null },
+  let cards = [
+    { id:'opening',   label:'Opening',      icon:'☀', color:'var(--opening)', total: getActiveChecks(dept,'opening').length  || 12 },
+    { id:'equipment', label:'Equipment',    icon:'🌡', color:'var(--temp)',    total: null, tab:'equipment', recType:'temperature' },
+    { id:'cleaning',  label:'Cleaning',     icon:'◎', color:'var(--clean)',   total: getActiveChecks(dept,'cleaning').length || 14 },
+    { id:'closing',   label:'Closing',      icon:'☽', color:'var(--closing)', total: getActiveChecks(dept,'closing').length  || 10 },
+    { id:'tasks',     label:'Weekly Tasks', icon:'☑', color:'#a78bfa',        total: null },
   ];
+  if (dept === 'kitchen') {
+    cards.splice(2, 0, { id:'probe', label:'Food Probe', icon:'🍖', color:'var(--success)', total: null, tab:'probe', recType:'food_probe' });
+  }
 
   const grid = document.getElementById('dashboard-grid');
   if (!grid) return;
 
   grid.innerHTML = `<div class="dashboard-grid-2col">${cards.map(card => {
-    if (card.id === 'temperature') {
-      const temps   = deptRecords.filter(r => r.type==='temperature');
+    const tab     = card.tab || card.id;
+    const recType = card.recType || card.id;
+
+    if (card.id === 'equipment') {
+      const temps   = dr.filter(r => r.type==='temperature');
       const hasFail = temps.some(r => r.fields?.temp_status==='FAIL');
       const hasWarn = temps.some(r => r.fields?.temp_status==='WARNING');
       const pct     = Math.min(100, temps.length * 12.5);
       const statText = hasFail ? '⚠ BREACH' : hasWarn ? '! Warning' : temps.length>0 ? '✓ All OK' : '—';
       const statCls  = hasFail ? 'overdue' : hasWarn ? 'partial' : temps.length>0 ? 'complete' : '';
-      return `<div class="dash-card" onclick="showTab('temperature')">
+      return `<div class="dash-card" onclick="showTab('equipment')">
         <div class="dash-card-icon" style="color:${card.color}">${card.icon}</div>
         <div class="dash-card-body"><h3>${card.label}</h3>
           <div class="dash-progress"><div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${card.color}"></div></div></div>
-          <div class="progress-label">${temps.length} reading${temps.length!==1?'s':''} today</div>
+          <div class="progress-label">${temps.length} check${temps.length!==1?'s':''} today</div>
+        </div>
+        <div class="dash-card-status ${statCls}">${statText}</div>
+      </div>`;
+    }
+    if (card.id === 'probe') {
+      const probes  = dr.filter(r => r.type==='food_probe');
+      const hasFail = probes.some(r => r.fields?.probe_status==='FAIL');
+      const pct     = Math.min(100, probes.length * 33);
+      const statText = hasFail ? '⚠ FAIL' : probes.length>0 ? '✓ Logged' : new Date().getHours()>=12 ? '⚠ Due' : '—';
+      const statCls  = hasFail ? 'overdue' : probes.length>0 ? 'complete' : new Date().getHours()>=12 ? 'partial' : '';
+      return `<div class="dash-card" onclick="showTab('probe')">
+        <div class="dash-card-icon" style="color:${card.color}">${card.icon}</div>
+        <div class="dash-card-body"><h3>${card.label}</h3>
+          <div class="dash-progress"><div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${card.color}"></div></div></div>
+          <div class="progress-label">${probes.length} check${probes.length!==1?'s':''} today</div>
         </div>
         <div class="dash-card-status ${statCls}">${statText}</div>
       </div>`;
@@ -551,23 +737,22 @@ function renderStaffDashboard() {
         <div class="dash-card-status ${statCls}">${statText}</div>
       </div>`;
     }
-    const rec    = deptRecords.filter(r=>r.type===card.id).sort((a,b)=>new Date(b.iso)-new Date(a.iso))[0];
-    const total  = card.total||10;
-    if (!rec) {
-      return `<div class="dash-card" onclick="showTab('${card.id}')">
-        <div class="dash-card-icon" style="color:${card.color}">${card.icon}</div>
-        <div class="dash-card-body"><h3>${card.label}</h3>
-          <div class="dash-progress"><div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div></div>
-          <div class="progress-label">0 / ${total}</div>
-        </div>
-        <div class="dash-card-status">—</div>
-      </div>`;
-    }
+    // Standard checklist card
+    const rec   = dr.filter(r=>r.type===card.id).sort((a,b)=>new Date(b.iso)-new Date(a.iso))[0];
+    const total = card.total || 10;
+    if (!rec) return `<div class="dash-card" onclick="showTab('${tab}')">
+      <div class="dash-card-icon" style="color:${card.color}">${card.icon}</div>
+      <div class="dash-card-body"><h3>${card.label}</h3>
+        <div class="dash-progress"><div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div></div>
+        <div class="progress-label">0 / ${total}</div>
+      </div>
+      <div class="dash-card-status">—</div>
+    </div>`;
     const checks = Object.values(rec.fields).filter(v=>v==='Yes'||v==='No');
     const passed = checks.filter(v=>v==='Yes').length;
     const pct    = Math.round((passed/(checks.length||total))*100);
     const signed = rec.fields?.open_signed_by||rec.fields?.close_signed_by||rec.fields?.clean_signed_by||'';
-    return `<div class="dash-card" onclick="showTab('${card.id}')">
+    return `<div class="dash-card" onclick="showTab('${tab}')">
       <div class="dash-card-icon" style="color:${card.color}">${card.icon}</div>
       <div class="dash-card-body"><h3>${card.label}</h3>
         <div class="dash-progress"><div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${card.color}"></div></div></div>
@@ -582,45 +767,40 @@ function renderDashAlerts() {
   const el = document.getElementById('dash-alerts'); if (!el) return;
   const today = todayStr();
   const dept  = currentDept();
-  const deptRecords = state.records.filter(r => r.date===today && (isManagement()||(r.dept===dept||!r.dept)));
+  const dr    = state.records.filter(r => r.date===today && (isManagement()||(r.dept===dept||!r.dept)));
   const alerts = [];
   const hour   = new Date().getHours();
-
-  // Use dept-specific times from settings
   const openTime  = state.settings.openingTimes?.[dept]||'08:00';
   const closeTime = state.settings.closingTimes?.[dept]||'23:00';
   const openHour  = parseInt(openTime.split(':')[0]);
   const closeHour = parseInt(closeTime.split(':')[0]);
 
   if (!isManagement()) {
-    if (hour >= openHour && !deptRecords.find(r=>r.type==='opening'))
+    if (hour >= openHour && !dr.find(r=>r.type==='opening'))
       alerts.push(`⚠ Opening checks not yet completed today`);
-    if (hour >= 15 && deptRecords.filter(r=>r.type==='temperature').length < 2)
-      alerts.push(`⚠ Less than 2 temperature readings logged today`);
-    // Food probe alert — kitchen only
+    if (hour >= 15 && dr.filter(r=>r.type==='temperature').length < 2)
+      alerts.push(`⚠ Less than 2 equipment checks logged today`);
     if (dept === 'kitchen' && hour >= 12 && !hasFoodProbeToday())
       alerts.push(`⚠ No food probe check logged today — at least 1 required`);
-    if (hour >= closeHour && !deptRecords.find(r=>r.type==='closing'))
+    if (hour >= closeHour && !dr.find(r=>r.type==='closing'))
       alerts.push(`⚠ Closing checks not yet completed`);
   } else {
-    // Manager sees cross-dept alerts
     ['kitchen','foh'].forEach(d => {
-      const dr    = state.records.filter(r=>r.date===today&&r.dept===d);
+      const ddr   = state.records.filter(r=>r.date===today&&r.dept===d);
       const dInfo = DEPARTMENTS[d];
       const oh    = parseInt((state.settings.openingTimes?.[d]||'08:00').split(':')[0]);
       const ch    = parseInt((state.settings.closingTimes?.[d]||'23:00').split(':')[0]);
-      if (hour>=oh && !dr.find(r=>r.type==='opening'))
+      if (hour>=oh && !ddr.find(r=>r.type==='opening'))
         alerts.push(`⚠ ${dInfo.icon} ${dInfo.label}: Opening checks not done`);
-      if (hour>=ch && !dr.find(r=>r.type==='closing'))
+      if (hour>=ch && !ddr.find(r=>r.type==='closing'))
         alerts.push(`⚠ ${dInfo.icon} ${dInfo.label}: Closing checks not done`);
     });
-    // Food probe — kitchen specific
     if (hour >= 12 && !hasFoodProbeToday())
       alerts.push(`⚠ 🍳 Kitchen: No food probe check logged today`);
   }
 
-  const breaches = deptRecords.filter(r=>r.type==='temperature'&&r.fields?.temp_status==='FAIL');
-  if (breaches.length) alerts.push(`⚠ ${breaches.length} temperature breach${breaches.length>1?'es':''} today — check corrective actions`);
+  const breaches = dr.filter(r=>r.type==='temperature'&&r.fields?.temp_status==='FAIL');
+  if (breaches.length) alerts.push(`⚠ ${breaches.length} temperature breach${breaches.length>1?'es':''} today`);
 
   el.innerHTML = alerts.map(a=>`<div class="dash-alert">${a}</div>`).join('');
 }
@@ -637,7 +817,7 @@ function labelFor(type) {
     closing:    'Closing Checks',
     cleaning:   'Cleaning Schedule',
     weekly:     'Weekly Review',
-    temperature:'Temperature Log',
+    temperature:'Equipment Temperature',
     food_probe: 'Food Probe Check',
   }[type] || type;
 }
@@ -664,8 +844,14 @@ function saveSheetConnection() {
   state.config.sheetsViewUrl = viewUrl;
   localStorage.setItem(CONFIG_KEY, JSON.stringify(state.config));
   closeModal(); checkConnectionStatus(); showToast('Connecting…');
-  pullSettingsFromSheets().then(()=>{ rebuildAllChecklists(); rebuildSignedByDropdowns(); rebuildTempLocationDropdown(); rebuildProbeProductDropdown(); });
-  pullAllRecords(true).then(()=>{ updateDashboard(); renderTempLog(); showToast('Connected & synced ✓','success'); startAutoPoll(); });
+  pullSettingsFromSheets().then(()=>{
+    rebuildAllChecklists(); rebuildSignedByDropdowns();
+    rebuildTempLocationDropdown(); rebuildProbeProductDropdown();
+  });
+  pullAllRecords(true).then(()=>{
+    updateDashboard(); renderEquipmentLog();
+    showToast('Connected & synced ✓','success'); startAutoPoll();
+  });
 }
 
 function disconnectSheets() {

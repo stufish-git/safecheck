@@ -38,15 +38,16 @@
 
   <!-- NAV -->
   <nav class="tab-nav">
-    <button class="tab-btn active" data-tab="dashboard"   onclick="showTab('dashboard')">  <span class="tab-icon">⌂</span><span class="tab-label">Dashboard</span></button>
-    <button class="tab-btn"        data-tab="opening"     onclick="showTab('opening')">    <span class="tab-icon">☀</span><span class="tab-label">Opening</span></button>
-    <button class="tab-btn"        data-tab="temperature" onclick="showTab('temperature')"><span class="tab-icon">⊕</span><span class="tab-label">Temps</span></button>
-    <button class="tab-btn"        data-tab="cleaning"    onclick="showTab('cleaning')">   <span class="tab-icon">◎</span><span class="tab-label">Cleaning</span></button>
-    <button class="tab-btn"        data-tab="closing"     onclick="showTab('closing')">    <span class="tab-icon">☽</span><span class="tab-label">Closing</span></button>
-    <button class="tab-btn"        data-tab="weekly"      onclick="showTab('weekly')">     <span class="tab-icon">▦</span><span class="tab-label">Weekly</span></button>
-    <button class="tab-btn"        data-tab="history"     onclick="showTab('history')">    <span class="tab-icon">◷</span><span class="tab-label">History</span></button>
-    <button class="tab-btn"        data-tab="tasks"       onclick="showTab('tasks')">      <span class="tab-icon">☑</span><span class="tab-label">Tasks</span></button>
-    <button class="tab-btn"        data-tab="settings"    onclick="showSettingsTab()">     <span class="tab-icon">⚙</span><span class="tab-label">Settings</span></button>
+    <button class="tab-btn active" data-tab="dashboard" onclick="showTab('dashboard')"><span class="tab-icon">⌂</span><span class="tab-label">Dashboard</span></button>
+    <button class="tab-btn" data-tab="opening"          onclick="showTab('opening')">  <span class="tab-icon">☀</span><span class="tab-label">Opening</span></button>
+    <button class="tab-btn" data-tab="equipment"        onclick="showTab('equipment')"><span class="tab-icon">🌡</span><span class="tab-label">Equipment</span></button>
+    <button class="tab-btn" data-tab="probe"            onclick="showTab('probe')">    <span class="tab-icon">🍖</span><span class="tab-label">Probe</span></button>
+    <button class="tab-btn" data-tab="cleaning"         onclick="showTab('cleaning')"> <span class="tab-icon">◎</span><span class="tab-label">Cleaning</span></button>
+    <button class="tab-btn" data-tab="closing"          onclick="showTab('closing')">  <span class="tab-icon">☽</span><span class="tab-label">Closing</span></button>
+    <button class="tab-btn" data-tab="weekly"           onclick="showTab('weekly')">   <span class="tab-icon">▦</span><span class="tab-label">Weekly</span></button>
+    <button class="tab-btn" data-tab="history"          onclick="showTab('history')">  <span class="tab-icon">◷</span><span class="tab-label">History</span></button>
+    <button class="tab-btn" data-tab="tasks"            onclick="showTab('tasks')">    <span class="tab-icon">☑</span><span class="tab-label">Tasks</span></button>
+    <button class="tab-btn" data-tab="settings"         onclick="showSettingsTab()">   <span class="tab-icon">⚙</span><span class="tab-label">Settings</span></button>
   </nav>
 
   <main class="app-main">
@@ -88,126 +89,103 @@
       </form>
     </section>
 
-    <!-- ═══════════════════════════════ TEMPERATURE ═ -->
-    <section id="tab-temperature" class="tab-section">
+    <!-- ═══════════════════════════ EQUIPMENT TEMPS ═ -->
+    <section id="tab-equipment" class="tab-section">
       <div class="section-header">
-        <h1 class="section-title">Temperature Log</h1>
-        <p class="section-subtitle">Equipment checks &amp; food probe readings</p>
+        <h1 class="section-title">Equipment Checks</h1>
+        <p class="section-subtitle">Log temperatures for all equipment at once</p>
+        <div id="equip-day-status" class="probe-day-status" style="margin-top:8px"></div>
+      </div>
+      <!-- dept selector injected here by applyDeviceIdentity() for management -->
+
+      <div class="temp-targets" style="margin:0 0 16px">
+        <span class="target-chip">🧊 Fridge ≤5°C</span>
+        <span class="target-chip">❄ Freezer ≤-18°C</span>
+        <span class="target-chip">♨ Hot Hold ≥63°C</span>
+        <span class="target-chip">🔥 Cooked ≥75°C</span>
       </div>
 
-      <!-- ── PART 1: EQUIPMENT TEMPERATURES ── -->
-      <div class="temp-section-header">
-        <div class="temp-section-icon">🌡</div>
-        <div>
-          <div class="temp-section-title">Equipment Temperatures</div>
-          <div class="temp-section-sub">Fridges, freezers, ovens, hot hold</div>
+      <!-- Staff + probe fields -->
+      <div class="equip-header-fields">
+        <div class="field-group">
+          <label>Logged by</label>
+          <select class="select-field" id="equip-staff">
+            <option value="">Select staff member...</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label>Probe / method used</label>
+          <select class="select-field" id="equip-probe">
+            <option value="Digital Probe 1">Digital Probe 1</option>
+            <option value="Digital Probe 2">Digital Probe 2</option>
+            <option value="Infrared Gun">Infrared Gun</option>
+            <option value="Built-in Gauge">Built-in Gauge</option>
+          </select>
         </div>
       </div>
-      <div class="temp-targets">
-        <span class="target-chip">🧊 Fridge: 1–5°C</span>
-        <span class="target-chip">❄ Freezer: ≤-18°C</span>
-        <span class="target-chip">🔥 Cooked: ≥75°C</span>
-        <span class="target-chip">♨ Hot Hold: ≥63°C</span>
+
+      <!-- Equipment rows — built by buildEquipmentCheckUI() -->
+      <div id="equip-check-list"></div>
+
+      <!-- Today's log -->
+      <div class="temp-log-display" style="margin-top:24px">
+        <h3 class="group-title">Today's Equipment Readings</h3>
+        <div class="temp-log-list" id="equip-log-list"></div>
       </div>
+    </section>
+
+    <!-- ═══════════════════════════════ FOOD PROBE ════ -->
+    <section id="tab-probe" class="tab-section">
+      <div class="section-header">
+        <h1 class="section-title">Food Probe Checks</h1>
+        <p class="section-subtitle">Core temperature of cooked food · ≥75°C to pass · min. 1 per day</p>
+        <div id="food-probe-day-status" class="probe-day-status" style="margin-top:8px"></div>
+      </div>
+
       <div class="temp-entry-form">
         <div class="temp-entry-grid">
-          <div class="field-group">
-            <label>Location</label>
-            <select class="select-field" id="temp-location">
-              <option value="">Select location...</option>
+          <div class="field-group" style="grid-column:span 2">
+            <label>Product / Dish</label>
+            <select class="select-field" id="probe-product">
+              <option value="">Select product / dish...</option>
             </select>
           </div>
           <div class="field-group">
-            <label>Temperature °C</label>
-            <input type="number" class="text-field" id="temp-value" placeholder="e.g. 3.8" step="0.1"/>
+            <label>Core Temperature °C</label>
+            <input type="number" class="text-field" id="probe-temp"
+              placeholder="e.g. 78" step="0.1" min="0" max="150"/>
           </div>
           <div class="field-group">
             <label>Probe Used</label>
-            <select class="select-field" id="temp-probe">
+            <select class="select-field" id="probe-instrument">
               <option value="Digital Probe 1">Digital Probe 1</option>
               <option value="Digital Probe 2">Digital Probe 2</option>
-              <option value="Infrared Gun">Infrared Gun</option>
-              <option value="Built-in Gauge">Built-in Gauge</option>
-            </select>
-          </div>
-          <div class="field-group">
-            <label>Logged by</label>
-            <select class="select-field signed-by-select" id="temp-staff">
-              <option value="">Select staff member...</option>
+              <option value="Thermocouple">Thermocouple</option>
             </select>
           </div>
         </div>
         <div class="field-group" style="margin-bottom:14px">
-          <label>Corrective Action Taken (if required)</label>
-          <input type="text" class="text-field" id="temp-action" placeholder="e.g. Adjusted thermostat, moved stock..."/>
+          <label>Logged by</label>
+          <select class="select-field signed-by-select" id="probe-staff">
+            <option value="">Select staff member...</option>
+          </select>
         </div>
-        <button class="btn-submit" onclick="logTemperature()">
-          <span>Log Equipment Temperature</span><span class="btn-icon">+</span>
+        <div class="field-group" style="margin-bottom:14px" id="probe-action-group">
+          <label>Corrective Action (if below 75°C)</label>
+          <input type="text" class="text-field" id="probe-action"
+            placeholder="e.g. Returned to oven, cooked further 5 mins..."/>
+        </div>
+        <button class="btn-submit" onclick="logFoodProbe()">
+          <span>Log Food Probe Check</span><span class="btn-icon">+</span>
         </button>
       </div>
-      <div class="temp-log-display">
-        <h3 class="group-title">Today's Equipment Readings</h3>
-        <div class="temp-log-list" id="temp-log-list"></div>
-      </div>
 
-      <!-- ── PART 2: FOOD PROBE (KITCHEN ONLY) ── -->
-      <div id="food-probe-section" class="food-probe-section">
-        <div class="temp-section-divider"></div>
-        <div class="temp-section-header">
-          <div class="temp-section-icon">🍖</div>
-          <div>
-            <div class="temp-section-title">Food Probe Checks</div>
-            <div class="temp-section-sub">Core temperature of cooked food — min. 1 per day · ≥75°C to pass</div>
-          </div>
-          <div id="food-probe-day-status" class="probe-day-status"></div>
-        </div>
-
-        <div class="temp-entry-form">
-          <div class="temp-entry-grid">
-            <div class="field-group" style="grid-column: span 2">
-              <label>Product / Dish</label>
-              <select class="select-field" id="probe-product">
-                <option value="">Select product / dish...</option>
-              </select>
-            </div>
-            <div class="field-group">
-              <label>Core Temperature °C</label>
-              <input type="number" class="text-field" id="probe-temp"
-                placeholder="e.g. 78" step="0.1" min="0" max="150"/>
-            </div>
-            <div class="field-group">
-              <label>Probe Used</label>
-              <select class="select-field" id="probe-instrument">
-                <option value="Digital Probe 1">Digital Probe 1</option>
-                <option value="Digital Probe 2">Digital Probe 2</option>
-                <option value="Thermocouple">Thermocouple</option>
-              </select>
-            </div>
-          </div>
-          <div class="field-group" style="margin-bottom:14px">
-            <label>Logged by</label>
-            <select class="select-field signed-by-select" id="probe-staff">
-              <option value="">Select staff member...</option>
-            </select>
-          </div>
-          <div class="field-group" style="margin-bottom:14px" id="probe-action-group" style="display:none">
-            <label>Corrective Action (if below 75°C)</label>
-            <input type="text" class="text-field" id="probe-action"
-              placeholder="e.g. Returned to oven, cooked further 5 mins..."/>
-          </div>
-          <button class="btn-submit" onclick="logFoodProbe()">
-            <span>Log Food Probe Check</span><span class="btn-icon">+</span>
-          </button>
-        </div>
-
-        <div class="temp-log-display">
-          <h3 class="group-title">Today's Food Probe Readings</h3>
-          <div class="temp-log-list" id="food-probe-log-list">
-            <p class="empty-state">No food probe checks logged today yet.</p>
-          </div>
+      <div class="temp-log-display" style="margin-top:24px">
+        <h3 class="group-title">Today's Food Probe Readings</h3>
+        <div class="temp-log-list" id="food-probe-log-list">
+          <p class="empty-state">No food probe checks logged today yet.</p>
         </div>
       </div>
-
     </section>
 
     <!-- ═══════════════════════════════ CLEANING ════ -->

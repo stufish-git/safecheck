@@ -398,7 +398,14 @@ function getDeptStaff(dept) {
 function rebuildAllChecklists() {
   const dept = currentDept();
   if (dept === 'mgmt') {
+    // Management gets weekly + can submit kitchen/foh checklists
     rebuildChecklist('weekly', 'mgmt');
+    const openDept  = (state.tabDept && state.tabDept['opening'])  || 'kitchen';
+    const cleanDept = (state.tabDept && state.tabDept['cleaning']) || 'kitchen';
+    const closeDept = (state.tabDept && state.tabDept['closing'])  || 'kitchen';
+    rebuildChecklist('opening',  openDept);
+    rebuildChecklist('cleaning', cleanDept);
+    rebuildChecklist('closing',  closeDept);
   } else {
     rebuildChecklist('opening', dept);
     rebuildChecklist('cleaning', dept);
@@ -440,8 +447,11 @@ function checkItemHTML(c) {
 
 function rebuildSignedByDropdowns() {
   const dept  = currentDept();
-  const staff = getDeptStaff(dept);
   const me    = currentStaffMember();
+  // Management signed-by shows all staff; others show their dept only
+  const staff = isManagement()
+    ? (state.settings.staff || []).filter(s => s.dept !== 'mgmt')
+    : getDeptStaff(dept);
   const opts  = `<option value="">Select staff member...</option>` +
     staff.map(s => `<option value="${s.name}">${s.name} — ${s.role}</option>`).join('');
   document.querySelectorAll('.signed-by-select').forEach(sel => {
@@ -449,6 +459,12 @@ function rebuildSignedByDropdowns() {
     sel.innerHTML = opts;
     sel.value = cur || (me ? me.name : '');
   });
+  // Equipment staff dropdown
+  const equipSel = document.getElementById('equip-staff');
+  if (equipSel) {
+    equipSel.innerHTML = opts;
+    equipSel.value = me ? me.name : '';
+  }
 }
 
 function rebuildTempLocationDropdown() {
@@ -487,9 +503,43 @@ function applyDeviceIdentity() {
   pill.textContent = `${deptInfo?.icon} ${me ? me.name : deptInfo?.label}`;
   pill.style.cssText += `;border-color:${deptInfo?.color}44;color:${deptInfo?.color}`;
 
-  // Tab visibility
-  const isKitchenOrFOH = dept !== 'mgmt';
-  document.querySelector('[data-tab="weekly"]')?.classList.toggle('hidden', isKitchenOrFOH);
+  // Tab visibility based on role
+  // Weekly: management only
+  document.querySelector('[data-tab="weekly"]')?.classList.toggle('hidden', dept !== 'mgmt');
+  // Probe: kitchen + management only (FOH has no food probe requirement)
+  document.querySelector('[data-tab="probe"]')?.classList.toggle('hidden', dept === 'foh');
+
+  // Inject dept selector bars into checklist forms for management
+  if (dept === 'mgmt') {
+    ['opening','closing','cleaning'].forEach(type => {
+      const formEl = document.getElementById('form-' + type);
+      if (!formEl) return;
+      if (!formEl.querySelector('.dept-selector-bar')) {
+        const bar = document.createElement('div');
+        bar.id = type + '-dept-selector';
+        bar.className = 'dept-selector-bar';
+        bar.innerHTML = `
+          <span class="dept-bar-label">Submitting for:</span>
+          <button class="dept-bar-btn active" data-dept="kitchen" onclick="setFormDept('${type}','kitchen')">🍳 Kitchen</button>
+          <button class="dept-bar-btn" data-dept="foh" onclick="setFormDept('${type}','foh')">🍽 FOH</button>`;
+        formEl.insertBefore(bar, formEl.firstChild);
+      }
+    });
+
+    // Equipment dept selector
+    const equipSection = document.getElementById('equip-dept-selector');
+    if (!equipSection) {
+      const bar = document.createElement('div');
+      bar.id = 'equip-dept-selector';
+      bar.className = 'dept-selector-bar';
+      bar.innerHTML = `
+        <span class="dept-bar-label">Viewing:</span>
+        <button class="dept-bar-btn active" data-dept="kitchen" onclick="setFormDept('equipment','kitchen')">🍳 Kitchen</button>
+        <button class="dept-bar-btn" data-dept="foh" onclick="setFormDept('equipment','foh')">🍽 FOH</button>`;
+      const equipContainer = document.querySelector('#tab-equipment .section-header');
+      equipContainer?.after(bar);
+    }
+  }
 }
 
 // ── PIN ───────────────────────────────────────────────
