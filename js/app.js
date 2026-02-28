@@ -1013,12 +1013,12 @@ async function pullDraftsFromSheets() {
         saveDraft(d.type, d.dept, merged);
       });
 
-    // Re-apply ticks to any open checklist forms
+    // Re-apply ticks to all checklist forms — active or not
+    // Safe to call unconditionally: restoreDraft only sets checked=true, never unticks
     ['opening','closing','cleaning'].forEach(t => {
       const dept = getFormDept(t);
-      if (document.getElementById('tab-' + t)?.classList.contains('active')) {
-        restoreDraft(t, dept);
-      }
+      restoreDraft(t, dept);
+      updateChecklistProgress(t, dept);
     });
   } catch(e) { console.warn('pullDraftsFromSheets error:', e); }
 }
