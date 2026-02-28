@@ -401,14 +401,11 @@ function rebuildAllChecklists() {
     // Management gets weekly + can submit kitchen/foh checklists
     rebuildChecklist('weekly', 'mgmt');
     const openDept  = (state.tabDept && state.tabDept['opening'])  || 'kitchen';
-    const cleanDept = (state.tabDept && state.tabDept['cleaning']) || 'kitchen';
     const closeDept = (state.tabDept && state.tabDept['closing'])  || 'kitchen';
     rebuildChecklist('opening',  openDept);
-    rebuildChecklist('cleaning', cleanDept);
     rebuildChecklist('closing',  closeDept);
   } else {
     rebuildChecklist('opening', dept);
-    rebuildChecklist('cleaning', dept);
     rebuildChecklist('closing', dept);
   }
 }
@@ -535,7 +532,7 @@ function applyDeviceIdentity() {
   const equipSel = document.getElementById('equip-dept-selector');
   if (equipSel) equipSel.style.display = isMgmt ? 'flex' : 'none';
   // Checklist selectors
-  ['opening','closing','cleaning'].forEach(type => {
+  ['opening','closing'].forEach(type => {
     const sel = document.getElementById(type + '-dept-selector');
     if (sel) sel.style.display = isMgmt ? 'flex' : 'none';
   });
@@ -1085,7 +1082,7 @@ function confirmResetToday() {
   const removed = before - state.records.length;
 
   // Clear drafts for any checklist types being reset
-  ['opening','closing','cleaning'].forEach(type => {
+  ['opening','closing'].forEach(type => {
     if (checked.includes(type)) {
       const d = isManagement() ? (state.tabDept[type] || 'kitchen') : dept;
       clearDraft(type, d);
@@ -1098,7 +1095,7 @@ function confirmResetToday() {
   rebuildAllChecklists();
 
   // Refresh whichever tab is currently open
-  ['opening','closing','cleaning'].forEach(type => {
+  ['opening','closing'].forEach(type => {
     if (checked.includes(type)) {
       updateChecklistProgress(type, isManagement() ? (state.tabDept[type]||'kitchen') : dept);
     }

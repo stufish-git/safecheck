@@ -123,7 +123,7 @@ function showTab(tabId) {
   if (tabId === 'closing') renderUndoneTasksSection();
 
   // Restore draft tick state when opening a checklist tab
-  if (['opening','closing','cleaning'].includes(tabId)) {
+  if (['opening','closing'].includes(tabId)) {
     const dept = getFormDept(tabId);
     restoreDraft(tabId, dept);
     updateChecklistProgress(tabId, dept);
@@ -172,7 +172,7 @@ function setFormDept(type, dept) {
   const selectorId = type === 'equipment' ? 'equip-dept-selector' : `${type}-dept-selector`;
   syncDeptBar(selectorId, dept);
   // Rebuild form content for new dept
-  if (['opening','closing','cleaning'].includes(type)) {
+  if (['opening','closing'].includes(type)) {
     rebuildChecklist(type, dept);
     updateChecklistProgress(type, dept);
     const staff = getDeptStaff(dept);
@@ -713,7 +713,6 @@ function renderManagerDashboard() {
       : [
           { type:'opening',     label:'Opening',     icon:'☀', total: getActiveChecks(deptId,'opening').length  || 12 },
           { type:'temperature', label:'Equipment',   icon:'🌡', total: null },
-          { type:'cleaning',    label:'Cleaning',    icon:'◎', total: getActiveChecks(deptId,'cleaning').length || 14 },
           { type:'closing',     label:'Closing',     icon:'☽', total: getActiveChecks(deptId,'closing').length  || 10 },
           { type:'tasks',       label:'Tasks',       icon:'☑', total: null },
         ];
@@ -797,7 +796,6 @@ function renderStaffDashboard() {
   let cards = [
     { id:'opening',   label:'Opening',      icon:'☀', color:'var(--opening)', total: getActiveChecks(dept,'opening').length  || 12 },
     { id:'equipment', label:'Equipment',    icon:'🌡', color:'var(--temp)',    total: null, tab:'equipment', recType:'temperature' },
-    { id:'cleaning',  label:'Cleaning',     icon:'◎', color:'var(--clean)',   total: getActiveChecks(dept,'cleaning').length || 14 },
     { id:'closing',   label:'Closing',      icon:'☽', color:'var(--closing)', total: getActiveChecks(dept,'closing').length  || 10 },
     { id:'tasks',     label:'Weekly Tasks', icon:'☑', color:'#a78bfa',        total: null },
   ];
@@ -1160,7 +1158,7 @@ async function pullDraftsFromSheets() {
 
     // Re-apply ticks to all checklist forms — active or not
     // Safe to call unconditionally: restoreDraft only sets checked=true, never unticks
-    ['opening','closing','cleaning'].forEach(t => {
+    ['opening','closing'].forEach(t => {
       const dept = getFormDept(t);
       restoreDraft(t, dept);
       updateChecklistProgress(t, dept);
