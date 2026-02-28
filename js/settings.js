@@ -429,21 +429,29 @@ function rebuildChecklist(section, dept) {
   if (shared.length) {
     const g = document.createElement('div');
     g.className = 'check-group';
-    g.innerHTML = `<h3 class="group-title">General Safety</h3>` + shared.map(checkItemHTML).join('');
+    g.innerHTML = `<h3 class="group-title">General Safety</h3>` + shared.map(c => checkItemHTML(c, section, dept)).join('');
     frag.appendChild(g);
   }
   if (specific.length) {
     const g = document.createElement('div');
     g.className = 'check-group';
-    g.innerHTML = `<h3 class="group-title">${deptInfo?.icon || ''} ${deptInfo?.label || ''}</h3>` + specific.map(checkItemHTML).join('');
+    g.innerHTML = `<h3 class="group-title">${deptInfo?.icon || ''} ${deptInfo?.label || ''}</h3>` + specific.map(c => checkItemHTML(c, section, dept)).join('');
     frag.appendChild(g);
   }
   // Insert before notes-group — NOT before signed-by-group (signed-by is pinned at top)
   formEl.insertBefore(frag, formEl.querySelector('.notes-group, .form-actions'));
+
+  // Restore any ticks saved earlier today
+  restoreDraft(section, dept);
+  updateChecklistProgress(section, dept);
 }
 
-function checkItemHTML(c) {
-  return `<label class="check-item"><input type="checkbox" data-key="${c.id}">${c.label}</label>`;
+function checkItemHTML(c, type, dept) {
+  // onchange saves tick to draft immediately — persistent across nav and devices
+  const handler = type && dept
+    ? `onchange="onCheckboxChange('${type}','${dept}','${c.id}',this.checked);updateChecklistProgress('${type}','${dept}')"`
+    : '';
+  return `<label class="check-item"><input type="checkbox" data-key="${c.id}" ${handler}>${c.label}</label>`;
 }
 
 function rebuildSignedByDropdowns() {

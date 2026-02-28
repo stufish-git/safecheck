@@ -143,6 +143,9 @@ async function pullAllRecords(force=false) {
     // Tasks store completions separately (not in state.records) for fast lookup
     syncRemoteTaskCompletions(remoteRecords);
 
+    // Pull and merge checklist drafts (persistent tick state across devices)
+    await pullDraftsFromSheets();
+
     setSyncStatus('connected','Up to date');
     updateDashboard();
     renderEquipmentLog();

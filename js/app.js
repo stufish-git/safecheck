@@ -122,6 +122,13 @@ function showTab(tabId) {
   if (tabId === 'tasks') renderTasksTab();
   if (tabId === 'closing') renderUndoneTasksSection();
 
+  // Restore draft tick state when opening a checklist tab
+  if (['opening','closing','cleaning'].includes(tabId)) {
+    const dept = getFormDept(tabId);
+    restoreDraft(tabId, dept);
+    updateChecklistProgress(tabId, dept);
+  }
+
   if (tabId === 'equipment') {
     const dept = getFormDept('equipment');
     buildEquipmentCheckUI(dept);
@@ -235,9 +242,28 @@ function submitChecklist(type) {
     document.querySelectorAll('.rating-btn').forEach(b => b.classList.remove('selected'));
   }
 
+  // Clear draft — checks are now formally submitted
+  clearDraft(type, dept);
+
   updateDashboard();
   showToast(`${labelFor(type)} submitted ✓`, 'success');
   setTimeout(() => showTab('dashboard'), 1200);
+}
+
+// ── Checklist progress bar ───────────────────────────
+// Shows tick progress in the form header before formal submit
+function updateChecklistProgress(type, dept) {
+  const progEl = document.getElementById(`${type}-progress`);
+  if (!progEl) return;
+  const { ticked, total } = getDraftProgress(type, dept);
+  if (!total) { progEl.style.display = 'none'; return; }
+  const pct = Math.round((ticked / total) * 100);
+  progEl.style.display = 'block';
+  progEl.innerHTML = `
+    <div class="draft-progress-bar">
+      <div class="draft-progress-fill" style="width:${pct}%"></div>
+    </div>
+    <div class="draft-progress-label">${ticked} of ${total} ticked${ticked === total ? ' — ready to submit ✓' : ''}</div>`;
 }
 
 // ── Equipment check thresholds ────────────────────────
@@ -892,4 +918,122 @@ function checkConnectionStatus() {
 function openSheetsUrl() {
   if (state.config.sheetsViewUrl) window.open(state.config.sheetsViewUrl,'_blank');
   else showToast('No spreadsheet URL saved — connect first','error');
+}
+
+// ═══════════════════════════════════════════════════════
+//  CHECKLIST DRAFT SYSTEM v5.3
+//  Persistent tick state within a day — local + synced
+// ═══════════════════════════════════════════════════════
+
+// Draft key: "draft_{type}_{dept}_{YYYY-MM-DD}"
+function draftKey(type, dept) {
+  return `draft_${type}_${dept}_${todayStr()}`;
+}
+
+// Load draft from localStorage — returns {checkId: true/false, ...}
+function loadDraft(type, dept) {
+  try {
+    const raw = localStorage.getItem(draftKey(type, dept));
+    return raw ? JSON.parse(raw) : {};
+  } catch(e) { return {}; }
+}
+
+// Save draft to localStorage
+function saveDraft(type, dept, draft) {
+  try {
+    localStorage.setItem(draftKey(type, dept), JSON.stringify(draft));
+  } catch(e) {}
+}
+
+// OR-merge two drafts — once ticked on any device, stays ticked
+function mergeDrafts(local, remote) {
+  const merged = { ...local };
+  Object.entries(remote).forEach(([k, v]) => {
+    if (v === true) merged[k] = true;   // ticked always wins
+    else if (!(k in merged)) merged[k] = v;
+  });
+  return merged;
+}
+
+// Called when user ticks/unticks a box — saves locally and pushes to Sheets
+function onCheckboxChange(type, dept, checkId, checked) {
+  const draft = loadDraft(type, dept);
+  if (checked) draft[checkId] = true;
+  else delete draft[checkId];   // unticking removes it — allows correction before submit
+  saveDraft(type, dept, draft);
+  pushDraftToSheets(type, dept, draft);
+  updateDashboard();
+}
+
+// Restore draft ticks into the form after rebuild
+function restoreDraft(type, dept) {
+  const draft  = loadDraft(type, dept);
+  const formEl = document.getElementById('form-' + type);
+  if (!formEl || !Object.keys(draft).length) return;
+  formEl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    if (draft[cb.dataset.key] === true) cb.checked = true;
+  });
+}
+
+// Push draft to Sheets as an upsert (overwrites previous draft row for this day/dept/type)
+async function pushDraftToSheets(type, dept, draft) {
+  if (!state.config.sheetsUrl) return;
+  try {
+    const payload = {
+      action:   'upsert',
+      sheetTab: 'Drafts',
+      upsertKey: `${type}_${dept}_${todayStr()}`,
+      data: { type, dept, date: todayStr(), draft, timestamp: nowTimestamp() },
+    };
+    await fetch(state.config.sheetsUrl, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch(e) { /* silent — draft push is best-effort */ }
+}
+
+// Pull all drafts from Sheets and merge with local — called inside pullAllRecords
+async function pullDraftsFromSheets() {
+  if (!state.config.sheetsUrl) return;
+  try {
+    const url  = `${state.config.sheetsUrl}?action=readDrafts`;
+    const resp = await fetch(url, { method: 'GET', mode: 'cors' });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (data.status !== 'ok' || !Array.isArray(data.drafts)) return;
+
+    const today = todayStr();
+    data.drafts
+      .filter(d => d.date === today)
+      .forEach(d => {
+        if (!d.type || !d.dept || !d.draft) return;
+        const local  = loadDraft(d.type, d.dept);
+        const merged = mergeDrafts(local, d.draft);
+        saveDraft(d.type, d.dept, merged);
+      });
+
+    // Re-apply ticks to any open checklist forms
+    ['opening','closing','cleaning'].forEach(t => {
+      const dept = getFormDept(t);
+      if (document.getElementById('tab-' + t)?.classList.contains('active')) {
+        restoreDraft(t, dept);
+      }
+    });
+  } catch(e) { console.warn('pullDraftsFromSheets error:', e); }
+}
+
+// Clear draft after successful submit
+function clearDraft(type, dept) {
+  localStorage.removeItem(draftKey(type, dept));
+  // Push an empty draft to Sheets so other devices know it's been submitted
+  pushDraftToSheets(type, dept, {});
+}
+
+// Progress indicator — how many boxes ticked today (for dashboard)
+function getDraftProgress(type, dept) {
+  const draft   = loadDraft(type, dept);
+  const ticked  = Object.values(draft).filter(v => v === true).length;
+  const checks  = getActiveChecks(dept, type);
+  return { ticked, total: checks.length };
 }
