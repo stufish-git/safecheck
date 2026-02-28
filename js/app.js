@@ -677,17 +677,31 @@ function renderManagerDashboard() {
       }
       const rec   = deptRecords.filter(r=>r.type===sec.type).sort((a,b)=>new Date(b.iso)-new Date(a.iso))[0];
       const total = sec.total || 10;
-      if (!rec) return `<div class="mgr-card" onclick="showTab('${sec.type === 'weekly' ? 'weekly' : sec.type}')">
-        <div class="mgr-card-header"><span class="mgr-card-icon">${sec.icon}</span><span class="mgr-card-label">${sec.label}</span></div>
-        <div class="pb"><div class="pf" style="width:0%"></div></div>
-        <div class="mgr-card-status">Not done</div>
-      </div>`;
+      const tabTarget = sec.type === 'weekly' ? 'weekly' : sec.type;
+
+      if (!rec) {
+        // No submitted record — show draft tick progress
+        const { ticked, total: dTotal } = getDraftProgress(sec.type, deptId);
+        const t   = dTotal || total;
+        const pct = t > 0 ? Math.round((ticked / t) * 100) : 0;
+        const statusText = ticked > 0 ? `${ticked} of ${t} ticked` : 'Not done';
+        const statusCls  = ticked > 0 ? 'partial' : '';
+        return `<div class="mgr-card" onclick="showTab('${tabTarget}')">
+          <div class="mgr-card-header"><span class="mgr-card-icon">${sec.icon}</span><span class="mgr-card-label">${sec.label}</span></div>
+          <div class="pb"><div class="pf" style="width:${pct}%;background:var(--success)"></div></div>
+          <div class="mgr-card-status ${statusCls}">${statusText}</div>
+        </div>`;
+      }
+      // Submitted record — show final count
       const checks = Object.values(rec.fields).filter(v=>v==='Yes'||v==='No');
       const passed = checks.filter(v=>v==='Yes').length;
-      const pct    = Math.round((passed/(checks.length||total))*100);
+      const n      = checks.length || total;
+      const pct    = Math.round((passed / n) * 100);
       const signed = rec.fields?.open_signed_by||rec.fields?.close_signed_by||rec.fields?.clean_signed_by||rec.fields?.weekly_signed_by||'';
-      const status = pct===100 ? { text:`✓ ${signed||'Done'}`, cls:'complete' } : { text:`${pct}% · ${signed}`, cls:'partial' };
-      return `<div class="mgr-card" onclick="showTab('${sec.type}')">
+      const status = pct===100
+        ? { text:`✓ ${signed||'Done'} · ${passed}/${n}`, cls:'complete' }
+        : { text:`${passed} of ${n} · ${signed}`,        cls:'partial'  };
+      return `<div class="mgr-card" onclick="showTab('${tabTarget}')">
         <div class="mgr-card-header"><span class="mgr-card-icon">${sec.icon}</span><span class="mgr-card-label">${sec.label}</span></div>
         <div class="pb"><div class="pf" style="width:${pct}%;background:var(--success)"></div></div>
         <div class="mgr-card-status ${status.cls}">${status.text}</div>
@@ -778,25 +792,36 @@ function renderStaffDashboard() {
     // Standard checklist card
     const rec   = dr.filter(r=>r.type===card.id).sort((a,b)=>new Date(b.iso)-new Date(a.iso))[0];
     const total = card.total || 10;
-    if (!rec) return `<div class="dash-card" onclick="showTab('${tab}')">
-      <div class="dash-card-icon" style="color:${card.color}">${card.icon}</div>
-      <div class="dash-card-body"><h3>${card.label}</h3>
-        <div class="dash-progress"><div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div></div>
-        <div class="progress-label">0 / ${total}</div>
-      </div>
-      <div class="dash-card-status">—</div>
-    </div>`;
+
+    if (!rec) {
+      // No submitted record — show draft tick progress instead
+      const { ticked, total: dTotal } = getDraftProgress(card.id, dept);
+      const t     = dTotal || total;
+      const pct   = t > 0 ? Math.round((ticked / t) * 100) : 0;
+      const label = ticked > 0 ? `${ticked} of ${t} ticked` : `0 of ${t}`;
+      const cls   = ticked > 0 ? 'partial' : '';
+      return `<div class="dash-card" onclick="showTab('${tab}')">
+        <div class="dash-card-icon" style="color:${card.color}">${card.icon}</div>
+        <div class="dash-card-body"><h3>${card.label}</h3>
+          <div class="dash-progress"><div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${card.color}"></div></div></div>
+          <div class="progress-label">${label}</div>
+        </div>
+        <div class="dash-card-status ${cls}">${ticked > 0 ? 'In progress' : '—'}</div>
+      </div>`;
+    }
+    // Submitted record exists — show final count
     const checks = Object.values(rec.fields).filter(v=>v==='Yes'||v==='No');
     const passed = checks.filter(v=>v==='Yes').length;
-    const pct    = Math.round((passed/(checks.length||total))*100);
+    const n      = checks.length || total;
+    const pct    = Math.round((passed / n) * 100);
     const signed = rec.fields?.open_signed_by||rec.fields?.close_signed_by||rec.fields?.clean_signed_by||'';
     return `<div class="dash-card" onclick="showTab('${tab}')">
       <div class="dash-card-icon" style="color:${card.color}">${card.icon}</div>
       <div class="dash-card-body"><h3>${card.label}</h3>
         <div class="dash-progress"><div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${card.color}"></div></div></div>
-        <div class="progress-label">${passed} / ${checks.length||total}${signed?' · '+signed:''}</div>
+        <div class="progress-label">${passed} of ${n}${signed ? ' · ' + signed : ''}</div>
       </div>
-      <div class="dash-card-status ${pct===100?'complete':'partial'}">${pct===100?'✓ Complete':pct+'% done'}</div>
+      <div class="dash-card-status ${pct===100?'complete':'partial'}">${pct===100 ? '✓ Complete' : `${passed} / ${n} done`}</div>
     </div>`;
   }).join('')}</div>`;
 }
