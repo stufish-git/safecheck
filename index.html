@@ -83,6 +83,7 @@
           </select>
         </div>
         <div id="opening-progress" class="draft-progress" style="display:none"></div>
+        <div id="opening-banner" class="checklist-banner" style="display:none"></div>
         <!-- check groups injected by rebuildChecklist() -->
         <div class="notes-group">
           <label class="notes-label">Notes / Issues</label>
@@ -90,7 +91,7 @@
         </div>
         <div class="form-actions">
           <button class="btn-submit" onclick="submitChecklist('opening')">
-            <span>Submit Opening Checks</span><span class="btn-icon">→</span>
+            <span>Finalise &amp; Submit</span><span class="btn-icon">→</span>
           </button>
         </div>
       </form>
@@ -220,6 +221,7 @@
           </select>
         </div>
         <div id="cleaning-progress" class="draft-progress" style="display:none"></div>
+        <div id="cleaning-banner" class="checklist-banner" style="display:none"></div>
         <!-- check groups injected by rebuildChecklist() -->
         <div class="notes-group">
           <label class="notes-label">Notes / Issues</label>
@@ -227,7 +229,7 @@
         </div>
         <div class="form-actions">
           <button class="btn-submit" onclick="submitChecklist('cleaning')">
-            <span>Submit Cleaning Schedule</span><span class="btn-icon">→</span>
+            <span>Finalise &amp; Submit</span><span class="btn-icon">→</span>
           </button>
         </div>
       </form>
@@ -253,6 +255,7 @@
           </select>
         </div>
         <div id="closing-progress" class="draft-progress" style="display:none"></div>
+        <div id="closing-banner" class="checklist-banner" style="display:none"></div>
         <!-- check groups injected by rebuildChecklist() -->
         <!-- Undone weekly tasks — visible to management on Sat/Sun -->
         <div id="undone-tasks-section" style="display:none"></div>
@@ -262,7 +265,7 @@
         </div>
         <div class="form-actions">
           <button class="btn-submit" onclick="submitChecklist('closing')">
-            <span>Submit Closing Checks</span><span class="btn-icon">→</span>
+            <span>Finalise &amp; Submit</span><span class="btn-icon">→</span>
           </button>
         </div>
       </form>
@@ -327,6 +330,11 @@
       <div class="section-header">
         <h1 class="section-title">History</h1>
         <p class="section-subtitle">Your department's compliance records</p>
+      </div>
+      <div class="history-quick-dates">
+        <button class="quick-date-btn" onclick="setHistoryQuickDate('today')">Today</button>
+        <button class="quick-date-btn" onclick="setHistoryQuickDate('yesterday')">Yesterday</button>
+        <button class="quick-date-btn" onclick="setHistoryQuickDate('week')">This Week</button>
       </div>
       <div class="history-filters">
         <select class="select-field" id="history-type">
