@@ -206,10 +206,11 @@ body {
   border-bottom: 1px solid var(--border);
 }
 .check-item {
-  display: flex; align-items: flex-start; gap: 14px;
+  display: flex; align-items: center; gap: 14px;
   padding: 14px 20px; cursor: pointer;
   border-bottom: 1px solid var(--border);
   transition: background 0.15s; font-size: 14px; line-height: 1.4;
+  width: 100%; box-sizing: border-box;
 }
 .check-item:last-child { border-bottom: none; }
 .check-item:hover { background: rgba(255,255,255,0.03); }
@@ -1118,52 +1119,36 @@ body.theme-light .draft-progress-bar { background: #e8ecf3; }
 }
 body.theme-light .quick-date-btn { background: #f4f6fa; border-color: #d0d6e0; color: #555; }
 
-/* ── Check item info button ──────────────────────────── */
-.check-item {
-  display: flex;
-  align-items: flex-start;
-  flex: 1;
-}
+/* ── Check item layout — label + info button on same row ── */
 .check-item-label {
   flex: 1;
 }
-/* Wrapper for check + info button on same row */
-label.check-item + .check-info-btn,
 .check-info-btn {
   flex-shrink: 0;
   background: none;
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--success);
   border-radius: 50%;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
   font-size: 13px;
-  color: var(--text-dim);
+  color: var(--success);
   cursor: pointer;
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
-  margin-left: 8px;
-  margin-top: 2px;
   line-height: 1;
   transition: all 0.15s;
-  vertical-align: middle;
+  padding: 0;
+  margin-left: auto;
 }
 .check-info-btn:hover {
-  background: var(--surface-raised);
-  color: var(--success);
-  border-color: var(--success);
+  background: var(--success);
+  color: #000;
 }
 .task-info-btn {
   margin-left: auto;
-  margin-top: 0;
-}
-
-/* Check item row layout — label + info btn side by side */
-.check-item-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  padding: 2px 0;
+  flex-shrink: 0;
 }
 
 /* ── Info overlay modal ──────────────────────────────── */
@@ -1246,7 +1231,7 @@ label.check-item + .check-info-btn,
   opacity: 0.8;
 }
 
-body.theme-light .check-info-btn { border-color: #d0d6e0; color: #888; }
+body.theme-light .check-info-btn { border-color: var(--success); color: var(--success); }
 body.theme-light .set-btn-info   { background: #f4f6fa; border-color: #d0d6e0; }
 
 /* ── Reset Today modal ───────────────────────────────── */
