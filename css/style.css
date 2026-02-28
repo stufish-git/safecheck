@@ -1000,3 +1000,37 @@ body.theme-light .equip-btn          { background: #f4f6fa; border-color: #d0d6e
 body.theme-light .equip-temp-input   { background: #fff; border-color: #d0d6e0; color: #111; }
 body.theme-light .equip-action-input { background: rgba(239,68,68,0.04); color: #111; }
 body.theme-light .dept-bar-btn       { background: #f4f6fa; border-color: #d0d6e0; color: #555; }
+
+/* Signed-by at top of form — tighter bottom margin, separator below */
+.signed-by-top {
+  margin-bottom: 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Checklist draft progress bar ──────────────────── */
+.draft-progress {
+  padding: 10px 0 16px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.draft-progress-bar {
+  height: 5px;
+  background: var(--surface-raised);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 7px;
+}
+.draft-progress-fill {
+  height: 100%;
+  background: var(--success);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.draft-progress-label {
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+body.theme-light .draft-progress-bar { background: #e8ecf3; }
