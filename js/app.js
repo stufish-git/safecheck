@@ -146,15 +146,24 @@ function getFormDept(type) {
   return state.tabDept[type] || 'kitchen';
 }
 
+function syncDeptBar(selectorId, activeDept) {
+  const selector = document.getElementById(selectorId);
+  if (!selector) return;
+  selector.querySelectorAll('.dept-bar-btn').forEach(btn => {
+    const isActive = btn.dataset.dept === activeDept;
+    btn.classList.toggle('active', isActive);
+    // Force inline style as fallback in case CSS class isn't applying
+    btn.style.background   = isActive ? 'var(--success)' : '';
+    btn.style.borderColor  = isActive ? 'var(--success)' : '';
+    btn.style.color        = isActive ? '#000' : '';
+  });
+}
+
 function setFormDept(type, dept) {
   state.tabDept[type] = dept;
   // Update selector button states
-  const selector = document.getElementById(`${type}-dept-selector`);
-  if (selector) {
-    selector.querySelectorAll('.dept-bar-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.dept === dept);
-    });
-  }
+  const selectorId = type === 'equipment' ? 'equip-dept-selector' : `${type}-dept-selector`;
+  syncDeptBar(selectorId, dept);
   // Rebuild form content for new dept
   if (['opening','closing','cleaning'].includes(type)) {
     rebuildChecklist(type, dept);
@@ -263,6 +272,9 @@ function buildEquipmentCheckUI(dept) {
   const ORDER  = ['fridge','freezer','hothold','oven','other'];
   const ICONS  = { fridge:'🧊', freezer:'❄', hothold:'♨', oven:'🔥', other:'⊕' };
   const LABELS = { fridge:'Fridges', freezer:'Freezers', hothold:'Hot Hold', oven:'Ovens & Grills', other:'Other' };
+
+  // Sync dept bar button states to reflect current dept
+  syncDeptBar('equip-dept-selector', dept);
 
   container.innerHTML = ORDER
     .filter(t => groups[t]?.length)
