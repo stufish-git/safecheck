@@ -674,6 +674,15 @@
             <button class="btn-submit" onclick="connectGoogleSheets()"><span>Configure Sheets Connection</span><span class="btn-icon">↗</span></button>
           </div>
         </div>
+        <div class="check-group reset-today-card" style="margin-top:14px">
+          <h3 class="group-title" style="color:var(--danger)">Reset Today's Data</h3>
+          <div style="padding:16px 20px">
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6">
+              Clears selected submissions from today on this device only. Use this to correct wrong submissions — data already in Google Sheets is not affected.
+            </p>
+            <button class="btn-danger" onclick="showResetTodayModal()"><span>Reset Today's Data</span><span class="btn-icon">↺</span></button>
+          </div>
+        </div>
       </div>
 
     </section>

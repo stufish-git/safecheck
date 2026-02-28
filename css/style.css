@@ -1248,3 +1248,75 @@ label.check-item + .check-info-btn,
 
 body.theme-light .check-info-btn { border-color: #d0d6e0; color: #888; }
 body.theme-light .set-btn-info   { background: #f4f6fa; border-color: #d0d6e0; }
+
+/* ── Reset Today modal ───────────────────────────────── */
+.reset-type-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 16px 0;
+}
+.reset-type-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.reset-type-row:has(.reset-type-cb:checked) {
+  border-color: rgba(239,68,68,0.4);
+  background: rgba(239,68,68,0.07);
+}
+.reset-type-cb {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--danger);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.reset-type-icon { font-size: 18px; flex-shrink: 0; }
+.reset-type-info  { flex: 1; }
+.reset-type-label { font-size: 13px; font-weight: 600; color: var(--text); }
+.reset-type-count { font-size: 11px; color: var(--text-muted); margin-top: 2px; font-family: var(--mono); }
+.reset-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 11px 14px;
+  border-radius: 8px;
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.25);
+  font-size: 12px;
+  color: var(--danger);
+  line-height: 1.5;
+  margin-bottom: 4px;
+}
+
+/* Danger button */
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 22px;
+  border-radius: 12px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: var(--font);
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-danger:hover { opacity: 0.88; }
+.btn-danger .btn-icon {
+  font-size: 16px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+body.theme-light .reset-type-row { background: #f8f9fc; border-color: #d8dde8; }

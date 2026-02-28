@@ -997,3 +997,112 @@ async function pullSettingsFromSheets() {
     if (data.status==='ok'&&data.settings) { state.settings=deepMergeSettings(state.settings, data.settings); saveSettings(); }
   } catch(e) { console.warn('Settings pull failed:', e); }
 }
+
+// ── Reset Today ───────────────────────────────────────
+function showResetTodayModal() {
+  showPinModal(() => {
+    document.getElementById('reset-today-modal')?.remove();
+
+    const today = todayStr();
+    const dept  = currentDept();
+
+    // Count today's records by type for the checkboxes
+    const types = [
+      { id:'opening',     label:'Opening Checks',        icon:'☀' },
+      { id:'closing',     label:'Closing Checks',         icon:'☽' },
+      { id:'cleaning',    label:'Cleaning Schedule',      icon:'◎' },
+      { id:'temperature', label:'Equipment Temperatures', icon:'🌡' },
+      { id:'food_probe',  label:'Food Probe Checks',      icon:'🍖' },
+      { id:'weekly',      label:'Weekly Review',           icon:'▦' },
+    ];
+
+    const withCounts = types.map(t => {
+      const count = state.records.filter(r =>
+        r.type === t.id && r.date === today &&
+        (isManagement() || !r.dept || r.dept === dept)
+      ).length;
+      return { ...t, count };
+    }).filter(t => t.count > 0);  // only show types that have data today
+
+    if (!withCounts.length) {
+      showToast('No submissions found for today', 'error');
+      return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'reset-today-modal';
+    overlay.className = 'modal-overlay';
+    overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+
+    overlay.innerHTML = `
+      <div class="modal-box" style="max-width:420px">
+        <h2 class="modal-title" style="color:var(--danger)">↺ Reset Today's Data</h2>
+        <p class="modal-desc">Select which submissions to clear from <strong>${today}</strong>. This device only — Sheets data is not affected.</p>
+        <div class="reset-type-list">
+          ${withCounts.map(t => `
+            <label class="reset-type-row">
+              <input type="checkbox" class="reset-type-cb" value="${t.id}" checked/>
+              <span class="reset-type-icon">${t.icon}</span>
+              <div class="reset-type-info">
+                <div class="reset-type-label">${t.label}</div>
+                <div class="reset-type-count">${t.count} record${t.count !== 1 ? 's' : ''} today</div>
+              </div>
+            </label>`).join('')}
+        </div>
+        <div class="reset-warning">
+          <span>⚠</span>
+          <span>Cleared records cannot be recovered locally. Staff will need to resubmit.</span>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-cancel" onclick="document.getElementById('reset-today-modal').remove()">Cancel</button>
+          <button class="btn-danger" onclick="confirmResetToday()"><span>Clear Selected</span><span class="btn-icon">↺</span></button>
+        </div>
+      </div>`;
+
+    document.body.appendChild(overlay);
+  });
+}
+
+function confirmResetToday() {
+  const today   = todayStr();
+  const dept    = currentDept();
+  const modal   = document.getElementById('reset-today-modal');
+  const checked = [...modal.querySelectorAll('.reset-type-cb:checked')].map(cb => cb.value);
+
+  if (!checked.length) {
+    showToast('Select at least one type to clear', 'error');
+    return;
+  }
+
+  // Remove matching records from state
+  const before = state.records.length;
+  state.records = state.records.filter(r => {
+    if (r.date !== today) return true;                                   // keep other days
+    if (!checked.includes(r.type)) return true;                          // keep unchecked types
+    if (!isManagement() && r.dept && r.dept !== dept) return true;       // staff: keep other depts
+    return false;                                                         // remove this one
+  });
+  const removed = before - state.records.length;
+
+  // Clear drafts for any checklist types being reset
+  ['opening','closing','cleaning'].forEach(type => {
+    if (checked.includes(type)) {
+      const d = isManagement() ? (state.tabDept[type] || 'kitchen') : dept;
+      clearDraft(type, d);
+    }
+  });
+
+  saveState();
+  modal.remove();
+  updateDashboard();
+  rebuildAllChecklists();
+
+  // Refresh whichever tab is currently open
+  ['opening','closing','cleaning'].forEach(type => {
+    if (checked.includes(type)) {
+      updateChecklistProgress(type, isManagement() ? (state.tabDept[type]||'kitchen') : dept);
+    }
+  });
+
+  showToast(`${removed} record${removed !== 1 ? 's' : ''} cleared for today ✓`, 'success');
+}
