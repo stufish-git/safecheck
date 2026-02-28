@@ -9,7 +9,7 @@
 const SYNC_QUEUE_KEY   = 'safechecks_sync_queue';
 const REMOTE_CACHE_KEY = 'safechecks_remote_records';
 const LAST_PULL_KEY    = 'safechecks_last_pull';
-const PULL_INTERVAL_MS = 60 * 1000;
+const PULL_INTERVAL_MS = 15 * 1000;  // 15s — fast enough for multi-device, within Apps Script limits
 
 const SHEET_TABS = {
   opening:         'Opening Checks',
@@ -138,11 +138,21 @@ async function pullAllRecords(force=false) {
     saveState();
     localStorage.setItem(REMOTE_CACHE_KEY, JSON.stringify(remoteRecords));
     localStorage.setItem(LAST_PULL_KEY, Date.now().toString());
+
+    // Sync remote task completions into the task completions localStorage
+    // Tasks store completions separately (not in state.records) for fast lookup
+    syncRemoteTaskCompletions(remoteRecords);
+
     setSyncStatus('connected','Up to date');
     updateDashboard();
-    renderTempLog();
+    renderEquipmentLog();
     renderFoodProbeLog();
     updateFoodProbeDayStatus();
+    updateEquipDayStatus();
+    // If tasks tab is open, refresh it
+    if (document.getElementById('tab-tasks')?.classList.contains('active')) {
+      renderTasksTab();
+    }
   } catch(err) {
     console.error('Pull error:', err);
     setSyncStatus('error','Offline');
@@ -192,6 +202,15 @@ function parseSheetRow(row, type) {
         probe_used:    row['Probe Used']             || '',
         probe_action:  row['Corrective Action']      || '',
         probe_staff:   row['Logged By']              || '',
+      };
+    }
+
+    // Fallback for task_completion (no Fields JSON column — use named columns)
+    if (type === 'task_completion') {
+      fields = {
+        task_id:      row['Task ID']      || '',
+        task_week:    row['Week Start']   || '',
+        task_done_by: row['Completed By'] || '',
       };
     }
 
@@ -301,6 +320,44 @@ function mergeRecords(local, remote) {
   });
 
   return Array.from(map.values());
+}
+
+// ── Task completion sync ─────────────────────────────
+// Remote task_completion records come back as state.records entries.
+// The tasks UI reads from a separate localStorage key (safechecks_task_completions).
+// This function bridges the two so cross-device task completions are visible.
+function syncRemoteTaskCompletions(remoteRecords) {
+  try {
+    const taskRecs = remoteRecords.filter(r => r.type === 'task_completion');
+    if (!taskRecs.length) return;
+
+    const completions = loadTaskCompletions();
+    let changed = false;
+
+    taskRecs.forEach(r => {
+      const taskId   = r.fields?.task_id   || '';
+      const weekStart= r.fields?.task_week  || '';
+      const staffName= r.fields?.task_done_by || '';
+      if (!taskId || !weekStart) return;
+
+      const key = `${weekStart}__${taskId}`;
+      if (!completions[key]) {
+        completions[key] = {
+          taskId,
+          weekStart,
+          staffName,
+          timestamp: r.iso || new Date().toISOString(),
+          done: true,
+          source: 'remote',
+        };
+        changed = true;
+      }
+    });
+
+    if (changed) saveTaskCompletions(completions);
+  } catch(e) {
+    console.warn('syncRemoteTaskCompletions error:', e);
+  }
 }
 
 // ── Offline queue ─────────────────────────────────────

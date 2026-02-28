@@ -438,7 +438,8 @@ function rebuildChecklist(section, dept) {
     g.innerHTML = `<h3 class="group-title">${deptInfo?.icon || ''} ${deptInfo?.label || ''}</h3>` + specific.map(checkItemHTML).join('');
     frag.appendChild(g);
   }
-  formEl.insertBefore(frag, formEl.querySelector('.notes-group,.signed-by-group,.form-actions'));
+  // Insert before notes-group — NOT before signed-by-group (signed-by is pinned at top)
+  formEl.insertBefore(frag, formEl.querySelector('.notes-group, .form-actions'));
 }
 
 function checkItemHTML(c) {
@@ -509,37 +510,16 @@ function applyDeviceIdentity() {
   // Probe: kitchen + management only (FOH has no food probe requirement)
   document.querySelector('[data-tab="probe"]')?.classList.toggle('hidden', dept === 'foh');
 
-  // Inject dept selector bars into checklist forms for management
-  if (dept === 'mgmt') {
-    ['opening','closing','cleaning'].forEach(type => {
-      const formEl = document.getElementById('form-' + type);
-      if (!formEl) return;
-      if (!formEl.querySelector('.dept-selector-bar')) {
-        const bar = document.createElement('div');
-        bar.id = type + '-dept-selector';
-        bar.className = 'dept-selector-bar';
-        bar.innerHTML = `
-          <span class="dept-bar-label">Submitting for:</span>
-          <button class="dept-bar-btn active" data-dept="kitchen" onclick="setFormDept('${type}','kitchen')">🍳 Kitchen</button>
-          <button class="dept-bar-btn" data-dept="foh" onclick="setFormDept('${type}','foh')">🍽 FOH</button>`;
-        formEl.insertBefore(bar, formEl.firstChild);
-      }
-    });
-
-    // Equipment dept selector
-    const equipSection = document.getElementById('equip-dept-selector');
-    if (!equipSection) {
-      const bar = document.createElement('div');
-      bar.id = 'equip-dept-selector';
-      bar.className = 'dept-selector-bar';
-      bar.innerHTML = `
-        <span class="dept-bar-label">Viewing:</span>
-        <button class="dept-bar-btn active" data-dept="kitchen" onclick="setFormDept('equipment','kitchen')">🍳 Kitchen</button>
-        <button class="dept-bar-btn" data-dept="foh" onclick="setFormDept('equipment','foh')">🍽 FOH</button>`;
-      const equipContainer = document.querySelector('#tab-equipment .section-header');
-      equipContainer?.after(bar);
-    }
-  }
+  // Show/hide dept selector bars — all are in static HTML, just toggle visibility
+  const isMgmt = dept === 'mgmt';
+  // Equipment selector
+  const equipSel = document.getElementById('equip-dept-selector');
+  if (equipSel) equipSel.style.display = isMgmt ? 'flex' : 'none';
+  // Checklist selectors
+  ['opening','closing','cleaning'].forEach(type => {
+    const sel = document.getElementById(type + '-dept-selector');
+    if (sel) sel.style.display = isMgmt ? 'flex' : 'none';
+  });
 }
 
 // ── PIN ───────────────────────────────────────────────
