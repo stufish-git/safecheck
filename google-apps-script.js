@@ -1,28 +1,25 @@
 /**
  * ═══════════════════════════════════════════════════════
- *  SAFECHECKS — Google Apps Script v5
- *  Departments: Kitchen · Front of House · Management
- *  Tabs: Opening Checks, Closing Checks, Temperature Log,
- *        Food Probe Log, Cleaning Schedule, Weekly Review,
- *        Task Completions, Settings
+ *  SAFECHECKS — Google Apps Script v5.5
  *
- *  HOW TO USE:
+ *  CHANGES FROM v5:
+ *  - doGet now converts Date cell values back to YYYY-MM-DD strings
+ *    (Sheets auto-converts date strings to Date objects; this fixes
+ *    the PWA receiving "Thu Feb 27 2026 00:00:00..." instead of
+ *    "2026-02-27", which caused parseSheetRow to return null for
+ *    every row — history showing 0 records)
+ *  - setupSheets updated to match new compact checklist headers
+ *    (with Fields JSON column for full round-trip reconstruction)
+ *
+ *  HOW TO UPDATE (you've already deployed v5):
  *  1. Open your Google Sheet
- *  2. Click Extensions → Apps Script
- *  3. Delete all existing code and paste this entire file
- *  4. Click Save (Ctrl+S / Cmd+S)
- *  5. In the function dropdown select setupSheets and click Run
- *     — authorise when prompted, then all tabs are created
- *  6. Click Deploy → New deployment
- *       Type: Web app
- *       Execute as: Me
- *       Who has access: Anyone
- *  7. Click Deploy → Authorise → Allow
- *  8. Copy the Web App URL and paste it into SafeChecks
- *
- *  TO UPDATE LATER: Deploy → Manage deployments → Edit (pencil)
- *  → Version: New version → Deploy
- *  Never create a new deployment — the URL would change.
+ *  2. Extensions → Apps Script
+ *  3. Replace ALL code with this file → Save
+ *  4. Run setupSheets() once — this recreates all tabs with
+ *     correct headers (existing data will be cleared)
+ *  5. Deploy → Manage deployments → Edit (pencil icon)
+ *     → Version: New version → Deploy
+ *     The URL stays the same — no reconnection needed.
  * ═══════════════════════════════════════════════════════
  */
 
@@ -33,14 +30,12 @@ function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
 
-    // Settings save — handle before sheet lookup
     if (data.action === 'saveSettings') return handleSaveSettings(data);
 
     const ss      = SpreadsheetApp.getActiveSpreadsheet();
     const tabName = data.sheetTab || 'General';
     let   sheet   = ss.getSheetByName(tabName);
 
-    // Auto-create tab with headers if it doesn't exist yet
     if (!sheet) {
       sheet = ss.insertSheet(tabName);
       if (data.headers && data.headers.length > 0) {
@@ -48,12 +43,15 @@ function doPost(e) {
       }
     }
 
-    // Append the row
+    // Upsert action — for draft tick state (overwrites matching row by upsertKey)
+    if (data.action === 'upsert' && data.upsertKey) {
+      return handleUpsert(ss, data);
+    }
+
     if (data.row && data.row.length > 0) {
       sheet.appendRow(data.row);
 
-      // Colour-code status rows for visibility
-      // Both Temperature Log and Food Probe Log have Status at array index 6
+      // Status is at array index 6 for both Temperature Log and Food Probe Log
       // (ID=0, Date=1, Time=2, Department=3, Location/Product=4, Temp=5, Status=6)
       if (tabName === 'Temperature Log' || tabName === 'Food Probe Log') {
         colourStatusRow(sheet, data.row, 6);
@@ -75,6 +73,7 @@ function doGet(e) {
     const ss      = SpreadsheetApp.getActiveSpreadsheet();
 
     if (action === 'readSettings') return handleReadSettings();
+    if (action === 'readDrafts')   return handleReadDrafts(ss);
 
     if (action === 'read') {
       const sheet = ss.getSheetByName(tabName);
@@ -88,7 +87,21 @@ function doGet(e) {
         .filter(row => row.some(cell => cell !== ''))
         .map(row => {
           const obj = {};
-          headers.forEach((h, i) => { obj[h] = String(row[i] ?? ''); });
+          headers.forEach((h, i) => {
+            let val = row[i];
+
+            // KEY FIX: Sheets stores dates as Date objects.
+            // Convert them back to YYYY-MM-DD strings so the PWA
+            // can parse them reliably regardless of locale.
+            if (val instanceof Date) {
+              const y  = val.getFullYear();
+              const m  = String(val.getMonth() + 1).padStart(2, '0');
+              const d  = String(val.getDate()).padStart(2, '0');
+              val = `${y}-${m}-${d}`;
+            }
+
+            obj[h] = String(val ?? '');
+          });
           return obj;
         });
 
@@ -128,54 +141,45 @@ function applyHeaders(sheet, headers) {
   sheet.setConditionalFormatRules([rule]);
 }
 
-// Colour the last appended row based on status value
-// statusArrayIndex: 0-based index in the row array where status lives
 function colourStatusRow(sheet, row, statusArrayIndex) {
   const lastRow  = sheet.getLastRow();
   const rowRange = sheet.getRange(lastRow, 1, 1, row.length);
   const status   = String(row[statusArrayIndex] || '').toUpperCase();
   if      (status === 'FAIL')    rowRange.setBackground('#3d0000');
   else if (status === 'WARNING') rowRange.setBackground('#3d2800');
-  // PASS / OK rows stay default (dark theme base)
 }
 
 // ── One-time setup ────────────────────────────────────────
-// Select this function in the dropdown and click Run
+// Select setupSheets in the dropdown and click Run.
+// This clears and recreates all tabs with correct v5.1 headers.
 function setupSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
   const configs = [
     {
+      // Compact schema: full check data stored in Fields JSON column
       name: 'Opening Checks',
-      headers: [
-        'ID','Date','Time','Department',
-        'Fire Exits Clear','Fire Extinguishers OK','First Aid Kit OK','No Slip Hazards',
-        'Fridge Temps Checked','Raw/Cooked Separated','Date Labels OK','Expired Items Removed',
-        'Surfaces Cleaned','Equipment Cleaned','Handwash Stocked','PPE Available',
-        'Sanitiser Available','Staff Illness Check','Uniforms OK',
-        'Tables Set','Bar Stocked','Display Fridge Checked','Menus Clean','Specials Updated',
-        'Allergen Info Current','Till Checked','Toilets Restocked','Furniture Checked',
-        'Staff Uniform FOH','Reservations Checked',
-        'Notes','Signed By',
-      ],
+      headers: ['ID','Date','Time','Department','Summary','Notes','Signed By','Fields JSON'],
     },
     {
       name: 'Closing Checks',
-      headers: [
-        'ID','Date','Time','Department',
-        'Windows Secured','Doors Locked','Lights Off',
-        'Food Stored Correctly','Waste Removed','Raw/Cooked Separated','Fridge Temps Checked',
-        'Equipment Off','Gas Off','Fryer Off','Kitchen Cleaned','Boards Cleaned','Deliveries Logged',
-        'Tables Cleared','Bar Cleaned','Fridge Temps FOH','Till Reconciled',
-        'Cash Secured','CCTV On','Alarm Set','Toilets Cleaned','FOH Floors','Outdoor Cleared',
-        'Notes','Signed By',
-      ],
+      headers: ['ID','Date','Time','Department','Summary','Notes','Signed By','Fields JSON'],
     },
     {
+      name: 'Cleaning Schedule',
+      headers: ['ID','Date','Time','Department','Summary','Notes','Signed By','Fields JSON'],
+    },
+    {
+      name: 'Weekly Review',
+      headers: ['ID','Date','Time','Department','Summary','Issues','Actions','Rating','Signed By','Fields JSON'],
+    },
+    {
+      // Temperature: named columns for easy reading in Sheets + Fields JSON
       name: 'Temperature Log',
       headers: [
         'ID','Date','Time','Department',
         'Location','Temperature (°C)','Status','Probe Used','Corrective Action','Logged By',
+        'Fields JSON',
       ],
     },
     {
@@ -183,41 +187,12 @@ function setupSheets() {
       headers: [
         'ID','Date','Time','Department',
         'Product / Dish','Core Temperature (°C)','Status','Probe Used','Corrective Action','Logged By',
-      ],
-    },
-    {
-      name: 'Cleaning Schedule',
-      headers: [
-        'ID','Date','Time','Department',
-        'Surfaces Wiped Mid-Service','Spillages Cleaned','Bins Emptied Mid-Service',
-        'All Surfaces Deep Cleaned','Ovens/Grills Cleaned','Fryer Cleaned','Sinks Cleaned',
-        'Floors Mopped','Waste Removed','Chopping Boards','Utensils Stored',
-        'Fridge Wiped','Fridge Seals','Dry Store',
-        'Tables Wiped Between Covers','Bar Surface Clean','Spills Cleaned',
-        'Glasses Polished','Toilets Checked','FOH Deep Clean',
-        'Bar Equipment Cleaned','Coffee Machine Cleaned','Beer Lines','Menus Wiped','Highchairs',
-        'Notes','Signed By',
-      ],
-    },
-    {
-      name: 'Weekly Review',
-      headers: [
-        'ID','Week Start Date','Submitted At','Department',
-        'HACCP Reviewed','Temp Logs Complete','No Temp Breaches','Allergen Info Current',
-        'FIFO Followed','Kitchen Deep Clean','FOH Deep Clean','Clean Records Signed',
-        'Pest Check OK','Drains Cleaned','Fridges Deep Cleaned',
-        'Staff Training Current','No Illness Reports','Briefing Held',
-        'Equipment Working','Probe Calibrated','Maintenance Logged','First Aid Checked',
-        'Rotas Confirmed','Supplier Invoices Checked',
-        'Issues This Week','Actions Next Week','Overall Rating','Manager Sign-Off',
+        'Fields JSON',
       ],
     },
     {
       name: 'Task Completions',
-      headers: [
-        'ID','Date','Time','Department',
-        'Task ID','Week Start','Completed By',
-      ],
+      headers: ['ID','Date','Time','Department','Task ID','Week Start','Completed By'],
     },
   ];
 
@@ -236,25 +211,84 @@ function setupSheets() {
   sr.setValues([['key','value']]);
   sr.setFontWeight('bold').setBackground('#0d1117').setFontColor('#22c55e');
 
-  // Remove default blank sheet if present
+  // Remove default blank sheet if still present
   try {
     const def = ss.getSheetByName('Sheet1');
     if (def && ss.getNumSheets() > 1) ss.deleteSheet(def);
   } catch(e) {}
 
   SpreadsheetApp.getUi().alert(
-    '✅ SafeChecks v5 — All sheets created successfully!\n\n' +
-    'Tabs created:\n' +
-    '  • Opening Checks\n' +
-    '  • Closing Checks\n' +
-    '  • Temperature Log\n' +
-    '  • Food Probe Log\n' +
-    '  • Cleaning Schedule\n' +
-    '  • Weekly Review\n' +
-    '  • Task Completions\n' +
-    '  • Settings\n\n' +
-    'Next step: Deploy → New deployment → Web app'
+    '✅ SafeChecks v5.1 — All sheets recreated!\n\n' +
+    'Tabs: Opening Checks, Closing Checks, Temperature Log,\n' +
+    'Food Probe Log, Cleaning Schedule, Weekly Review,\n' +
+    'Task Completions, Settings\n\n' +
+    'Now: Deploy → Manage deployments → Edit → New version → Deploy'
   );
+}
+
+// ── Drafts: upsert ───────────────────────────────────────
+// Stores one row per upsertKey, overwriting if already exists.
+// Used for checklist draft tick state — one row per type+dept+date.
+function handleUpsert(ss, data) {
+  let sheet = ss.getSheetByName('Drafts');
+  if (!sheet) {
+    sheet = ss.insertSheet('Drafts');
+    const hdr = sheet.getRange(1, 1, 1, 3);
+    hdr.setValues([['upsertKey', 'date', 'data']]);
+    hdr.setFontWeight('bold').setBackground('#0d1117').setFontColor('#22c55e');
+    sheet.setFrozenRows(1);
+  }
+
+  const key     = String(data.upsertKey);
+  const dateStr = String(data.data?.date || '');
+  const payload = JSON.stringify(data.data || {});
+
+  // Search for existing row with matching key
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    const keys = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (let i = 0; i < keys.length; i++) {
+      if (String(keys[i][0]) === key) {
+        // Overwrite existing row
+        sheet.getRange(i + 2, 1, 1, 3).setValues([[key, dateStr, payload]]);
+        return jsonResponse({ status: 'ok', action: 'upsert', updated: true });
+      }
+    }
+  }
+
+  // No existing row — append
+  sheet.appendRow([key, dateStr, payload]);
+  return jsonResponse({ status: 'ok', action: 'upsert', updated: false });
+}
+
+// ── Drafts: read all today's drafts ──────────────────────
+function handleReadDrafts(ss) {
+  const sheet = ss.getSheetByName('Drafts');
+  if (!sheet || sheet.getLastRow() < 2) {
+    return jsonResponse({ status: 'ok', drafts: [] });
+  }
+
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = String(today.getMonth() + 1).padStart(2, '0');
+  const d = String(today.getDate()).padStart(2, '0');
+  const todayStr = `${y}-${m}-${d}`;
+
+  const data = sheet.getDataRange().getValues();
+  const drafts = [];
+
+  for (let i = 1; i < data.length; i++) {
+    const rowDate = String(data[i][1]);
+    if (rowDate !== todayStr) continue;   // only return today's drafts
+    try {
+      const parsed = JSON.parse(String(data[i][2]));
+      if (parsed && parsed.type && parsed.dept && parsed.draft) {
+        drafts.push(parsed);
+      }
+    } catch(e) {}
+  }
+
+  return jsonResponse({ status: 'ok', drafts });
 }
 
 // ── Settings: save ────────────────────────────────────────
