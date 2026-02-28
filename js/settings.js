@@ -453,7 +453,7 @@ function checkItemHTML(c, type, dept) {
   const infoBtn = c.info
     ? `<button type="button" class="check-info-btn" onclick="showInfoOverlay(event,'${escAttr(c.label)}','${escAttr(c.info||'')}')">ⓘ</button>`
     : '';
-  return `<label class="check-item"><input type="checkbox" data-key="${c.id}" ${handler}><span class="check-item-label">${c.label}</span></label>${infoBtn}`;
+  return `<div class="check-item-row"><label class="check-item"><input type="checkbox" data-key="${c.id}" ${handler}><span class="check-item-label">${c.label}</span></label>${infoBtn}</div>`;
 }
 
 // Escape text for use in an HTML attribute
