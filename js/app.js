@@ -174,6 +174,7 @@ function setFormDept(type, dept) {
   // Rebuild form content for new dept
   if (['opening','closing','cleaning'].includes(type)) {
     rebuildChecklist(type, dept);
+    updateChecklistProgress(type, dept);
     const staff = getDeptStaff(dept);
     const formEl = document.getElementById('form-' + type);
     if (formEl) {
@@ -250,20 +251,91 @@ function submitChecklist(type) {
   setTimeout(() => showTab('dashboard'), 1200);
 }
 
-// ── Checklist progress bar ───────────────────────────
-// Shows tick progress in the form header before formal submit
+// ── Checklist state: progress bar + banner ───────────
+// Three states: pristine (nothing ticked), in-progress (ticked but not submitted), submitted
 function updateChecklistProgress(type, dept) {
-  const progEl = document.getElementById(`${type}-progress`);
+  const progEl   = document.getElementById(`${type}-progress`);
+  const bannerEl = document.getElementById(`${type}-banner`);
+  const formEl   = document.getElementById(`form-${type}`);
   if (!progEl) return;
+
+  // Check if formally submitted today
+  const submitted = isChecklistSubmittedToday(type, dept);
+  if (submitted) {
+    applyChecklistSubmittedState(type, dept, submitted, progEl, bannerEl, formEl);
+    return;
+  }
+
+  // Not submitted — show progress + amber warning if any ticks
   const { ticked, total } = getDraftProgress(type, dept);
-  if (!total) { progEl.style.display = 'none'; return; }
+
+  // Unlock form (in case it was previously submitted on a different day)
+  if (formEl) {
+    formEl.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.disabled = false);
+    formEl.classList.remove('form-submitted');
+  }
+
+  if (!total || !ticked) {
+    progEl.style.display  = 'none';
+    if (bannerEl) bannerEl.style.display = 'none';
+    return;
+  }
+
+  // Show progress bar
   const pct = Math.round((ticked / total) * 100);
   progEl.style.display = 'block';
   progEl.innerHTML = `
     <div class="draft-progress-bar">
       <div class="draft-progress-fill" style="width:${pct}%"></div>
     </div>
-    <div class="draft-progress-label">${ticked} of ${total} ticked${ticked === total ? ' — ready to submit ✓' : ''}</div>`;
+    <div class="draft-progress-label">${ticked} of ${total} ticked${ticked === total ? ' — ready to finalise ✓' : ''}</div>`;
+
+  // Show amber in-progress banner
+  if (bannerEl) {
+    bannerEl.style.display = 'block';
+    bannerEl.className = 'checklist-banner banner-inprogress';
+    bannerEl.innerHTML = `
+      <span class="banner-icon">⚠</span>
+      <div class="banner-body">
+        <div class="banner-title">In progress — not yet submitted</div>
+        <div class="banner-sub">Tap <strong>Finalise &amp; Submit</strong> when all checks are complete. Ticks are saved but this checklist is not formally recorded until submitted.</div>
+      </div>`;
+  }
+}
+
+function isChecklistSubmittedToday(type, dept) {
+  const today = todayStr();
+  return state.records.find(r =>
+    r.type === type && r.date === today &&
+    (r.dept === dept || (!r.dept && dept === currentDept()))
+  ) || null;
+}
+
+function applyChecklistSubmittedState(type, dept, record, progEl, bannerEl, formEl) {
+  // Lock all checkboxes
+  if (formEl) {
+    formEl.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.disabled = true);
+    formEl.classList.add('form-submitted');
+  }
+
+  // Hide progress bar
+  if (progEl) progEl.style.display = 'none';
+
+  // Show green submitted banner
+  if (bannerEl) {
+    const signed  = record.fields?.open_signed_by || record.fields?.close_signed_by ||
+                    record.fields?.clean_signed_by || record.fields?.weekly_signed_by || '';
+    const checks  = Object.values(record.fields || {}).filter(v => v === 'Yes' || v === 'No');
+    const passed  = checks.filter(v => v === 'Yes').length;
+    bannerEl.style.display = 'block';
+    bannerEl.className = 'checklist-banner banner-submitted';
+    bannerEl.innerHTML = `
+      <span class="banner-icon">✓</span>
+      <div class="banner-body">
+        <div class="banner-title">Submitted for today</div>
+        <div class="banner-sub">${passed} of ${checks.length} checks passed · Signed: ${signed} · ${record.timestamp}</div>
+      </div>`;
+  }
 }
 
 // ── Equipment check thresholds ────────────────────────
@@ -943,6 +1015,55 @@ function checkConnectionStatus() {
 function openSheetsUrl() {
   if (state.config.sheetsViewUrl) window.open(state.config.sheetsViewUrl,'_blank');
   else showToast('No spreadsheet URL saved — connect first','error');
+}
+
+// ── Info overlay ─────────────────────────────────────
+// Shared overlay for check item and task info text
+// Supports plain text and lines starting with - or • as bullet points
+function showInfoOverlay(event, title, rawText) {
+  event.stopPropagation();  // don't trigger checkbox
+  document.getElementById('info-overlay')?.remove();
+
+  // Decode escaped newlines
+  const text = rawText.replace(/\n/g, '
+');
+
+  // Render lines — bullet if starts with - or •, else plain paragraph
+  const lines = text.split('
+').filter(l => l.trim());
+  let bodyHTML = '';
+  let bulletBuffer = [];
+
+  const flushBullets = () => {
+    if (!bulletBuffer.length) return;
+    bodyHTML += `<ul class="info-bullet-list">${bulletBuffer.map(b=>`<li>${b}</li>`).join('')}</ul>`;
+    bulletBuffer = [];
+  };
+
+  lines.forEach(line => {
+    const stripped = line.trim();
+    if (stripped.startsWith('-') || stripped.startsWith('•')) {
+      bulletBuffer.push(stripped.replace(/^[-•]\s*/,''));
+    } else {
+      flushBullets();
+      bodyHTML += `<p class="info-para">${stripped}</p>`;
+    }
+  });
+  flushBullets();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'info-overlay';
+  overlay.className = 'modal-overlay';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="modal-box info-modal-box">
+      <div class="info-modal-header">
+        <h3 class="info-modal-title">${title}</h3>
+        <button class="info-modal-close" onclick="document.getElementById('info-overlay').remove()">✕</button>
+      </div>
+      <div class="info-modal-body">${bodyHTML}</div>
+    </div>`;
+  document.body.appendChild(overlay);
 }
 
 // ═══════════════════════════════════════════════════════

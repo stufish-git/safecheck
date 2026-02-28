@@ -127,3 +127,32 @@ function exportToCSV() {
   a.click(); URL.revokeObjectURL(url);
   showToast('CSV downloaded ✓','success');
 }
+
+// ── Quick date shortcuts ──────────────────────────────
+function setHistoryQuickDate(range) {
+  const from = document.getElementById('history-date-from');
+  const to   = document.getElementById('history-date-to');
+  const today = new Date();
+  const fmt = d => d.toISOString().split('T')[0];
+
+  if (range === 'today') {
+    from.value = fmt(today);
+    to.value   = fmt(today);
+  } else if (range === 'yesterday') {
+    const y = new Date(today); y.setDate(today.getDate() - 1);
+    from.value = fmt(y);
+    to.value   = fmt(y);
+  } else if (range === 'week') {
+    const mon = new Date(today);
+    mon.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+    from.value = fmt(mon);
+    to.value   = fmt(today);
+  }
+
+  // Highlight active button
+  document.querySelectorAll('.quick-date-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('onclick').includes(`'${range}'`));
+  });
+
+  loadHistory();
+}

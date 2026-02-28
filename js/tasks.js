@@ -208,6 +208,10 @@ function renderTaskItem(task, weekStart, day, dayIdx, todayIdx, dept) {
   const deptInfo  = DEPARTMENTS[task.dept];
   const completion = loadTaskCompletions()[getCompletionKey(weekStart, task.id)];
   const me        = currentStaffMember();
+  const infoBtn   = task.info
+    ? `<button type="button" class="check-info-btn task-info-btn" onclick="showInfoOverlay(event,'${(task.label||'').replace(/'/g,'\'')}','${(task.info||'').replace(/
+/g,'\\n').replace(/'/g,'\''')}')" >ⓘ</button>`
+    : '';
 
   return `
     <div class="task-item ${done ? 'task-done' : ''} ${overdue ? 'task-overdue' : ''}"
@@ -228,6 +232,7 @@ function renderTaskItem(task, weekStart, day, dayIdx, todayIdx, dept) {
           ${task.isOneOff ? `<span class="task-oneoff-tag">One-off</span>` : ''}
         </div>
       </div>
+      ${infoBtn}
       ${task.isOneOff ? `<button class="task-delete-btn" onclick="deleteOneOffTask('${task.id}')">✕</button>` : ''}
     </div>`;
 }
@@ -380,7 +385,7 @@ function renderTaskEditor() {
         ${sorted.map(t => `
           <div class="settings-item">
             <div class="settings-item-content">
-              <div class="settings-item-main">${t.label}</div>
+              <div class="settings-item-main">${t.label}${t.info ? ' <span class="check-edit-has-info" title="Has info text">ⓘ</span>' : ''}</div>
               <div class="settings-item-sub">${DAY_LABELS[t.day]} ${!t.enabled ? '· Disabled' : ''}</div>
             </div>
             <div class="settings-item-actions">
@@ -388,6 +393,7 @@ function renderTaskEditor() {
                 <input type="checkbox" ${t.enabled ? 'checked' : ''} onchange="toggleRecurringTask('${t.id}', this.checked)"/>
                 <span class="toggle-slider"></span>
               </label>
+              <button class="set-btn-info"   onclick="editTaskInfo('${t.id}')" title="Edit info text">ⓘ</button>
               <button class="set-btn-edit"   onclick="editRecurringTask('${t.id}')">Edit</button>
               <button class="set-btn-delete" onclick="deleteRecurringTask('${t.id}')">✕</button>
             </div>
@@ -428,6 +434,48 @@ function deleteRecurringTask(id) {
   if (!confirm('Remove this recurring task?')) return;
   state.settings.tasks = (state.settings.tasks||[]).filter(t=>t.id!==id);
   saveSettings(); syncSettingsToSheets(); renderTaskEditor();
+}
+
+function editTaskInfo(id) {
+  const t = (state.settings.tasks||[]).find(t => t.id===id); if (!t) return;
+  document.getElementById('task-info-modal')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'task-info-modal';
+  overlay.className = 'modal-overlay';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="modal-box" style="max-width:460px">
+      <h2 class="modal-title">Task Info Text</h2>
+      <p class="modal-desc" style="margin-bottom:4px"><strong>${t.label}</strong></p>
+      <p class="modal-desc">Shown when staff tap the ⓘ button on this task. Plain text or start lines with - or • for bullet points.</p>
+      <div class="modal-field">
+        <textarea id="task-info-text" class="text-field notes-field" rows="6"
+          placeholder="e.g. Check behind all equipment.
+- Clean fridge seals
+- Wipe down shelving
+Report issues to the manager."
+          style="font-size:13px;line-height:1.6">${t.info || ''}</textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="document.getElementById('task-info-modal').remove()">Cancel</button>
+        ${t.info ? `<button class="btn-cancel" style="color:var(--danger)" onclick="saveTaskInfo('${id}','')">Clear</button>` : ''}
+        <button class="btn-submit" onclick="saveTaskInfo('${id}',document.getElementById('task-info-text').value)"><span>Save</span><span class="btn-icon">✓</span></button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('task-info-text').focus();
+}
+
+function saveTaskInfo(id, text) {
+  const t = (state.settings.tasks||[]).find(t => t.id===id); if (!t) return;
+  const trimmed = text.trim();
+  if (trimmed) t.info = trimmed;
+  else delete t.info;
+  saveSettings();
+  syncSettingsToSheets();
+  renderTaskEditor();
+  document.getElementById('task-info-modal')?.remove();
+  showToast(trimmed ? 'Info text saved ✓' : 'Info text cleared', 'success');
 }
 
 // ── Dashboard task summary ────────────────────────────

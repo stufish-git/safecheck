@@ -447,11 +447,21 @@ function rebuildChecklist(section, dept) {
 }
 
 function checkItemHTML(c, type, dept) {
-  // onchange saves tick to draft immediately — persistent across nav and devices
   const handler = type && dept
     ? `onchange="onCheckboxChange('${type}','${dept}','${c.id}',this.checked);updateChecklistProgress('${type}','${dept}')"`
     : '';
-  return `<label class="check-item"><input type="checkbox" data-key="${c.id}" ${handler}>${c.label}</label>`;
+  const infoBtn = c.info
+    ? `<button type="button" class="check-info-btn" onclick="showInfoOverlay(event,'${escAttr(c.label)}','${escAttr(c.info||'')}')">ⓘ</button>`
+    : '';
+  return `<label class="check-item"><input type="checkbox" data-key="${c.id}" ${handler}><span class="check-item-label">${c.label}</span></label>${infoBtn}`;
+}
+
+// Escape text for use in an HTML attribute
+function escAttr(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;').replace(/
+/g,'\n');
 }
 
 function rebuildSignedByDropdowns() {
@@ -768,13 +778,64 @@ function renderChecklistEditor(editorId, path, section) {
         <input type="checkbox" ${c.enabled?'checked':''} onchange="toggleCheck('${path}','${section}','${c.id}',this.checked)"/>
         <span class="toggle-slider"></span>
       </label>
-      <span class="check-edit-label">${c.label}</span>
+      <div class="check-edit-label-group">
+        <span class="check-edit-label">${c.label}</span>
+        ${c.info ? '<span class="check-edit-has-info" title="Has info text">ⓘ</span>' : ''}
+      </div>
       <div class="check-edit-actions">
+        <button class="set-btn-info" onclick="editCheckInfo('${path}','${section}','${c.id}')" title="Edit info text">ⓘ</button>
         <button class="set-btn-move" onclick="moveCheck('${path}','${section}','${c.id}',-1)" ${i===0?'disabled':''}>↑</button>
         <button class="set-btn-move" onclick="moveCheck('${path}','${section}','${c.id}',1)"  ${i===checks.length-1?'disabled':''}>↓</button>
         ${c.id.startsWith('cu_')||c.id.startsWith('sh_cu_')?`<button class="set-btn-delete" onclick="deleteCheck('${path}','${section}','${c.id}')">✕</button>`:''}
       </div>
     </div>`).join('');
+}
+
+function editCheckInfo(path, section, id) {
+  const checks = getChecksRef(path)?.[section];
+  const c = checks?.find(c => c.id === id);
+  if (!c) return;
+  document.getElementById('check-info-modal')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'check-info-modal';
+  overlay.className = 'modal-overlay';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="modal-box" style="max-width:460px">
+      <h2 class="modal-title">Info Text</h2>
+      <p class="modal-desc" style="margin-bottom:4px"><strong>${c.label}</strong></p>
+      <p class="modal-desc">Shown when staff tap ⓘ next to this check. Plain text, or start lines with - or • for bullet points.</p>
+      <div class="modal-field">
+        <textarea id="check-info-text" class="text-field notes-field" rows="6"
+          placeholder="e.g. Use food-safe sanitiser on all surfaces.
+- Prep surfaces
+- Equipment handles
+- Chopping boards"
+          style="font-size:13px;line-height:1.6">${c.info || ''}</textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="document.getElementById('check-info-modal').remove()">Cancel</button>
+        ${c.info ? `<button class="btn-cancel" style="color:var(--danger);margin-right:auto" onclick="saveCheckInfo('${path}','${section}','${id}','')">Clear</button>` : ''}
+        <button class="btn-submit" onclick="saveCheckInfo('${path}','${section}','${id}',document.getElementById('check-info-text').value)"><span>Save</span><span class="btn-icon">✓</span></button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(() => document.getElementById('check-info-text')?.focus(), 50);
+}
+
+function saveCheckInfo(path, section, id, text) {
+  const checks = getChecksRef(path)?.[section];
+  const c = checks?.find(c => c.id === id);
+  if (!c) return;
+  const trimmed = text.trim();
+  if (trimmed) c.info = trimmed;
+  else delete c.info;
+  saveSettings();
+  syncSettingsToSheets();
+  renderCheckEditors();
+  rebuildAllChecklists();
+  document.getElementById('check-info-modal')?.remove();
+  showToast(trimmed ? 'Info text saved ✓' : 'Info text cleared', 'success');
 }
 
 function toggleCheck(path,section,id,enabled) {
