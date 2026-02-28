@@ -70,16 +70,22 @@
         <p class="section-subtitle">Complete before service begins</p>
       </div>
       <form id="form-opening" class="checklist-form" onsubmit="return false">
-        <!-- check groups injected by rebuildChecklist() -->
-        <div class="notes-group">
-          <label class="notes-label">Notes / Issues</label>
-          <textarea class="notes-field" data-key="open_notes" placeholder="Any issues or comments..."></textarea>
+        <!-- dept selector — shown for management only -->
+        <div id="opening-dept-selector" class="dept-selector-bar" style="display:none">
+          <span class="dept-bar-label">Submitting for:</span>
+          <button class="dept-bar-btn active" data-dept="kitchen" onclick="setFormDept('opening','kitchen')">🍳 Kitchen</button>
+          <button class="dept-bar-btn" data-dept="foh" onclick="setFormDept('opening','foh')">🍽 FOH</button>
         </div>
-        <div class="signed-by-group">
+        <div class="signed-by-group signed-by-top">
           <label class="notes-label">Signed off by</label>
           <select class="select-field signed-by-select" data-key="open_signed_by">
             <option value="">Select staff member...</option>
           </select>
+        </div>
+        <!-- check groups injected by rebuildChecklist() -->
+        <div class="notes-group">
+          <label class="notes-label">Notes / Issues</label>
+          <textarea class="notes-field" data-key="open_notes" placeholder="Any issues or comments..."></textarea>
         </div>
         <div class="form-actions">
           <button class="btn-submit" onclick="submitChecklist('opening')">
@@ -96,7 +102,12 @@
         <p class="section-subtitle">Log temperatures for all equipment at once</p>
         <div id="equip-day-status" class="probe-day-status" style="margin-top:8px"></div>
       </div>
-      <!-- dept selector injected here by applyDeviceIdentity() for management -->
+      <!-- dept selector — shown for management only, hidden via applyDeviceIdentity -->
+      <div id="equip-dept-selector" class="dept-selector-bar" style="display:none">
+        <span class="dept-bar-label">Viewing:</span>
+        <button class="dept-bar-btn active" data-dept="kitchen" onclick="setFormDept('equipment','kitchen')">🍳 Kitchen</button>
+        <button class="dept-bar-btn" data-dept="foh" onclick="setFormDept('equipment','foh')">🍽 FOH</button>
+      </div>
 
       <div class="temp-targets" style="margin:0 0 16px">
         <span class="target-chip">🧊 Fridge ≤5°C</span>
@@ -143,6 +154,12 @@
       </div>
 
       <div class="temp-entry-form">
+        <div class="signed-by-group signed-by-top">
+          <label class="notes-label">Logged by</label>
+          <select class="select-field signed-by-select" id="probe-staff">
+            <option value="">Select staff member...</option>
+          </select>
+        </div>
         <div class="temp-entry-grid">
           <div class="field-group" style="grid-column:span 2">
             <label>Product / Dish</label>
@@ -163,12 +180,6 @@
               <option value="Thermocouple">Thermocouple</option>
             </select>
           </div>
-        </div>
-        <div class="field-group" style="margin-bottom:14px">
-          <label>Logged by</label>
-          <select class="select-field signed-by-select" id="probe-staff">
-            <option value="">Select staff member...</option>
-          </select>
         </div>
         <div class="field-group" style="margin-bottom:14px" id="probe-action-group">
           <label>Corrective Action (if below 75°C)</label>
@@ -195,16 +206,22 @@
         <p class="section-subtitle">Your department's cleaning checklist</p>
       </div>
       <form id="form-cleaning" class="checklist-form" onsubmit="return false">
-        <!-- check groups injected by rebuildChecklist() -->
-        <div class="notes-group">
-          <label class="notes-label">Notes / Issues</label>
-          <textarea class="notes-field" data-key="clean_notes" placeholder="Any issues or comments..."></textarea>
+        <!-- dept selector — shown for management only -->
+        <div id="cleaning-dept-selector" class="dept-selector-bar" style="display:none">
+          <span class="dept-bar-label">Submitting for:</span>
+          <button class="dept-bar-btn active" data-dept="kitchen" onclick="setFormDept('cleaning','kitchen')">🍳 Kitchen</button>
+          <button class="dept-bar-btn" data-dept="foh" onclick="setFormDept('cleaning','foh')">🍽 FOH</button>
         </div>
-        <div class="signed-by-group">
+        <div class="signed-by-group signed-by-top">
           <label class="notes-label">Signed off by</label>
           <select class="select-field signed-by-select" data-key="clean_signed_by">
             <option value="">Select staff member...</option>
           </select>
+        </div>
+        <!-- check groups injected by rebuildChecklist() -->
+        <div class="notes-group">
+          <label class="notes-label">Notes / Issues</label>
+          <textarea class="notes-field" data-key="clean_notes" placeholder="Any issues or comments..."></textarea>
         </div>
         <div class="form-actions">
           <button class="btn-submit" onclick="submitChecklist('cleaning')">
@@ -221,18 +238,24 @@
         <p class="section-subtitle">Complete before locking up</p>
       </div>
       <form id="form-closing" class="checklist-form" onsubmit="return false">
+        <!-- dept selector — shown for management only -->
+        <div id="closing-dept-selector" class="dept-selector-bar" style="display:none">
+          <span class="dept-bar-label">Submitting for:</span>
+          <button class="dept-bar-btn active" data-dept="kitchen" onclick="setFormDept('closing','kitchen')">🍳 Kitchen</button>
+          <button class="dept-bar-btn" data-dept="foh" onclick="setFormDept('closing','foh')">🍽 FOH</button>
+        </div>
+        <div class="signed-by-group signed-by-top">
+          <label class="notes-label">Signed off by</label>
+          <select class="select-field signed-by-select" data-key="close_signed_by">
+            <option value="">Select staff member...</option>
+          </select>
+        </div>
         <!-- check groups injected by rebuildChecklist() -->
         <!-- Undone weekly tasks — visible to management on Sat/Sun -->
         <div id="undone-tasks-section" style="display:none"></div>
         <div class="notes-group">
           <label class="notes-label">Notes / Issues</label>
           <textarea class="notes-field" data-key="close_notes" placeholder="Any issues or comments..."></textarea>
-        </div>
-        <div class="signed-by-group">
-          <label class="notes-label">Signed off by</label>
-          <select class="select-field signed-by-select" data-key="close_signed_by">
-            <option value="">Select staff member...</option>
-          </select>
         </div>
         <div class="form-actions">
           <button class="btn-submit" onclick="submitChecklist('closing')">
