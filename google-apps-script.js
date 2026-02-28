@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════
- *  SAFECHECKS — Google Apps Script v5.5
+ *  SAFECHECKS — Google Apps Script v5.1
  *
  *  CHANGES FROM v5:
  *  - doGet now converts Date cell values back to YYYY-MM-DD strings
@@ -278,7 +278,15 @@ function handleReadDrafts(ss) {
   const drafts = [];
 
   for (let i = 1; i < data.length; i++) {
-    const rowDate = String(data[i][1]);
+    // Sheets auto-converts date strings to Date objects — normalise back
+    let rawDate = data[i][1];
+    if (rawDate instanceof Date) {
+      const ry = rawDate.getFullYear();
+      const rm = String(rawDate.getMonth() + 1).padStart(2, '0');
+      const rd = String(rawDate.getDate()).padStart(2, '0');
+      rawDate = `${ry}-${rm}-${rd}`;
+    }
+    const rowDate = String(rawDate);
     if (rowDate !== todayStr) continue;   // only return today's drafts
     try {
       const parsed = JSON.parse(String(data[i][2]));
