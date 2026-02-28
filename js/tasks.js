@@ -208,11 +208,11 @@ function renderTaskItem(task, weekStart, day, dayIdx, todayIdx, dept) {
   const deptInfo  = DEPARTMENTS[task.dept];
   const completion = loadTaskCompletions()[getCompletionKey(weekStart, task.id)];
   const me        = currentStaffMember();
+  const safeLabel = (task.label || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n');
+  const safeInfo  = (task.info  || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n');
   const infoBtn   = task.info
-    ? `<button type="button" class="check-info-btn task-info-btn" onclick="showInfoOverlay(event,'${(task.label||'').replace(/'/g,'\'')}','${(task.info||'').replace(/
-/g,'\\n').replace(/'/g,'\''')}')" >ⓘ</button>`
+    ? '<button type="button" class="check-info-btn task-info-btn" onclick="showInfoOverlay(event,\'' + safeLabel + '\',\'' + safeInfo + '\')">ⓘ</button>'
     : '';
-
   return `
     <div class="task-item ${done ? 'task-done' : ''} ${overdue ? 'task-overdue' : ''}"
          id="task-item-${task.id}">

@@ -1021,32 +1021,30 @@ function openSheetsUrl() {
 // Shared overlay for check item and task info text
 // Supports plain text and lines starting with - or • as bullet points
 function showInfoOverlay(event, title, rawText) {
-  event.stopPropagation();  // don't trigger checkbox
+  event.stopPropagation();
   document.getElementById('info-overlay')?.remove();
 
-  // Decode escaped newlines
-  const text = rawText.replace(/\n/g, '
-');
+  // Decode escaped newlines passed via HTML attribute
+  const text = rawText.replace(/\\n/g, '\n');
 
-  // Render lines — bullet if starts with - or •, else plain paragraph
-  const lines = text.split('
-').filter(l => l.trim());
+  // Render lines: bullet if starts with - or •, else plain paragraph
+  const lines = text.split('\n').filter(l => l.trim());
   let bodyHTML = '';
   let bulletBuffer = [];
 
   const flushBullets = () => {
     if (!bulletBuffer.length) return;
-    bodyHTML += `<ul class="info-bullet-list">${bulletBuffer.map(b=>`<li>${b}</li>`).join('')}</ul>`;
+    bodyHTML += '<ul class="info-bullet-list">' + bulletBuffer.map(b => '<li>' + b + '</li>').join('') + '</ul>';
     bulletBuffer = [];
   };
 
   lines.forEach(line => {
     const stripped = line.trim();
-    if (stripped.startsWith('-') || stripped.startsWith('•')) {
-      bulletBuffer.push(stripped.replace(/^[-•]\s*/,''));
+    if (stripped.startsWith('-') || stripped.startsWith('\u2022')) {
+      bulletBuffer.push(stripped.replace(/^[-\u2022]\s*/, ''));
     } else {
       flushBullets();
-      bodyHTML += `<p class="info-para">${stripped}</p>`;
+      bodyHTML += '<p class="info-para">' + stripped + '</p>';
     }
   });
   flushBullets();
@@ -1055,16 +1053,17 @@ function showInfoOverlay(event, title, rawText) {
   overlay.id = 'info-overlay';
   overlay.className = 'modal-overlay';
   overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
-  overlay.innerHTML = `
-    <div class="modal-box info-modal-box">
-      <div class="info-modal-header">
-        <h3 class="info-modal-title">${title}</h3>
-        <button class="info-modal-close" onclick="document.getElementById('info-overlay').remove()">✕</button>
-      </div>
-      <div class="info-modal-body">${bodyHTML}</div>
-    </div>`;
+  overlay.innerHTML =
+    '<div class="modal-box info-modal-box">' +
+      '<div class="info-modal-header">' +
+        '<h3 class="info-modal-title">' + title + '</h3>' +
+        '<button class="info-modal-close" onclick="document.getElementById(\'info-overlay\').remove()">✕</button>' +
+      '</div>' +
+      '<div class="info-modal-body">' + bodyHTML + '</div>' +
+    '</div>';
   document.body.appendChild(overlay);
 }
+
 
 // ═══════════════════════════════════════════════════════
 //  CHECKLIST DRAFT SYSTEM v5.3

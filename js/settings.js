@@ -459,9 +459,10 @@ function checkItemHTML(c, type, dept) {
 // Escape text for use in an HTML attribute
 function escAttr(str) {
   return String(str)
-    .replace(/&/g,'&amp;').replace(/"/g,'&quot;')
-    .replace(/'/g,'&#39;').replace(/
-/g,'\n');
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/\r?\n/g, '\\n');
 }
 
 function rebuildSignedByDropdowns() {
