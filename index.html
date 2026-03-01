@@ -48,6 +48,7 @@
     <button class="tab-btn" data-tab="weekly"           onclick="showTab('weekly')">   <span class="tab-icon">▦</span><span class="tab-label">Weekly</span></button>
     <button class="tab-btn" data-tab="history"          onclick="showTab('history')">  <span class="tab-icon">◷</span><span class="tab-label">History</span></button>
     <button class="tab-btn" data-tab="tasks"            onclick="showTab('tasks')">    <span class="tab-icon">☑</span><span class="tab-label">Tasks</span></button>
+    <button class="tab-btn" data-tab="reports"          onclick="showTab('reports')">   <span class="tab-icon">📊</span><span class="tab-label">Reports</span></button>
     <button class="tab-btn" data-tab="settings"         onclick="showSettingsTab()">   <span class="tab-icon">⚙</span><span class="tab-label">Settings</span></button>
   </nav>
 
@@ -359,6 +360,36 @@
         <button class="btn-export btn-export-sheets" onclick="openSheetsUrl()">↗ View in Sheets</button>
       </div>
       <div id="history-list" class="history-list"></div>
+    </section>
+
+    <!-- ═══════════════════════════════ REPORTS ════ -->
+    <section id="tab-reports" class="tab-section">
+      <div class="section-header">
+        <h1 class="section-title">Reports</h1>
+        <p class="section-subtitle">Daily &amp; weekly compliance reports</p>
+      </div>
+
+      <!-- Mode switcher -->
+      <div class="report-mode-bar">
+        <button id="report-mode-daily" class="report-mode-btn active" onclick="switchReportMode('daily')">Daily Report</button>
+        <button id="report-mode-weekly" class="report-mode-btn" onclick="switchReportMode('weekly')">Weekly Report</button>
+        <button class="report-print-btn" onclick="printReport()">🖨 Print</button>
+      </div>
+
+      <!-- Daily controls -->
+      <div id="report-daily-controls" class="report-controls" style="display:flex">
+        <label class="report-control-label">Date</label>
+        <input type="date" id="report-daily-date" class="text-field report-date-input" onchange="renderReport()"/>
+      </div>
+
+      <!-- Weekly controls -->
+      <div id="report-weekly-controls" class="report-controls" style="display:none">
+        <label class="report-control-label">Week</label>
+        <select id="report-week-select" class="select-field report-week-select" onchange="renderReport()"></select>
+      </div>
+
+      <!-- Report output -->
+      <div id="report-output" class="report-output"></div>
     </section>
 
     <!-- ═══════════════════════════════ SETTINGS ════ -->
@@ -726,6 +757,7 @@
   <script src="js/sheets.js"></script>
   <script src="js/history.js"></script>
   <script src="js/tasks.js"></script>
+  <script src="js/reports.js"></script>
   <script src="js/app.js"></script>
 
 </body>

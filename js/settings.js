@@ -523,6 +523,8 @@ function applyDeviceIdentity() {
   // Tab visibility based on role
   // Weekly: management only
   document.querySelector('[data-tab="weekly"]')?.classList.toggle('hidden', dept !== 'mgmt');
+  // Reports: management only
+  document.querySelector('[data-tab="reports"]')?.classList.toggle('hidden', dept !== 'mgmt');
   // Probe: kitchen + management only (FOH has no food probe requirement)
   document.querySelector('[data-tab="probe"]')?.classList.toggle('hidden', dept === 'foh');
 

@@ -245,6 +245,10 @@ function showTab(tabId) {
     if (state.config.sheetsUrl) pullAllRecords().then(loadHistory);
     else loadHistory();
   }
+  if (tabId === 'reports') {
+    if (state.config.sheetsUrl) pullAllRecords().then(initReportsTab);
+    else initReportsTab();
+  }
 }
 
 // ── Form dept (management can switch per-form) ────────
