@@ -9,8 +9,7 @@ function loadHistory() {
   const toVal   = document.getElementById('history-date-to')?.value;
   const dept    = currentDept();
 
-  // task_completion records are internal — never show in history
-  let records = state.records.filter(r => r.type !== 'task_completion');
+  let records = [...state.records];
 
   // Department filter: staff only see their dept
   if (!isManagement()) {

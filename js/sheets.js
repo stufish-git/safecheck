@@ -344,7 +344,10 @@ function syncRemoteTaskCompletions(remoteRecords) {
       if (!taskId || !weekStart) return;
 
       const key = `${weekStart}__${taskId}`;
-      if (!completions[key]) {
+      const existing = completions[key];
+      // Skip if: key already exists (done or tombstone)
+      // Tombstone (done:false, unticked:true) means user deliberately unticked — don't restore
+      if (!existing) {
         completions[key] = {
           taskId,
           weekStart,

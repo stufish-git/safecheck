@@ -34,7 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
       rebuildTempLocationDropdown();
       rebuildProbeProductDropdown();
       renderTodayDate();
-      setWeekRange();
+      populateWeekSelector();
       updateDashboard();
       bootSheets();
     });
@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
     rebuildTempLocationDropdown();
     rebuildProbeProductDropdown();
     renderTodayDate();
-    setWeekRange();
+    populateWeekSelector();
     updateDashboard();
     bootSheets();
   }
@@ -93,13 +93,80 @@ function renderTodayDate() {
   const el = document.getElementById('today-date');
   if (el) el.textContent = new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 }
-function setWeekRange() {
-  const el = document.getElementById('week-range-display'); if (!el) return;
-  const now = new Date(), mon = new Date(now);
-  mon.setDate(now.getDate() - ((now.getDay()+6)%7));
-  const sun = new Date(mon); sun.setDate(mon.getDate()+6);
-  const fmt = d => d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
-  el.textContent = `Week: ${fmt(mon)} — ${fmt(sun)}`;
+// Returns array of closed weeks (Mon–Sun) for the weekly review selector
+// A week is "closed" once its Sunday has passed
+function getClosedWeeks(count = 8) {
+  const weeks = [];
+  const now   = new Date();
+  // Start from the most recently completed Sunday
+  const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon...
+  // Days since last Sunday
+  const daysSinceSun = dayOfWeek === 0 ? 7 : dayOfWeek;
+  const lastSun = new Date(now);
+  lastSun.setDate(now.getDate() - daysSinceSun);
+  lastSun.setHours(23, 59, 59, 0);
+
+  for (let i = 0; i < count; i++) {
+    const sun = new Date(lastSun);
+    sun.setDate(lastSun.getDate() - (i * 7));
+    const mon = new Date(sun);
+    mon.setDate(sun.getDate() - 6);
+    mon.setHours(0, 0, 0, 0);
+
+    const fmt     = d => d.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+    const weekStr = mon.toISOString().split('T')[0]; // YYYY-MM-DD of Monday
+
+    weeks.push({
+      weekStart: weekStr,
+      label: `${fmt(mon)} — ${fmt(sun)}`,
+    });
+  }
+  return weeks;
+}
+
+function populateWeekSelector() {
+  const sel = document.getElementById('weekly-week-select');
+  if (!sel) return;
+  const weeks = getClosedWeeks(8);
+  sel.innerHTML = weeks.map((w, i) =>
+    `<option value="${w.weekStart}">${i === 0 ? 'Last week · ' : ''}${w.label}</option>`
+  ).join('');
+  // Default to most recent closed week
+  if (weeks.length) sel.value = weeks[0].weekStart;
+  onWeekSelectChange();
+}
+
+function getSelectedWeekStart() {
+  return document.getElementById('weekly-week-select')?.value || '';
+}
+
+function onWeekSelectChange() {
+  const weekStart = getSelectedWeekStart();
+  if (!weekStart) return;
+  // Check if this week already has a submission and update banner
+  const submitted = isWeeklySubmitted(weekStart);
+  const progEl    = document.getElementById('weekly-progress');
+  const bannerEl  = document.getElementById('weekly-banner');
+  const formEl    = document.getElementById('form-weekly');
+  if (submitted) {
+    applyChecklistSubmittedState('weekly', 'mgmt', submitted, progEl, bannerEl, formEl);
+  } else {
+    // Unlock form for this week
+    if (formEl) {
+      formEl.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.disabled = false);
+      formEl.classList.remove('form-submitted');
+    }
+    if (bannerEl) bannerEl.style.display = 'none';
+    if (progEl)   progEl.style.display   = 'none';
+    updateChecklistProgress('weekly', 'mgmt');
+  }
+}
+
+function isWeeklySubmitted(weekStart) {
+  return state.records.find(r =>
+    r.type === 'weekly' &&
+    (r.fields?.week_start === weekStart || r.date === weekStart)
+  ) || null;
 }
 function prefillDates() {
   const toEl = document.getElementById('history-date-to');
@@ -127,6 +194,9 @@ function showTab(tabId) {
     const dept = getFormDept(tabId);
     restoreDraft(tabId, dept);
     updateChecklistProgress(tabId, dept);
+  }
+  if (tabId === 'weekly') {
+    populateWeekSelector();
   }
 
   if (tabId === 'equipment') {
@@ -206,10 +276,15 @@ function submitChecklist(type) {
   // Use active dept for this form (management may have switched)
   const dept = getFormDept(type);
 
+  // For weekly review, file the record under the selected week's start date
+  const recordDate = (type === 'weekly' && getSelectedWeekStart())
+    ? getSelectedWeekStart()
+    : todayStr();
+
   const record = {
     id:        crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
     type, dept,
-    date:      todayStr(),
+    date:      recordDate,
     timestamp: nowTimestamp(),
     iso:       nowISO(),
     fields:    {},
@@ -224,7 +299,10 @@ function submitChecklist(type) {
   formEl.querySelectorAll('[data-key]:not([type="checkbox"])').forEach(el => {
     record.fields[el.dataset.key] = el.value || '';
   });
-  if (type === 'weekly') record.fields.weekly_rating = state.weeklyRating || 'Not rated';
+  if (type === 'weekly') {
+    record.fields.weekly_rating = state.weeklyRating || 'Not rated';
+    record.fields.week_start    = recordDate;  // explicit field for report lookup
+  }
 
   record.summary = `${checked}/${total} checks passed · Signed: ${signed}`;
   state.records.push(record);
@@ -304,6 +382,7 @@ function updateChecklistProgress(type, dept) {
 }
 
 function isChecklistSubmittedToday(type, dept) {
+  if (type === 'weekly') return isWeeklySubmitted(getSelectedWeekStart());
   const today = todayStr();
   return state.records.find(r =>
     r.type === type && r.date === today &&
@@ -952,6 +1031,7 @@ function labelFor(type) {
     weekly:     'Weekly Review',
     temperature:'Equipment Temperature',
     food_probe: 'Food Probe Check',
+    task_completion: 'Task Completed',
   }[type] || type;
 }
 

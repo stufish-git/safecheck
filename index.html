@@ -58,8 +58,8 @@
         <p class="section-date" id="today-date"></p>
         <p class="section-date" id="dash-last-refresh" style="font-size:11px;opacity:0.5;margin-top:2px"></p>
       </div>
-      <div id="dashboard-grid"></div>
       <div id="dash-alerts" class="dash-alerts"></div>
+      <div id="dashboard-grid"></div>
     </section>
 
     <!-- ═══════════════════════════════ OPENING ═════ -->
@@ -276,7 +276,12 @@
         <h1 class="section-title">Weekly Review</h1>
         <p class="section-subtitle">Manager compliance summary</p>
       </div>
-      <div class="week-range-display" id="week-range-display"></div>
+      <div class="week-selector-bar">
+        <label class="week-selector-label">Completing review for:</label>
+        <select class="week-selector-select" id="weekly-week-select" onchange="onWeekSelectChange()">
+          <option value="">Loading weeks...</option>
+        </select>
+      </div>
       <form id="form-weekly" class="checklist-form" onsubmit="return false">
         <!-- check groups injected by rebuildChecklist() -->
         <div class="notes-group">
@@ -344,6 +349,7 @@
           <option value="cleaning">Cleaning Schedule</option>
           <option value="closing">Closing Checks</option>
           <option value="weekly">Weekly Review</option>
+          <option value="task_completion">Tasks</option>
         </select>
         <input type="date" class="text-field" id="history-date-from"/>
         <input type="date" class="text-field" id="history-date-to"/>

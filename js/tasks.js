@@ -72,7 +72,8 @@ function getCompletionKey(weekStart, taskId) {
 
 function isTaskDone(weekStart, taskId) {
   const completions = loadTaskCompletions();
-  return !!completions[getCompletionKey(weekStart, taskId)];
+  const c = completions[getCompletionKey(weekStart, taskId)];
+  return c?.done === true;
 }
 
 function markTaskDone(weekStart, taskId, staffName, done = true) {
@@ -81,7 +82,8 @@ function markTaskDone(weekStart, taskId, staffName, done = true) {
   if (done) {
     completions[key] = { taskId, weekStart, staffName, timestamp: new Date().toISOString(), done: true };
   } else {
-    delete completions[key];
+    // Store a tombstone so sync doesn't restore the completion from Sheets
+    completions[key] = { taskId, weekStart, done: false, unticked: true, timestamp: new Date().toISOString() };
   }
   saveTaskCompletions(completions);
 
