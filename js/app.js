@@ -853,6 +853,7 @@ function renderManagerDashboard() {
       : [
           { type:'opening',     label:'Opening',     icon:'☀', total: getActiveChecks(deptId,'opening').length  || 12 },
           { type:'temperature', label:'Equipment',   icon:'🌡', total: null },
+          ...(deptId === 'kitchen' ? [{ type:'food_probe', label:'Food Probe', icon:'🍖', total: null }] : []),
           { type:'closing',     label:'Closing',     icon:'☽', total: getActiveChecks(deptId,'closing').length  || 10 },
           { type:'tasks',       label:'Tasks',       icon:'☑', total: null },
         ];
@@ -884,6 +885,20 @@ function renderManagerDashboard() {
           <div class="mgr-card-header"><span class="mgr-card-icon" style="color:var(--temp)">${sec.icon}</span><span class="mgr-card-label">${sec.label}</span></div>
           <div class="pb"><div class="pf" style="width:${pct}%;background:var(--temp)"></div></div>
           <div class="mgr-card-status ${status.cls}">${status.text} · ${temps.length} item${temps.length!==1?'s':''}</div>
+        </div>`;
+      }
+      if (sec.type === 'food_probe') {
+        const probes  = deptRecords.filter(r => r.type==='food_probe');
+        const hasFail = probes.some(r => r.fields?.probe_pass === 'No' || r.fields?.probe_pass === false);
+        const status  = hasFail
+          ? { text:'⚠ Fail recorded', cls:'overdue' }
+          : probes.length > 0 ? { text:`✓ ${probes.length} check${probes.length!==1?'s':''} passed`, cls:'complete' }
+          : { text:'—', cls:'' };
+        const pct = probes.length > 0 ? 100 : 0;
+        return `<div class="mgr-card" onclick="showTab('probe')">
+          <div class="mgr-card-header"><span class="mgr-card-icon" style="color:var(--success)">${sec.icon}</span><span class="mgr-card-label">${sec.label}</span></div>
+          <div class="pb"><div class="pf" style="width:${pct}%;background:var(--success)"></div></div>
+          <div class="mgr-card-status ${status.cls}">${status.text}</div>
         </div>`;
       }
       const tabTarget = sec.type === 'weekly' ? 'weekly' : sec.type;
