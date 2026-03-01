@@ -174,10 +174,11 @@ function onWeekSelectChange() {
   if (submitted) {
     applyChecklistSubmittedState('weekly', 'mgmt', submitted, progEl, bannerEl, formEl);
   } else {
-    // Unlock form and restore this week's draft ticks
+    // Remove submitted overlay if switching to an unsubmitted week
+    document.querySelector('.weekly-submitted-overlay')?.remove();
     if (bannerEl) bannerEl.style.display = 'none';
     if (progEl)   progEl.style.display   = 'none';
-    restoreDraft('weekly', 'mgmt');   // draftKey now uses selected week, so correct draft loads
+    restoreDraft('weekly', 'mgmt');
     updateChecklistProgress('weekly', 'mgmt');
   }
 }
@@ -416,27 +417,55 @@ function isChecklistSubmittedToday(type, dept) {
 }
 
 function applyChecklistSubmittedState(type, dept, record, progEl, bannerEl, formEl) {
-  // Lock all checkboxes
+  if (progEl) progEl.style.display = 'none';
+
+  const signed  = record.fields?.open_signed_by || record.fields?.close_signed_by ||
+                  record.fields?.clean_signed_by || record.fields?.weekly_signed_by || '';
+  const checks  = Object.values(record.fields || {}).filter(v => v === 'Yes' || v === 'No');
+  const passed  = checks.filter(v => v === 'Yes').length;
+
+  // For weekly: show a full overlay over the form instead of greyed checkboxes
+  if (type === 'weekly' && formEl) {
+    formEl.classList.add('form-submitted');
+    formEl.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.disabled = true);
+
+    // Remove any existing overlay first
+    formEl.parentElement?.querySelector('.weekly-submitted-overlay')?.remove();
+
+    const weekDate = record.fields?.week_start || record.date;
+    const weekFmt  = weekDate
+      ? new Date(weekDate + 'T12:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' })
+      : record.date;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'weekly-submitted-overlay';
+    overlay.innerHTML = `
+      <div class="wso-box">
+        <div class="wso-icon">✓</div>
+        <div class="wso-title">Weekly Review Submitted</div>
+        <div class="wso-week">Week of ${weekFmt}</div>
+        <div class="wso-detail">${passed} of ${checks.length} checks passed · Signed: ${signed}</div>
+        <div class="wso-time">${record.timestamp}</div>
+      </div>`;
+    formEl.parentElement?.insertBefore(overlay, formEl);
+
+    if (bannerEl) bannerEl.style.display = 'none';
+    return;
+  }
+
+  // Other checklists: lock form and show green banner as before
   if (formEl) {
     formEl.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.disabled = true);
     formEl.classList.add('form-submitted');
   }
-
-  // Hide progress bar
-  if (progEl) progEl.style.display = 'none';
-
-  // Show green submitted banner
   if (bannerEl) {
-    const signed  = record.fields?.open_signed_by || record.fields?.close_signed_by ||
-                    record.fields?.clean_signed_by || record.fields?.weekly_signed_by || '';
-    const checks  = Object.values(record.fields || {}).filter(v => v === 'Yes' || v === 'No');
-    const passed  = checks.filter(v => v === 'Yes').length;
+    const title = type === 'weekly' ? 'Submitted for this week' : 'Submitted for today';
     bannerEl.style.display = 'block';
     bannerEl.className = 'checklist-banner banner-submitted';
     bannerEl.innerHTML = `
       <span class="banner-icon">✓</span>
       <div class="banner-body">
-        <div class="banner-title">Submitted for today</div>
+        <div class="banner-title">${title}</div>
         <div class="banner-sub">${passed} of ${checks.length} checks passed · Signed: ${signed} · ${record.timestamp}</div>
       </div>`;
   }
@@ -850,14 +879,30 @@ function renderManagerDashboard() {
           <div class="mgr-card-status ${status.cls}">${status.text} · ${temps.length} item${temps.length!==1?'s':''}</div>
         </div>`;
       }
-      const rec   = sec.type === 'weekly'
-        ? state.records.filter(r => r.type === 'weekly').sort((a,b) => new Date(b.iso)-new Date(a.iso))[0]
-        : deptRecords.filter(r=>r.type===sec.type).sort((a,b)=>new Date(b.iso)-new Date(a.iso))[0];
-      const total = sec.total || 10;
       const tabTarget = sec.type === 'weekly' ? 'weekly' : sec.type;
+      const total = sec.total || 10;
+
+      // Weekly card — show last submitted week, not tick count
+      if (sec.type === 'weekly') {
+        const rec = state.records.filter(r => r.type === 'weekly').sort((a,b) => new Date(b.iso)-new Date(a.iso))[0];
+        if (!rec) return `<div class="mgr-card" onclick="showTab('weekly')">
+          <div class="mgr-card-header"><span class="mgr-card-icon">${sec.icon}</span><span class="mgr-card-label">${sec.label}</span></div>
+          <div class="pb"><div class="pf" style="width:0%"></div></div>
+          <div class="mgr-card-status">Not submitted yet</div>
+        </div>`;
+        const weekDate = rec.fields?.week_start || rec.date;
+        const weekFmt  = weekDate ? new Date(weekDate + 'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : '';
+        const signed   = rec.fields?.weekly_signed_by || '';
+        return `<div class="mgr-card" onclick="showTab('weekly')">
+          <div class="mgr-card-header"><span class="mgr-card-icon">${sec.icon}</span><span class="mgr-card-label">${sec.label}</span></div>
+          <div class="pb"><div class="pf" style="width:100%;background:var(--success)"></div></div>
+          <div class="mgr-card-status complete">✓ Week of ${weekFmt}${signed ? ' · ' + signed : ''}</div>
+        </div>`;
+      }
+
+      const rec = deptRecords.filter(r=>r.type===sec.type).sort((a,b)=>new Date(b.iso)-new Date(a.iso))[0];
 
       if (!rec) {
-        // No submitted record — show draft tick progress (not for weekly)
         const { ticked, total: dTotal } = getDraftProgress(sec.type, deptId);
         const t   = dTotal || total;
         const pct = t > 0 ? Math.round((ticked / t) * 100) : 0;
@@ -869,7 +914,6 @@ function renderManagerDashboard() {
           <div class="mgr-card-status ${statusCls}">${statusText}</div>
         </div>`;
       }
-      // Submitted record — show final count
       const checks = Object.values(rec.fields).filter(v=>v==='Yes'||v==='No');
       const passed = checks.filter(v=>v==='Yes').length;
       const n      = checks.length || total;
@@ -966,14 +1010,35 @@ function renderStaffDashboard() {
       </div>`;
     }
     // Standard checklist card
-    const rec   = card.id === 'weekly'
-      // For weekly, find most recent submission regardless of date
-      ? state.records.filter(r => r.type === 'weekly').sort((a,b) => new Date(b.iso)-new Date(a.iso))[0]
-      : dr.filter(r=>r.type===card.id).sort((a,b)=>new Date(b.iso)-new Date(a.iso))[0];
     const total = card.total || 10;
 
+    // Weekly card — show last submitted week date, no tick count
+    if (card.id === 'weekly') {
+      const rec = state.records.filter(r => r.type === 'weekly').sort((a,b) => new Date(b.iso)-new Date(a.iso))[0];
+      if (!rec) return `<div class="dash-card" onclick="showTab('${tab}')">
+        <div class="dash-card-icon" style="color:${card.color}">${card.icon}</div>
+        <div class="dash-card-body"><h3>${card.label}</h3>
+          <div class="dash-progress"><div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div></div>
+          <div class="progress-label">Not submitted yet</div>
+        </div>
+        <div class="dash-card-status">—</div>
+      </div>`;
+      const weekDate = rec.fields?.week_start || rec.date;
+      const weekFmt  = weekDate ? new Date(weekDate + 'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : '';
+      const signed   = rec.fields?.weekly_signed_by || '';
+      return `<div class="dash-card" onclick="showTab('${tab}')">
+        <div class="dash-card-icon" style="color:${card.color}">${card.icon}</div>
+        <div class="dash-card-body"><h3>${card.label}</h3>
+          <div class="dash-progress"><div class="progress-bar"><div class="progress-fill" style="width:100%;background:${card.color}"></div></div></div>
+          <div class="progress-label">Week of ${weekFmt}${signed ? ' · ' + signed : ''}</div>
+        </div>
+        <div class="dash-card-status complete">✓ Complete</div>
+      </div>`;
+    }
+
+    const rec = dr.filter(r=>r.type===card.id).sort((a,b)=>new Date(b.iso)-new Date(a.iso))[0];
+
     if (!rec) {
-      // No submitted record — show draft tick progress instead (not for weekly)
       const { ticked, total: dTotal } = getDraftProgress(card.id, dept);
       const t     = dTotal || total;
       const pct   = t > 0 ? Math.round((ticked / t) * 100) : 0;
@@ -988,7 +1053,6 @@ function renderStaffDashboard() {
         <div class="dash-card-status ${cls}">${ticked > 0 ? 'In progress' : '—'}</div>
       </div>`;
     }
-    // Submitted record exists — show final count
     const checks = Object.values(rec.fields).filter(v=>v==='Yes'||v==='No');
     const passed = checks.filter(v=>v==='Yes').length;
     const n      = checks.length || total;

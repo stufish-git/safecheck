@@ -1341,3 +1341,48 @@ body.theme-light .reset-type-row { background: #f8f9fc; border-color: #d8dde8; }
 }
 body.theme-light .week-selector-bar    { background: #f4f6fa; border-color: #d8dde8; }
 body.theme-light .week-selector-select { background: #fff; border-color: #d0d6e0; color: #1a1a2e; }
+
+/* ── Weekly submitted overlay ────────────────────────── */
+.weekly-submitted-overlay {
+  position: relative;
+  margin: 0 0 16px;
+  padding: 40px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(74,222,128,0.06);
+  border: 1.5px solid rgba(74,222,128,0.3);
+  border-radius: 16px;
+  text-align: center;
+}
+.wso-box { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.wso-icon {
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  background: var(--success);
+  color: #000;
+  font-size: 26px;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 4px;
+}
+.wso-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--success);
+}
+.wso-week {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.wso-detail {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.wso-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  opacity: 0.7;
+}
