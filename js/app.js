@@ -98,27 +98,39 @@ function renderTodayDate() {
 function getClosedWeeks(count = 8) {
   const weeks = [];
   const now   = new Date();
-  // Start from the most recently completed Sunday
   const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon...
-  // Days since last Sunday
-  const daysSinceSun = dayOfWeek === 0 ? 7 : dayOfWeek;
-  const lastSun = new Date(now);
-  lastSun.setDate(now.getDate() - daysSinceSun);
-  lastSun.setHours(23, 59, 59, 0);
+
+  // Current week — Monday of this week
+  const currentMon = new Date(now);
+  currentMon.setDate(now.getDate() - ((dayOfWeek + 6) % 7));
+  currentMon.setHours(0, 0, 0, 0);
+  const currentSun = new Date(currentMon);
+  currentSun.setDate(currentMon.getDate() + 6);
+
+  const fmt = d => d.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+
+  // Add current week first
+  weeks.push({
+    weekStart: currentMon.toISOString().split('T')[0],
+    label: `${fmt(currentMon)} — ${fmt(currentSun)}`,
+    current: true,
+  });
+
+  // Then closed weeks (starting from last Monday)
+  const lastMon = new Date(currentMon);
+  lastMon.setDate(currentMon.getDate() - 7);
 
   for (let i = 0; i < count; i++) {
-    const sun = new Date(lastSun);
-    sun.setDate(lastSun.getDate() - (i * 7));
-    const mon = new Date(sun);
-    mon.setDate(sun.getDate() - 6);
+    const mon = new Date(lastMon);
+    mon.setDate(lastMon.getDate() - (i * 7));
     mon.setHours(0, 0, 0, 0);
-
-    const fmt     = d => d.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
-    const weekStr = mon.toISOString().split('T')[0]; // YYYY-MM-DD of Monday
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
 
     weeks.push({
-      weekStart: weekStr,
+      weekStart: mon.toISOString().split('T')[0],
       label: `${fmt(mon)} — ${fmt(sun)}`,
+      current: false,
     });
   }
   return weeks;
@@ -128,10 +140,11 @@ function populateWeekSelector() {
   const sel = document.getElementById('weekly-week-select');
   if (!sel) return;
   const weeks = getClosedWeeks(8);
-  sel.innerHTML = weeks.map((w, i) =>
-    `<option value="${w.weekStart}">${i === 0 ? 'Last week · ' : ''}${w.label}</option>`
-  ).join('');
-  // Default to most recent closed week
+  sel.innerHTML = weeks.map((w, i) => {
+    const prefix = w.current ? 'Current week · ' : (i === 1 ? 'Last week · ' : '');
+    return `<option value="${w.weekStart}">${prefix}${w.label}</option>`;
+  }).join('');
+  // Default to current week
   if (weeks.length) sel.value = weeks[0].weekStart;
   onWeekSelectChange();
 }
@@ -143,21 +156,28 @@ function getSelectedWeekStart() {
 function onWeekSelectChange() {
   const weekStart = getSelectedWeekStart();
   if (!weekStart) return;
-  // Check if this week already has a submission and update banner
+
   const submitted = isWeeklySubmitted(weekStart);
   const progEl    = document.getElementById('weekly-progress');
   const bannerEl  = document.getElementById('weekly-banner');
   const formEl    = document.getElementById('form-weekly');
+
+  // Always reset checkboxes first before restoring
+  if (formEl) {
+    formEl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+      cb.checked  = false;
+      cb.disabled = false;
+    });
+    formEl.classList.remove('form-submitted');
+  }
+
   if (submitted) {
     applyChecklistSubmittedState('weekly', 'mgmt', submitted, progEl, bannerEl, formEl);
   } else {
-    // Unlock form for this week
-    if (formEl) {
-      formEl.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.disabled = false);
-      formEl.classList.remove('form-submitted');
-    }
+    // Unlock form and restore this week's draft ticks
     if (bannerEl) bannerEl.style.display = 'none';
     if (progEl)   progEl.style.display   = 'none';
+    restoreDraft('weekly', 'mgmt');   // draftKey now uses selected week, so correct draft loads
     updateChecklistProgress('weekly', 'mgmt');
   }
 }
@@ -272,6 +292,11 @@ function submitChecklist(type) {
   const signedEl = formEl.querySelector('[data-key$="_signed_by"]');
   const signed   = signedEl?.value?.trim();
   if (!signed) { showToast('Please select a staff member to sign off', 'error'); return; }
+
+  // Weekly: rating is compulsory
+  if (type === 'weekly' && (!state.weeklyRating || state.weeklyRating === 'Not rated')) {
+    showToast('Please select an overall compliance rating', 'error'); return;
+  }
 
   // Use active dept for this form (management may have switched)
   const dept = getFormDept(type);
@@ -825,12 +850,14 @@ function renderManagerDashboard() {
           <div class="mgr-card-status ${status.cls}">${status.text} · ${temps.length} item${temps.length!==1?'s':''}</div>
         </div>`;
       }
-      const rec   = deptRecords.filter(r=>r.type===sec.type).sort((a,b)=>new Date(b.iso)-new Date(a.iso))[0];
+      const rec   = sec.type === 'weekly'
+        ? state.records.filter(r => r.type === 'weekly').sort((a,b) => new Date(b.iso)-new Date(a.iso))[0]
+        : deptRecords.filter(r=>r.type===sec.type).sort((a,b)=>new Date(b.iso)-new Date(a.iso))[0];
       const total = sec.total || 10;
       const tabTarget = sec.type === 'weekly' ? 'weekly' : sec.type;
 
       if (!rec) {
-        // No submitted record — show draft tick progress
+        // No submitted record — show draft tick progress (not for weekly)
         const { ticked, total: dTotal } = getDraftProgress(sec.type, deptId);
         const t   = dTotal || total;
         const pct = t > 0 ? Math.round((ticked / t) * 100) : 0;
@@ -939,11 +966,14 @@ function renderStaffDashboard() {
       </div>`;
     }
     // Standard checklist card
-    const rec   = dr.filter(r=>r.type===card.id).sort((a,b)=>new Date(b.iso)-new Date(a.iso))[0];
+    const rec   = card.id === 'weekly'
+      // For weekly, find most recent submission regardless of date
+      ? state.records.filter(r => r.type === 'weekly').sort((a,b) => new Date(b.iso)-new Date(a.iso))[0]
+      : dr.filter(r=>r.type===card.id).sort((a,b)=>new Date(b.iso)-new Date(a.iso))[0];
     const total = card.total || 10;
 
     if (!rec) {
-      // No submitted record — show draft tick progress instead
+      // No submitted record — show draft tick progress instead (not for weekly)
       const { ticked, total: dTotal } = getDraftProgress(card.id, dept);
       const t     = dTotal || total;
       const pct   = t > 0 ? Math.round((ticked / t) * 100) : 0;
@@ -1150,6 +1180,10 @@ function showInfoOverlay(event, title, rawText) {
 
 // Draft key: "draft_{type}_{dept}_{YYYY-MM-DD}"
 function draftKey(type, dept) {
+  if (type === 'weekly') {
+    const ws = getSelectedWeekStart();
+    return `draft_${type}_${dept}_${ws || todayStr()}`;
+  }
   return `draft_${type}_${dept}_${todayStr()}`;
 }
 
