@@ -86,11 +86,13 @@ function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.re
 
 // ── Date helpers ──────────────────────────────────────
 function todayStr()     { return new Date().toISOString().split('T')[0]; }
-function weekEndingStr(weekStart) {
-  // Given a Monday date string, return the Sunday formatted as "1 Mar 2026"
-  const mon = new Date(weekStart + 'T12:00:00');
-  const sun = new Date(mon);
-  sun.setDate(mon.getDate() + 6);
+function weekEndingStr(dateStr) {
+  // Given any date string, return the Sunday of that week formatted as "1 Mar 2026"
+  const d = new Date(dateStr + 'T12:00:00');
+  const dayOfWeek = d.getDay(); // 0=Sun, 1=Mon ... 6=Sat
+  const daysToSun = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+  const sun = new Date(d);
+  sun.setDate(d.getDate() + daysToSun);
   return sun.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
 }
 function nowTimestamp() { return new Date().toLocaleString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}); }
