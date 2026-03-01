@@ -37,13 +37,11 @@ function renderReport() {
 function populateReportWeekSelector() {
   const sel = document.getElementById('report-week-select');
   if (!sel) return;
-  const prev = sel.value;
-  const weeks = getClosedWeeks(12); // includes current week
-  sel.innerHTML = weeks.map((w, i) =>
-    `<option value="${w.weekStart}">${i === 0 ? 'This week — ' : ''}${w.label}</option>`
+  const weeks = getClosedWeeks(12).filter(w => !w.current); // closed weeks only
+  sel.innerHTML = weeks.map(w =>
+    `<option value="${w.weekStart}">${w.label}</option>`
   ).join('');
-  if (prev && weeks.some(w => w.weekStart === prev)) sel.value = prev;
-  else if (weeks.length) sel.value = weeks[0].weekStart;
+  if (weeks.length) sel.value = weeks[0].weekStart;
 }
 
 // ─────────────────────────────────────────────────────
@@ -77,14 +75,14 @@ function renderDailyReport() {
 
   // ── Opening checks (per dept) ─────────────────────
   const openingHTML = allDepts.map(dept => {
-    const rec = dr.find(r => r.type === 'opening' && (r.dept === dept || (!r.dept && dept === 'kitchen')));
+    const rec = dr.find(r => r.type === 'opening' && r.dept === dept);
     const deptInfo = DEPARTMENTS[dept];
     return buildChecklistSection(rec, deptInfo, 'Opening Checks', 'open_signed_by', 'open_notes');
   }).join('');
 
   // ── Closing checks (per dept) ─────────────────────
   const closingHTML = allDepts.map(dept => {
-    const rec = dr.find(r => r.type === 'closing' && (r.dept === dept || (!r.dept && dept === 'kitchen')));
+    const rec = dr.find(r => r.type === 'closing' && r.dept === dept);
     const deptInfo = DEPARTMENTS[dept];
     return buildChecklistSection(rec, deptInfo, 'Closing Checks', 'close_signed_by', 'close_notes');
   }).join('');
@@ -290,7 +288,7 @@ function buildDailyTaskGrid(dateStr) {
 function renderWeeklyReport() {
   const weekStart = document.getElementById('report-week-select')?.value;
   if (!weekStart) {
-    document.getElementById('report-output').innerHTML = '<p class="report-empty-row">No weeks available. Try refreshing.</p>';
+    document.getElementById('report-output').innerHTML = '<p class="report-empty-row">No closed weeks available yet.</p>';
     return;
   }
 
@@ -362,16 +360,6 @@ function renderWeeklyReport() {
 }
 
 // ── Weekly day-by-day grid ────────────────────────────
-// findRec: matches on date+type+dept; also accepts 'mgmt' dept records
-// filed as kitchen/foh when management submitted without switching dept bar
-function findRec(date, type, dept) {
-  return state.records.find(r =>
-    r.date === date &&
-    r.type === type &&
-    (r.dept === dept || (!r.dept && dept === 'kitchen'))
-  );
-}
-
 function buildWeeklyGrid(weekDates, dayLabels, shortDates, allDepts) {
   const rows = [];
 
@@ -379,7 +367,7 @@ function buildWeeklyGrid(weekDates, dayLabels, shortDates, allDepts) {
   allDepts.forEach(dept => {
     const deptInfo = DEPARTMENTS[dept];
     const cells = weekDates.map(date => {
-      const rec = findRec(date, 'opening', dept);
+      const rec = state.records.find(r => r.date === date && r.type === 'opening' && r.dept === dept);
       return gridCell(rec);
     }).join('');
     rows.push(`<tr><td class="wg-label-col"><span style="color:${deptInfo.color}">${deptInfo.icon}</span> Opening</td>${cells}</tr>`);
@@ -389,7 +377,7 @@ function buildWeeklyGrid(weekDates, dayLabels, shortDates, allDepts) {
   allDepts.forEach(dept => {
     const deptInfo = DEPARTMENTS[dept];
     const cells = weekDates.map(date => {
-      const rec = findRec(date, 'closing', dept);
+      const rec = state.records.find(r => r.date === date && r.type === 'closing' && r.dept === dept);
       return gridCell(rec);
     }).join('');
     rows.push(`<tr><td class="wg-label-col"><span style="color:${deptInfo.color}">${deptInfo.icon}</span> Closing</td>${cells}</tr>`);
@@ -496,29 +484,6 @@ function buildWeekStats(weekDates) {
     </table>`;
 }
 
-// ── Label lookup — finds human label for a check id from settings ────
-function getCheckLabel(id) {
-  const s = state.settings || {};
-  // Search all check sections
-  const allSections = [
-    ...(s.sharedChecks?.opening || []),
-    ...(s.sharedChecks?.closing || []),
-    ...(s.checks?.mgmt?.weekly || []),
-    ...(s.checks?.mgmt?.opening || []),
-    ...(s.checks?.mgmt?.closing || []),
-    ...(s.checks?.kitchen?.opening || []),
-    ...(s.checks?.kitchen?.closing || []),
-    ...(s.checks?.foh?.opening || []),
-    ...(s.checks?.foh?.closing || []),
-  ];
-  const found = allSections.find(c => c.id === id);
-  if (found) return found.label;
-  // Friendly fallback: strip leading letters+digits prefix e.g. mw1 → raw key prettified
-  return id.replace(/^[a-z]+\d+$/, id) // keep as-is if it's a pure id like mw1
-            .replace(/_/g, ' ')
-            .replace(/\b\w/g, c => c.toUpperCase());
-}
-
 // ── Weekly management review section ──────────────────
 function buildWeeklyReviewSection(rec) {
   if (!rec) {
@@ -537,7 +502,7 @@ function buildWeeklyReviewSection(rec) {
   const ratingColor = rating === 'Good' ? 'var(--success)' : rating === 'Satisfactory' ? 'var(--warning)' : rating === 'Needs Improvement' ? 'var(--danger)' : 'var(--text-muted)';
 
   const checksHTML = checks.map(([key, val]) => {
-    const label = getCheckLabel(key);   // ← look up from settings, not key-munge
+    const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     const icon = val === 'Yes' ? '✓' : '✗';
     const cls = val === 'Yes' ? 'report-check-pass' : 'report-check-fail';
     return `<div class="report-check-row ${cls}"><span class="report-check-icon">${icon}</span><span>${label}</span></div>`;
