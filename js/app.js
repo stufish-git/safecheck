@@ -86,6 +86,13 @@ function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.re
 
 // ── Date helpers ──────────────────────────────────────
 function todayStr()     { return new Date().toISOString().split('T')[0]; }
+function weekEndingStr(weekStart) {
+  // Given a Monday date string, return the Sunday formatted as "1 Mar 2026"
+  const mon = new Date(weekStart + 'T12:00:00');
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  return sun.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+}
 function nowTimestamp() { return new Date().toLocaleString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}); }
 function nowISO()       { return new Date().toISOString(); }
 
@@ -433,9 +440,7 @@ function applyChecklistSubmittedState(type, dept, record, progEl, bannerEl, form
     formEl.parentElement?.querySelector('.weekly-submitted-overlay')?.remove();
 
     const weekDate = record.fields?.week_start || record.date;
-    const weekFmt  = weekDate
-      ? new Date(weekDate + 'T12:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' })
-      : record.date;
+    const weekFmt  = weekDate ? weekEndingStr(weekDate) : record.date;
 
     const overlay = document.createElement('div');
     overlay.className = 'weekly-submitted-overlay';
@@ -443,7 +448,7 @@ function applyChecklistSubmittedState(type, dept, record, progEl, bannerEl, form
       <div class="wso-box">
         <div class="wso-icon">✓</div>
         <div class="wso-title">Weekly Review Submitted</div>
-        <div class="wso-week">Week of ${weekFmt}</div>
+        <div class="wso-week">Week ending ${weekFmt}</div>
         <div class="wso-detail">${passed} of ${checks.length} checks passed · Signed: ${signed}</div>
         <div class="wso-time">${record.timestamp}</div>
       </div>`;
@@ -891,12 +896,12 @@ function renderManagerDashboard() {
           <div class="mgr-card-status">Not submitted yet</div>
         </div>`;
         const weekDate = rec.fields?.week_start || rec.date;
-        const weekFmt  = weekDate ? new Date(weekDate + 'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : '';
+        const weekFmt  = weekDate ? weekEndingStr(weekDate) : '';
         const signed   = rec.fields?.weekly_signed_by || '';
         return `<div class="mgr-card" onclick="showTab('weekly')">
           <div class="mgr-card-header"><span class="mgr-card-icon">${sec.icon}</span><span class="mgr-card-label">${sec.label}</span></div>
           <div class="pb"><div class="pf" style="width:100%;background:var(--success)"></div></div>
-          <div class="mgr-card-status complete">✓ Week of ${weekFmt}${signed ? ' · ' + signed : ''}</div>
+          <div class="mgr-card-status complete">✓ w/e ${weekFmt}${signed ? ' · ' + signed : ''}</div>
         </div>`;
       }
 
@@ -1024,13 +1029,13 @@ function renderStaffDashboard() {
         <div class="dash-card-status">—</div>
       </div>`;
       const weekDate = rec.fields?.week_start || rec.date;
-      const weekFmt  = weekDate ? new Date(weekDate + 'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : '';
+      const weekFmt  = weekDate ? weekEndingStr(weekDate) : '';
       const signed   = rec.fields?.weekly_signed_by || '';
       return `<div class="dash-card" onclick="showTab('${tab}')">
         <div class="dash-card-icon" style="color:${card.color}">${card.icon}</div>
         <div class="dash-card-body"><h3>${card.label}</h3>
           <div class="dash-progress"><div class="progress-bar"><div class="progress-fill" style="width:100%;background:${card.color}"></div></div></div>
-          <div class="progress-label">Week of ${weekFmt}${signed ? ' · ' + signed : ''}</div>
+          <div class="progress-label">w/e ${weekFmt}${signed ? ' · ' + signed : ''}</div>
         </div>
         <div class="dash-card-status complete">✓ Complete</div>
       </div>`;
