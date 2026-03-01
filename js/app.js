@@ -1091,8 +1091,12 @@ function renderDashAlerts() {
   if (!isManagement()) {
     if (hour >= openHour && !dr.find(r=>r.type==='opening'))
       alerts.push(`⚠ Opening checks not yet completed today`);
-    if (hour >= 15 && dr.filter(r=>r.type==='temperature').length < 2)
-      alerts.push(`⚠ Less than 2 equipment checks logged today`);
+    // Equipment: alert if fewer than 2 checks done after 15:00, or 0 done after opening
+    const tempCount = dr.filter(r=>r.type==='temperature').length;
+    if (hour >= openHour && tempCount === 0)
+      alerts.push(`⚠ No equipment temperature checks logged today`);
+    else if (hour >= 15 && tempCount < 2)
+      alerts.push(`⚠ Only ${tempCount} of 2 required equipment checks done today`);
     if (dept === 'kitchen' && hour >= 12 && !hasFoodProbeToday())
       alerts.push(`⚠ No food probe check logged today — at least 1 required`);
     if (hour >= closeHour && !dr.find(r=>r.type==='closing'))
@@ -1107,6 +1111,12 @@ function renderDashAlerts() {
         alerts.push(`⚠ ${dInfo.icon} ${dInfo.label}: Opening checks not done`);
       if (hour>=ch && !ddr.find(r=>r.type==='closing'))
         alerts.push(`⚠ ${dInfo.icon} ${dInfo.label}: Closing checks not done`);
+      // Equipment temp alerts per dept
+      const dTemps = ddr.filter(r=>r.type==='temperature').length;
+      if (hour >= oh && dTemps === 0)
+        alerts.push(`⚠ ${dInfo.icon} ${dInfo.label}: No equipment checks logged today`);
+      else if (hour >= 15 && dTemps < 2)
+        alerts.push(`⚠ ${dInfo.icon} ${dInfo.label}: Only ${dTemps} of 2 required equipment checks done`);
     });
     if (hour >= 12 && !hasFoodProbeToday())
       alerts.push(`⚠ 🍳 Kitchen: No food probe check logged today`);
