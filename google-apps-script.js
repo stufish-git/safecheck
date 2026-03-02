@@ -359,6 +359,18 @@ function removeDailyEmailTrigger() {
   });
 }
 
+// ── Trading calendar check (Apps Script side) ───────────
+function isTradingAS(dept, settings) {
+  if (dept === 'mgmt') return true;
+  const td = settings.tradingDays;
+  if (!td) return true;
+  const dayNames = ['sun','mon','tue','wed','thu','fri','sat'];
+  const day = dayNames[new Date().getDay()];
+  if (td.master && td.master[day] === false) return false;
+  if (td[dept] && td[dept][day] === false) return false;
+  return true;
+}
+
 // ── Main send function ────────────────────────────────
 function sendDailySummary() {
   const settings = getSettingsObj();
@@ -383,7 +395,8 @@ function sendDailySummary() {
   // ── Determine subject prefix ────────────────────────
   const depts = ['kitchen', 'foh'];
   const hasAnyMissing = depts.some(d => {
-    const noOpen  = !opening.find(r  => r.dept === d);
+    if (!isTradingAS(d, settings)) return false;  // closed — not missing
+    const noOpen  = !opening.find(r => r.dept === d);
     const noClose = !closing.find(r => r.dept === d);
     return noOpen || noClose;
   });
@@ -431,16 +444,18 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
 
   // ── Overview section ──────────────────────────────
   const overviewRows = depts.map(d => {
+    const trading = isTradingAS(d, settings);
     const op = opening.find(r => r.dept === d);
     const cl = closing.find(r => r.dept === d);
-    const missing = !op || !cl;
+    const missing = trading && (!op || !cl);
     const deptFail = (op && op.failCount > 0) || (cl && cl.failCount > 0);
     const tempFail = temps.filter(r => r.dept === d).some(r => r.status === 'FAIL' || r.status === 'WARNING');
 
     let pill, bg, color;
-    if (missing)          { pill = '⛔ ' + (!op ? 'Opening' : '') + (!op && !cl ? ' & ' : '') + (!cl ? 'Closing' : '') + ' missing'; bg = '#fee2e2'; color = '#991b1b'; }
+    if (!trading)                  { pill = '— Closed today'; bg = '#1e293b'; color = '#64748b'; }
+    else if (missing)              { pill = '⛔ ' + (!op ? 'Opening' : '') + (!op && !cl ? ' & ' : '') + (!cl ? 'Closing' : '') + ' missing'; bg = '#fee2e2'; color = '#991b1b'; }
     else if (deptFail || tempFail) { pill = '⚠ Issues recorded · ' + pct + '%'; bg = '#fef3c7'; color = '#92400e'; }
-    else                  { pill = '✓ All clear · 100%'; bg = '#dcfce7'; color = '#166534'; }
+    else                           { pill = '✓ All clear · 100%'; bg = '#dcfce7'; color = '#166534'; }
 
     return '<tr><td style="padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:13px;color:#1e293b;font-family:Arial,sans-serif"><strong>' + DEPT_LABELS[d] + '</strong></td>' +
       '<td style="text-align:right"><span style="background:' + bg + ';color:' + color + ';padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + pill + '</span></td></tr>';
@@ -451,6 +466,10 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
     const rows = depts.map(d => {
       const rec = records.find(r => r.dept === d);
       if (!rec) {
+        if (!isTradingAS(d, settings)) {
+          return '<tr><td style="padding:5px 0;font-size:13px;color:#64748b;font-family:Arial,sans-serif;font-style:italic">' + DEPT_LABELS[d] + '</td>' +
+            '<td style="text-align:right"><span style="background:#1e293b;color:#64748b;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;font-family:Arial,sans-serif">Closed</span></td></tr>';
+        }
         return '<tr><td style="padding:5px 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">' + DEPT_LABELS[d] + '</td>' +
           '<td style="text-align:right"><span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">Not submitted</span></td></tr>';
       }
