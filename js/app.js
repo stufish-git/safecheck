@@ -86,27 +86,6 @@ function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.re
 
 // ── Date helpers ──────────────────────────────────────
 function todayStr()     { return new Date().toISOString().split('T')[0]; }
-
-// ── Trading calendar ──────────────────────────────────
-// Returns true if a given dept is expected to trade on dateStr (YYYY-MM-DD).
-// 'dateStr' defaults to today. Dept 'mgmt' is always treated as trading.
-// Falls back to open if tradingDays is not configured.
-function isTrading(dept, dateStr) {
-  if (dept === 'mgmt') return true;
-  const td = state.settings?.tradingDays;
-  if (!td) return true;                      // no config — assume open
-
-  const d = new Date((dateStr || todayStr()) + 'T12:00:00');
-  const dayNames = ['sun','mon','tue','wed','thu','fri','sat'];
-  const day = dayNames[d.getDay()];
-
-  // Master off = entire site closed
-  if (td.master && td.master[day] === false) return false;
-
-  // Dept-specific
-  if (td[dept] && td[dept][day] === false) return false;
-  return true;
-}
 function weekEndingStr(dateStr) {
   // Given any date string, return the Sunday of that week formatted as "1 Mar 2026"
   const d = new Date(dateStr + 'T12:00:00');
@@ -976,14 +955,9 @@ function renderManagerDashboard() {
       </div>`;
     }).join('');
 
-    const trading = isTrading(deptId, today);
-    const closedOverlay = !trading
-      ? `<div class="dept-closed-banner">Closed today</div>`
-      : '';
     return `
-      <div class="dept-column${!trading ? ' dept-closed' : ''}">
+      <div class="dept-column">
         <div class="dept-col-header" style="color:${deptInfo.color}">${deptInfo.icon} ${deptInfo.label}</div>
-        ${closedOverlay}
         ${cards}
       </div>`;
   }).join('');
@@ -1008,17 +982,6 @@ function renderStaffDashboard() {
   const grid = document.getElementById('dashboard-grid');
   if (!grid) return;
 
-  const staffTrading = isTrading(dept, today);
-  if (!staffTrading) {
-    grid.innerHTML = `<div class="dashboard-grid-2col staff-closed-wrap">
-      <div class="staff-closed-banner">🔒 Closed today — no checks required</div>
-      <div class="dashboard-grid-2col" style="opacity:0.35;pointer-events:none">${cards.map(card => {
-        return `<div class="dash-card"><div class="dash-card-icon" style="color:#4a5568">—</div>
-          <div class="dash-card-body"><h3>${card.label}</h3><div class="progress-label">Closed today</div></div>
-          <div class="dash-card-status">—</div></div>`;
-      }).join('')}</div></div>`;
-    return;
-  }
   grid.innerHTML = `<div class="dashboard-grid-2col">${cards.map(card => {
     const tab     = card.tab || card.id;
     const recType = card.recType || card.id;
@@ -1145,24 +1108,20 @@ function renderDashAlerts() {
   const closeHour = parseInt(closeTime.split(':')[0]);
 
   if (!isManagement()) {
-    if (!isTrading(dept, today)) {
-      // Closed today — no alerts, just a quiet note
-    } else {
-      if (hour >= openHour && !dr.find(r=>r.type==='opening'))
-        alerts.push(`⚠ Opening checks not yet completed today`);
-      const tempCount = dr.filter(r=>r.type==='temperature').length;
-      if (hour >= openHour && tempCount === 0)
-        alerts.push(`⚠ No equipment temperature checks logged today`);
-      else if (hour >= 15 && tempCount < 2)
-        alerts.push(`⚠ Only ${tempCount} of 2 required equipment checks done today`);
-      if (dept === 'kitchen' && hour >= 12 && !hasFoodProbeToday())
-        alerts.push(`⚠ No food probe check logged today — at least 1 required`);
-      if (hour >= closeHour && !dr.find(r=>r.type==='closing'))
-        alerts.push(`⚠ Closing checks not yet completed`);
-    }
+    if (hour >= openHour && !dr.find(r=>r.type==='opening'))
+      alerts.push(`⚠ Opening checks not yet completed today`);
+    // Equipment: alert if fewer than 2 checks done after 15:00, or 0 done after opening
+    const tempCount = dr.filter(r=>r.type==='temperature').length;
+    if (hour >= openHour && tempCount === 0)
+      alerts.push(`⚠ No equipment temperature checks logged today`);
+    else if (hour >= 15 && tempCount < 2)
+      alerts.push(`⚠ Only ${tempCount} of 2 required equipment checks done today`);
+    if (dept === 'kitchen' && hour >= 12 && !hasFoodProbeToday())
+      alerts.push(`⚠ No food probe check logged today — at least 1 required`);
+    if (hour >= closeHour && !dr.find(r=>r.type==='closing'))
+      alerts.push(`⚠ Closing checks not yet completed`);
   } else {
     ['kitchen','foh'].forEach(d => {
-      if (!isTrading(d, today)) return;      // closed today — no alerts
       const ddr   = state.records.filter(r=>r.date===today&&r.dept===d);
       const dInfo = DEPARTMENTS[d];
       const oh    = parseInt((state.settings.openingTimes?.[d]||'08:00').split(':')[0]);
@@ -1171,13 +1130,14 @@ function renderDashAlerts() {
         alerts.push(`⚠ ${dInfo.icon} ${dInfo.label}: Opening checks not done`);
       if (hour>=ch && !ddr.find(r=>r.type==='closing'))
         alerts.push(`⚠ ${dInfo.icon} ${dInfo.label}: Closing checks not done`);
+      // Equipment temp alerts per dept
       const dTemps = ddr.filter(r=>r.type==='temperature').length;
       if (hour >= oh && dTemps === 0)
         alerts.push(`⚠ ${dInfo.icon} ${dInfo.label}: No equipment checks logged today`);
       else if (hour >= 15 && dTemps < 2)
         alerts.push(`⚠ ${dInfo.icon} ${dInfo.label}: Only ${dTemps} of 2 required equipment checks done`);
     });
-    if (isTrading('kitchen', today) && hour >= 12 && !hasFoodProbeToday())
+    if (hour >= 12 && !hasFoodProbeToday())
       alerts.push(`⚠ 🍳 Kitchen: No food probe check logged today`);
   }
 

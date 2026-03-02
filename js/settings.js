@@ -31,11 +31,6 @@ const DEFAULT_SETTINGS = {
   openingTimes: { kitchen:'08:00', foh:'09:00' },
   emailEnabled: false,
   emailRecipients: [],
-  tradingDays: {
-    master:  { mon:true, tue:true, wed:true, thu:true, fri:true, sat:true, sun:true },
-    kitchen: { mon:true, tue:true, wed:true, thu:true, fri:true, sat:true, sun:true },
-    foh:     { mon:true, tue:true, wed:true, thu:true, fri:true, sat:true, sun:true },
-  },
   closingTimes:  { kitchen:'23:00', foh:'23:30' },
 
   staff: [
@@ -372,7 +367,6 @@ function deepMergeSettings(def, saved) {
   if (saved.openingTimes)    m.openingTimes    = { ...m.openingTimes, ...saved.openingTimes };
   if (saved.emailEnabled !== undefined) m.emailEnabled = saved.emailEnabled;
   if (Array.isArray(saved.emailRecipients)) m.emailRecipients = saved.emailRecipients;
-  if (saved.tradingDays) m.tradingDays = JSON.parse(JSON.stringify(saved.tradingDays));
   if (saved.closingTimes)   m.closingTimes   = { ...m.closingTimes, ...saved.closingTimes };
   if (saved.staff)          m.staff          = saved.staff;
   if (saved.equipment)      m.equipment      = saved.equipment;
@@ -622,7 +616,7 @@ function renderSettingsPage() {
   document.getElementById('set-foh-close').value       = s.closingTimes?.foh||'23:30';
   updateThemeButtons(currentTheme());
   renderStaffList(); renderEquipmentList(); renderCheckEditors(); renderTaskEditor(); renderProbeProductList();
-  renderEmailSettings(); renderTradingSchedule();
+  renderEmailSettings();
   showSettingsSection('restaurant');
 }
 
@@ -1169,70 +1163,6 @@ function removeEmailRecipient(index) {
 
 function saveEmailSettings() {
   state.settings.emailEnabled = !!document.getElementById('set-email-enabled')?.checked;
-  saveSettings(); syncSettingsToSheets();
-  showToast('Saved ✓', 'success');
-}
-
-// ── Trading Schedule Settings ─────────────────────────
-const DAYS = ['mon','tue','wed','thu','fri','sat','sun'];
-const DAY_LABELS = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' };
-
-function renderTradingSchedule() {
-  const td = state.settings.tradingDays || {};
-  const masterOpen = DAYS.every(d => td.master?.[d] !== false);
-
-  // Master toggle
-  const masterEl = document.getElementById('trading-master-toggle');
-  if (masterEl) masterEl.checked = masterOpen;
-
-  // Dept toggles
-  ['kitchen','foh'].forEach(dept => {
-    DAYS.forEach(day => {
-      const el = document.getElementById(`trading-${dept}-${day}`);
-      if (el) {
-        el.checked = td[dept]?.[day] !== false;
-        el.disabled = !masterOpen;
-      }
-    });
-  });
-
-  // Grey out dept rows when master is off
-  document.querySelectorAll('.trading-dept-row').forEach(row => {
-    row.style.opacity = masterOpen ? '1' : '0.4';
-    row.style.pointerEvents = masterOpen ? '' : 'none';
-  });
-}
-
-function saveTradingMaster() {
-  const open = !!document.getElementById('trading-master-toggle')?.checked;
-  const td = state.settings.tradingDays || {};
-  DAYS.forEach(d => {
-    td.master  = td.master  || {};
-    td.kitchen = td.kitchen || {};
-    td.foh     = td.foh     || {};
-    td.master[d] = open;
-    // When toggling master off, set all dept days to match
-    // When toggling back on, restore dept toggles from their own values
-    if (!open) {
-      td.kitchen[d] = false;
-      td.foh[d]     = false;
-    }
-  });
-  // When toggling back on, reset all dept days to true
-  if (open) {
-    DAYS.forEach(d => { td.kitchen[d] = true; td.foh[d] = true; });
-  }
-  state.settings.tradingDays = td;
-  saveSettings(); syncSettingsToSheets();
-  renderTradingSchedule();
-  showToast(open ? 'Open for trading ✓' : 'Closed for trading', open ? 'success' : 'error');
-}
-
-function saveTradingDay(dept, day) {
-  const td = state.settings.tradingDays || {};
-  td[dept] = td[dept] || {};
-  td[dept][day] = !!document.getElementById(`trading-${dept}-${day}`)?.checked;
-  state.settings.tradingDays = td;
   saveSettings(); syncSettingsToSheets();
   showToast('Saved ✓', 'success');
 }

@@ -408,7 +408,6 @@
         <button class="settings-tab-btn" data-settings-tab="checks"     onclick="showSettingsSection('checks')">Checklists</button>
         <button class="settings-tab-btn" data-settings-tab="tasks-cfg"  onclick="showSettingsSection('tasks-cfg')">Tasks</button>
         <button class="settings-tab-btn" data-settings-tab="security"   onclick="showSettingsSection('security')">Security</button>
-        <button class="settings-tab-btn" data-settings-tab="trading"   onclick="showSettingsSection('trading')">Trading Days</button>
         <button class="settings-tab-btn" data-settings-tab="email"     onclick="showSettingsSection('email')">Email Reports</button>
       </div>
 
@@ -724,47 +723,6 @@
       </div>
 
 
-
-      <!-- ── Trading Days settings panel ── -->
-      <div id="settings-panel-trading" class="settings-panel">
-
-        <div class="check-group">
-          <h3 class="group-title">Site Status</h3>
-          <div style="padding:16px 20px">
-            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6">
-              Toggle the master switch off when closing for a period — holidays, refurbishment, etc.
-              The dashboard will grey out, no alerts will fire, and the nightly email will not flag missing checks.
-              Toggle back on when reopening.
-            </p>
-            <label class="check-item" style="display:flex;align-items:center;gap:12px;cursor:pointer">
-              <input type="checkbox" id="trading-master-toggle" checked onchange="saveTradingMaster()" style="width:20px;height:20px"/>
-              <div>
-                <div style="font-size:14px;font-weight:600;color:var(--text)">Open for trading</div>
-                <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Turn off when closed for a period</div>
-              </div>
-            </label>
-          </div>
-        </div>
-
-        <div class="check-group" style="margin-top:14px">
-          <h3 class="group-title">Regular Closed Days</h3>
-          <div style="padding:16px 20px">
-            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6">
-              Untick days each department is regularly closed. Closed days will be greyed out on the dashboard and weekly report.
-            </p>
-            <div class="trading-dept-row">
-              <div class="trading-dept-label">🍳 Kitchen</div>
-              <div class="trading-day-toggles"><label class="trading-day-toggle"><input type="checkbox" id="trading-kitchen-mon" checked onchange="saveTradingDay('kitchen','mon')"><span>Mon</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-kitchen-tue" checked onchange="saveTradingDay('kitchen','tue')"><span>Tue</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-kitchen-wed" checked onchange="saveTradingDay('kitchen','wed')"><span>Wed</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-kitchen-thu" checked onchange="saveTradingDay('kitchen','thu')"><span>Thu</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-kitchen-fri" checked onchange="saveTradingDay('kitchen','fri')"><span>Fri</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-kitchen-sat" checked onchange="saveTradingDay('kitchen','sat')"><span>Sat</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-kitchen-sun" checked onchange="saveTradingDay('kitchen','sun')"><span>Sun</span></label></div>
-            </div>
-            <div style="height:12px"></div>
-            <div class="trading-dept-row">
-              <div class="trading-dept-label">🍽 Front of House</div>
-              <div class="trading-day-toggles"><label class="trading-day-toggle"><input type="checkbox" id="trading-foh-mon" checked onchange="saveTradingDay('foh','mon')"><span>Mon</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-foh-tue" checked onchange="saveTradingDay('foh','tue')"><span>Tue</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-foh-wed" checked onchange="saveTradingDay('foh','wed')"><span>Wed</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-foh-thu" checked onchange="saveTradingDay('foh','thu')"><span>Thu</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-foh-fri" checked onchange="saveTradingDay('foh','fri')"><span>Fri</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-foh-sat" checked onchange="saveTradingDay('foh','sat')"><span>Sat</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-foh-sun" checked onchange="saveTradingDay('foh','sun')"><span>Sun</span></label></div>
-            </div>
-          </div>
-        </div>
-
-      </div>
       <!-- ── Email Reports settings panel ── -->
       <div id="settings-panel-email" class="settings-panel">
 

@@ -86,11 +86,6 @@ function renderDailyReport() {
   const container = document.getElementById('report-output');
   if (!container) return;
 
-  // Check if the site was closed on this date (either dept closed = site closed)
-  const kitchenOpen = isTrading('kitchen', date);
-  const fohOpen     = isTrading('foh', date);
-  const siteClosed  = !kitchenOpen && !fohOpen;
-
   const fmtDate = new Date(date + 'T12:00:00').toLocaleDateString('en-GB', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
   });
@@ -146,18 +141,14 @@ function renderDailyReport() {
           <div class="report-restaurant-name">${state.settings.restaurantName || 'SafeChecks'}</div>
           <div class="report-doc-date">${fmtDate}</div>
         </div>
-        <div class="report-compliance-badge" style="border-color:${siteClosed ? 'var(--text-dim)' : complianceColor};color:${siteClosed ? 'var(--text-dim)' : complianceColor}">
-          ${siteClosed
-            ? `<span class="report-compliance-label">Closed</span>`
-            : compliancePct !== null
-              ? `<span class="report-compliance-pct">${compliancePct}%</span><span class="report-compliance-label">Compliance</span>`
-              : `<span class="report-compliance-label">No checks recorded</span>`}
+        <div class="report-compliance-badge" style="border-color:${complianceColor};color:${complianceColor}">
+          ${compliancePct !== null
+            ? `<span class="report-compliance-pct">${compliancePct}%</span><span class="report-compliance-label">Compliance</span>`
+            : `<span class="report-compliance-label">No checks recorded</span>`}
         </div>
       </div>
 
-      ${siteClosed ? `<div class="report-closed-banner">🔒 Closed day — no checks expected. Any records below were submitted voluntarily.</div>` : ''}
-
-      ${!siteClosed && compliancePct !== null ? `
+      ${compliancePct !== null ? `
       <div class="report-score-bar-wrap">
         <div class="report-score-bar-track">
           <div class="report-score-bar-fill" style="width:${compliancePct}%;background:${complianceColor}"></div>
@@ -436,7 +427,7 @@ function buildWeeklyGrid(weekDates, dayLabels, shortDates, allDepts) {
     const deptInfo = DEPARTMENTS[dept];
     const cells = weekDates.map(date => {
       const rec = findRec(date, 'opening', dept);
-      return gridCell(rec, date, dept);
+      return gridCell(rec);
     }).join('');
     rows.push(`<tr><td class="wg-label-col"><span style="color:${deptInfo.color}">${deptInfo.icon}</span> Opening</td>${cells}</tr>`);
   });
@@ -446,7 +437,7 @@ function buildWeeklyGrid(weekDates, dayLabels, shortDates, allDepts) {
     const deptInfo = DEPARTMENTS[dept];
     const cells = weekDates.map(date => {
       const rec = findRec(date, 'closing', dept);
-      return gridCell(rec, date, dept);
+      return gridCell(rec);
     }).join('');
     rows.push(`<tr><td class="wg-label-col"><span style="color:${deptInfo.color}">${deptInfo.icon}</span> Closing</td>${cells}</tr>`);
   });
@@ -477,13 +468,8 @@ function buildWeeklyGrid(weekDates, dayLabels, shortDates, allDepts) {
   return rows.join('');
 }
 
-function gridCell(rec, date, dept) {
-  if (!rec) {
-    if (date && dept && !isTrading(dept, date)) {
-      return `<td class="wg-cell wg-closed" title="Closed">—</td>`;
-    }
-    return `<td class="wg-cell wg-notrecorded">—</td>`;
-  }
+function gridCell(rec) {
+  if (!rec) return `<td class="wg-cell wg-notrecorded">—</td>`;
   const checks = Object.entries(rec.fields || {}).filter(([, v]) => v === 'Yes' || v === 'No');
   const passed = checks.filter(([, v]) => v === 'Yes').length;
   const total = checks.length;
