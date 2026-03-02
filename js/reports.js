@@ -17,6 +17,38 @@ function initReportsTab() {
   populateReportWeekSelector();
   // Render with current selection
   renderReport();
+  // Update refresh button to show last-synced time
+  updateReportSyncLabel();
+}
+
+// ── Refresh button ─────────────────────────────────────
+function refreshReport() {
+  const btn = document.getElementById('report-refresh-btn');
+  if (btn) { btn.textContent = '↻ Syncing…'; btn.disabled = true; }
+
+  const out = document.getElementById('report-output');
+  if (out) out.style.opacity = '0.4';
+
+  const done = () => {
+    if (btn) { btn.disabled = false; }
+    if (out) out.style.opacity = '1';
+    populateReportWeekSelector();
+    renderReport();
+    updateReportSyncLabel();
+  };
+
+  if (state.config.sheetsUrl) {
+    pullAllRecords(true).then(done);
+  } else {
+    done();
+  }
+}
+
+function updateReportSyncLabel() {
+  const btn = document.getElementById('report-refresh-btn');
+  if (!btn) return;
+  const now = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  btn.textContent = `↻ Refresh · ${now}`;
 }
 
 function switchReportMode(mode) {
@@ -162,7 +194,7 @@ function buildChecklistSection(rec, deptInfo, title, signedByKey, notesKey) {
   const hasIssues = checks.some(([, v]) => v === 'No');
 
   const checksHTML = checks.map(([key, val]) => {
-    const label = key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const label = getCheckLabel(key);  // look up from settings
     const icon = val === 'Yes' ? '✓' : '✗';
     const cls = val === 'Yes' ? 'report-check-pass' : 'report-check-fail';
     return `<div class="report-check-row ${cls}"><span class="report-check-icon">${icon}</span><span>${label}</span></div>`;
@@ -243,6 +275,9 @@ function buildProbeTable(probes) {
 }
 
 // ── Daily task grid ───────────────────────────────────
+// Source of truth: state.records (cross-device, synced from Sheets)
+// Tombstones (unticks on this device) are checked from localStorage
+// to correctly handle cases where a task was ticked then unticked locally.
 function buildDailyTaskGrid(dateStr) {
   const d = new Date(dateStr + 'T12:00:00');
   const dayOfWeek = d.getDay();
@@ -259,13 +294,25 @@ function buildDailyTaskGrid(dateStr) {
     return `<div class="report-empty-row">No tasks scheduled for this day</div>`;
   }
 
-  const completions = JSON.parse(localStorage.getItem('safechecks_task_completions') || '{}');
+  // Pull tombstones from localStorage so unticks are respected
+  const localCompletions = JSON.parse(localStorage.getItem('safechecks_task_completions') || '{}');
 
   const rows = dayTasks.map(task => {
-    const key = `${weekStart}__${task.id}`;
-    const comp = completions[key];
-    const done = comp?.done === true;
+    // Primary: look for a synced task_completion record in state.records
+    const taskRec = state.records.find(r =>
+      r.type === 'task_completion' &&
+      r.fields?.task_id === task.id &&
+      r.fields?.task_week === weekStart
+    );
+
+    // Check for a local untick tombstone — this means someone ticked then unticked
+    const localKey = `${weekStart}__${task.id}`;
+    const isTombstoned = localCompletions[localKey]?.unticked === true;
+
+    const done = !!taskRec && !isTombstoned;
+    const doneBy = taskRec?.fields?.task_done_by || '—';
     const deptInfo = DEPARTMENTS[task.dept] || DEPARTMENTS['kitchen'];
+
     return `
       <tr>
         <td>${task.label}</td>
@@ -273,7 +320,7 @@ function buildDailyTaskGrid(dateStr) {
         <td>${done
           ? `<span class="report-status-badge status-ok">✓ Done</span>`
           : `<span class="report-status-badge status-notdone">— Not done</span>`}</td>
-        <td class="report-meta">${done && comp?.staffName ? comp.staffName : '—'}</td>
+        <td class="report-meta">${done ? doneBy : '—'}</td>
       </tr>`;
   }).join('');
 
@@ -465,8 +512,8 @@ function buildWeekStats(weekDates) {
         <td><span style="color:${deptInfo.color}">${deptInfo.icon} ${deptInfo.label}</span></td>
         <td style="color:${pctColor};font-weight:600">${pct !== null ? pct + '%' : '—'}</td>
         <td>${pct !== null ? `${passedChecks}/${totalChecks}` : '—'}</td>
-        <td>${tempChecks}</td>
-        <td>${tempFails > 0 ? `<span style="color:var(--danger)">${tempFails} breach${tempFails !== 1 ? 'es' : ''}</span>` : '<span style="color:var(--success)">None</span>'}</td>
+        <td>${tempChecks > 0 ? tempChecks : '—'}</td>
+        <td>${tempFails > 0 ? `<span style="color:var(--danger)">${tempFails} breach${tempFails !== 1 ? 'es' : ''}</span>` : tempChecks > 0 ? '<span style="color:var(--success)">None</span>' : '—'}</td>
       </tr>`);
   });
 
@@ -482,7 +529,7 @@ function buildWeekStats(weekDates) {
     <tr>
       <td><span style="color:#f59e0b">🍳 Kitchen</span> <span style="color:var(--text-muted);font-size:11px">Probes</span></td>
       <td>—</td>
-      <td>${probeTotal}</td>
+      <td>${probeTotal > 0 ? probeTotal : '—'}</td>
       <td>—</td>
       <td>${probeFails > 0 ? `<span style="color:var(--danger)">${probeFails} fail${probeFails !== 1 ? 's' : ''}</span>` : probeTotal > 0 ? '<span style="color:var(--success)">All pass</span>' : '—'}</td>
     </tr>`);
@@ -519,6 +566,23 @@ function getCheckLabel(id) {
             .replace(/\b\w/g, c => c.toUpperCase());
 }
 
+// ── Rating mismatch detection ─────────────────────────
+// Expected rating based on weekly review check compliance:
+//   Good           ≥ 90%
+//   Satisfactory   70–89%
+//   Needs Improvement < 70%
+// Returns a warning string if the submitted rating is better than data suggests.
+function getRatingMismatchWarning(submittedRating, passed, total) {
+  if (!submittedRating || !total) return null;
+  const pct = Math.round((passed / total) * 100);
+  const expected = pct >= 90 ? 'Good' : pct >= 70 ? 'Satisfactory' : 'Needs Improvement';
+  const rank = { 'Good': 2, 'Satisfactory': 1, 'Needs Improvement': 0 };
+  if (rank[submittedRating] > rank[expected]) {
+    return `Submitted as "${submittedRating}" but weekly check score is ${pct}% (${passed}/${total}) — data suggests "${expected}"`;
+  }
+  return null;
+}
+
 // ── Weekly management review section ──────────────────
 function buildWeeklyReviewSection(rec) {
   if (!rec) {
@@ -532,12 +596,13 @@ function buildWeeklyReviewSection(rec) {
   const issues = rec.fields?.weekly_issues || '';
   const actions = rec.fields?.weekly_actions || '';
   const signed = rec.fields?.weekly_signed_by || '';
-  const hasIssues = checks.some(([, v]) => v === 'No');
 
   const ratingColor = rating === 'Good' ? 'var(--success)' : rating === 'Satisfactory' ? 'var(--warning)' : rating === 'Needs Improvement' ? 'var(--danger)' : 'var(--text-muted)';
 
+  const mismatch = getRatingMismatchWarning(rating, passed, total);
+
   const checksHTML = checks.map(([key, val]) => {
-    const label = getCheckLabel(key);   // ← look up from settings, not key-munge
+    const label = getCheckLabel(key);
     const icon = val === 'Yes' ? '✓' : '✗';
     const cls = val === 'Yes' ? 'report-check-pass' : 'report-check-fail';
     return `<div class="report-check-row ${cls}"><span class="report-check-icon">${icon}</span><span>${label}</span></div>`;
@@ -551,6 +616,7 @@ function buildWeeklyReviewSection(rec) {
         </div>
         ${rating ? `<div class="report-rating-badge" style="border-color:${ratingColor};color:${ratingColor}">${rating}</div>` : ''}
       </div>
+      ${mismatch ? `<div class="report-rating-mismatch">⚠ ${mismatch}</div>` : ''}
       ${checks.length ? `<div class="report-check-list report-check-two-col">${checksHTML}</div>` : ''}
       ${issues ? `<div class="report-field-row"><div class="report-field-label">Issues / Incidents</div><div class="report-field-value">${issues}</div></div>` : ''}
       ${actions ? `<div class="report-field-row"><div class="report-field-label">Follow-up Actions</div><div class="report-field-value">${actions}</div></div>` : ''}

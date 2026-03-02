@@ -1813,3 +1813,14 @@ body.theme-light .week-selector-select { background: #fff; border-color: #d0d6e0
   .report-weekly-grid-wrap { overflow: visible !important; }
   @page { margin: 1.5cm; }
 }
+.report-rating-mismatch {
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.3);
+  border-radius: 6px;
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+}
+.report-output { transition: opacity 0.2s ease; }

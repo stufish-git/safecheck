@@ -29,6 +29,8 @@ const EQUIPMENT_TYPES = {
 const DEFAULT_SETTINGS = {
   restaurantName: 'My Restaurant',
   openingTimes: { kitchen:'08:00', foh:'09:00' },
+  emailEnabled: false,
+  emailRecipients: [],
   closingTimes:  { kitchen:'23:00', foh:'23:30' },
 
   staff: [
@@ -361,8 +363,10 @@ function saveSettings() {
 
 function deepMergeSettings(def, saved) {
   const m = JSON.parse(JSON.stringify(def));
-  if (saved.restaurantName) m.restaurantName = saved.restaurantName;
-  if (saved.openingTimes)   m.openingTimes   = { ...m.openingTimes, ...saved.openingTimes };
+  if (saved.restaurantName)  m.restaurantName  = saved.restaurantName;
+  if (saved.openingTimes)    m.openingTimes    = { ...m.openingTimes, ...saved.openingTimes };
+  if (saved.emailEnabled !== undefined) m.emailEnabled = saved.emailEnabled;
+  if (Array.isArray(saved.emailRecipients)) m.emailRecipients = saved.emailRecipients;
   if (saved.closingTimes)   m.closingTimes   = { ...m.closingTimes, ...saved.closingTimes };
   if (saved.staff)          m.staff          = saved.staff;
   if (saved.equipment)      m.equipment      = saved.equipment;
@@ -612,6 +616,7 @@ function renderSettingsPage() {
   document.getElementById('set-foh-close').value       = s.closingTimes?.foh||'23:30';
   updateThemeButtons(currentTheme());
   renderStaffList(); renderEquipmentList(); renderCheckEditors(); renderTaskEditor(); renderProbeProductList();
+  renderEmailSettings();
   showSettingsSection('restaurant');
 }
 
@@ -1104,4 +1109,60 @@ function confirmResetToday() {
   });
 
   showToast(`${removed} record${removed !== 1 ? 's' : ''} cleared for today ✓`, 'success');
+}
+
+
+// ── Email Report Settings ─────────────────────────────
+function renderEmailSettings() {
+  const s = state.settings;
+  const enabledEl = document.getElementById('set-email-enabled');
+  if (enabledEl) enabledEl.checked = !!s.emailEnabled;
+  renderEmailRecipientList();
+}
+
+function renderEmailRecipientList() {
+  const list = document.getElementById('email-recipient-list');
+  if (!list) return;
+  const recipients = state.settings.emailRecipients || [];
+  if (!recipients.length) {
+    list.innerHTML = '<p style="font-size:13px;color:var(--text-dim);font-family:var(--mono)">No recipients added yet.</p>';
+    return;
+  }
+  list.innerHTML = recipients.map((email, i) => `
+    <div class="settings-item" style="padding:8px 0">
+      <div class="settings-item-content">
+        <div class="settings-item-main" style="font-family:var(--mono);font-size:13px">${email}</div>
+      </div>
+      <div class="settings-item-actions">
+        <button class="set-btn-delete" onclick="removeEmailRecipient(${i})">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function addEmailRecipient() {
+  const input = document.getElementById('new-email-recipient');
+  const email = input?.value?.trim().toLowerCase();
+  if (!email || !email.includes('@')) { showToast('Enter a valid email address', 'error'); return; }
+  const recipients = state.settings.emailRecipients || [];
+  if (recipients.includes(email)) { showToast('Already in list', 'error'); return; }
+  state.settings.emailRecipients = [...recipients, email];
+  input.value = '';
+  saveSettings(); syncSettingsToSheets();
+  renderEmailRecipientList();
+  showToast('Recipient added ✓', 'success');
+}
+
+function removeEmailRecipient(index) {
+  const recipients = [...(state.settings.emailRecipients || [])];
+  recipients.splice(index, 1);
+  state.settings.emailRecipients = recipients;
+  saveSettings(); syncSettingsToSheets();
+  renderEmailRecipientList();
+  showToast('Removed', 'success');
+}
+
+function saveEmailSettings() {
+  state.settings.emailEnabled = !!document.getElementById('set-email-enabled')?.checked;
+  saveSettings(); syncSettingsToSheets();
+  showToast('Saved ✓', 'success');
 }

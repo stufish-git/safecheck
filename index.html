@@ -373,6 +373,7 @@
       <div class="report-mode-bar">
         <button id="report-mode-daily" class="report-mode-btn active" onclick="switchReportMode('daily')">Daily Report</button>
         <button id="report-mode-weekly" class="report-mode-btn" onclick="switchReportMode('weekly')">Weekly Report</button>
+        <button id="report-refresh-btn" class="report-print-btn" onclick="refreshReport()">↻ Refresh</button>
         <button class="report-print-btn" onclick="printReport()">🖨 Print</button>
       </div>
 
@@ -407,6 +408,7 @@
         <button class="settings-tab-btn" data-settings-tab="checks"     onclick="showSettingsSection('checks')">Checklists</button>
         <button class="settings-tab-btn" data-settings-tab="tasks-cfg"  onclick="showSettingsSection('tasks-cfg')">Tasks</button>
         <button class="settings-tab-btn" data-settings-tab="security"   onclick="showSettingsSection('security')">Security</button>
+        <button class="settings-tab-btn" data-settings-tab="email"     onclick="showSettingsSection('email')">Email Reports</button>
       </div>
 
       <!-- RESTAURANT -->
@@ -720,6 +722,55 @@
         </div>
       </div>
 
+
+      <!-- ── Email Reports settings panel ── -->
+      <div id="settings-panel-email" class="settings-panel">
+
+        <div class="check-group">
+          <h3 class="group-title">Daily Email Summary</h3>
+          <div style="padding:16px 20px">
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6">
+              Sends an HTML summary of each day's food safety records at 23:59 every night.
+              The trigger must be installed once from Google Apps Script after deploying.
+            </p>
+            <label class="check-item" style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:16px">
+              <input type="checkbox" id="set-email-enabled" onchange="saveEmailSettings()"/>
+              <span style="font-size:14px;color:var(--text)">Enable daily email reports</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="check-group" style="margin-top:14px">
+          <h3 class="group-title">Recipients</h3>
+          <div style="padding:16px 20px">
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;line-height:1.6">
+              Add one email address per line. All addresses will receive the nightly summary.
+            </p>
+            <div id="email-recipient-list" style="margin-bottom:12px"></div>
+            <div style="display:flex;gap:8px">
+              <input type="email" id="new-email-recipient" class="text-field" placeholder="name@example.com" style="flex:1"
+                onkeydown="if(event.key==='Enter')addEmailRecipient()"/>
+              <button class="btn-filter" onclick="addEmailRecipient()">+ Add</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="check-group" style="margin-top:14px">
+          <h3 class="group-title">Apps Script Setup</h3>
+          <div style="padding:16px 20px">
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:8px;line-height:1.6">
+              After updating <code style="font-family:var(--mono);background:var(--bg-input);padding:1px 5px;border-radius:3px">google-apps-script.js</code>,
+              open Apps Script and run <code style="font-family:var(--mono);background:var(--bg-input);padding:1px 5px;border-radius:3px">installDailyEmailTrigger()</code>
+              once to schedule the 23:59 trigger. Run
+              <code style="font-family:var(--mono);background:var(--bg-input);padding:1px 5px;border-radius:3px">removeDailyEmailTrigger()</code> to stop it.
+            </p>
+            <p style="font-size:12px;color:var(--text-dim);font-family:var(--mono);line-height:1.6">
+              The trigger runs as you (the Apps Script owner), so emails will arrive from your Google account's Gmail address.
+            </p>
+          </div>
+        </div>
+
+      </div>
     </section>
 
   </main>
