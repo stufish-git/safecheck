@@ -898,6 +898,7 @@ function renderManagerDashboard() {
           { type:'opening',     label:'Opening',     icon:'☀', total: getActiveChecks(deptId,'opening').length  || 12 },
           { type:'temperature', label:'Equipment',   icon:'🌡', total: null },
           ...(deptId === 'kitchen' ? [{ type:'food_probe', label:'Food Probe', icon:'🍖', total: null }] : []),
+          ...(deptId === 'kitchen' ? [{ type:'goods_in',   label:'Goods In',   icon:'📦', total: null }] : []),
           { type:'closing',     label:'Closing',     icon:'☽', total: getActiveChecks(deptId,'closing').length  || 10 },
           { type:'tasks',       label:'Tasks',       icon:'☑', total: null },
         ];
@@ -933,7 +934,7 @@ function renderManagerDashboard() {
       }
       if (sec.type === 'food_probe') {
         const probes  = deptRecords.filter(r => r.type==='food_probe');
-        const hasFail = probes.some(r => r.fields?.probe_pass === 'No' || r.fields?.probe_pass === false);
+        const hasFail = probes.some(r => r.fields?.probe_status === 'FAIL');
         const status  = hasFail
           ? { text:'⚠ Fail recorded', cls:'overdue' }
           : probes.length > 0 ? { text:`✓ ${probes.length} check${probes.length!==1?'s':''} passed`, cls:'complete' }
@@ -942,6 +943,22 @@ function renderManagerDashboard() {
         return `<div class="mgr-card" onclick="showTab('probe')">
           <div class="mgr-card-header"><span class="mgr-card-icon" style="color:var(--success)">${sec.icon}</span><span class="mgr-card-label">${sec.label}</span></div>
           <div class="pb"><div class="pf" style="width:${pct}%;background:var(--success)"></div></div>
+          <div class="mgr-card-status ${status.cls}">${status.text}</div>
+        </div>`;
+      }
+      if (sec.type === 'goods_in') {
+        const deliveries = deptRecords.filter(r => r.type==='goods_in');
+        const hasFail    = deliveries.some(r => r.fields?.gi_outcome === 'rejected' || r.fields?.gi_temp_status === 'FAIL');
+        const hasWarn    = deliveries.some(r => r.fields?.gi_temp_status === 'WARNING');
+        const status     = hasFail
+          ? { text:`⚠ Issue logged`, cls:'overdue' }
+          : hasWarn ? { text:`! Temp warning`, cls:'partial' }
+          : deliveries.length > 0 ? { text:`✓ ${deliveries.length} deliver${deliveries.length!==1?'ies':'y'} logged`, cls:'complete' }
+          : { text:'—', cls:'' };
+        const pct = deliveries.length > 0 ? 100 : 0;
+        return `<div class="mgr-card" onclick="showTab('goods-in')">
+          <div class="mgr-card-header"><span class="mgr-card-icon" style="color:#f59e0b">${sec.icon}</span><span class="mgr-card-label">${sec.label}</span></div>
+          <div class="pb"><div class="pf" style="width:${pct}%;background:#f59e0b"></div></div>
           <div class="mgr-card-status ${status.cls}">${status.text}</div>
         </div>`;
       }
@@ -1022,6 +1039,7 @@ function renderStaffDashboard() {
   ];
   if (dept === 'kitchen') {
     cards.splice(2, 0, { id:'probe', label:'Food Probe', icon:'🍖', color:'var(--success)', total: null, tab:'probe', recType:'food_probe' });
+    cards.splice(3, 0, { id:'goods_in', label:'Goods In', icon:'📦', color:'#f59e0b', total: null, tab:'goods-in', recType:'goods_in' });
   }
 
   const grid = document.getElementById('dashboard-grid');
@@ -1069,6 +1087,22 @@ function renderStaffDashboard() {
         <div class="dash-card-body"><h3>${card.label}</h3>
           <div class="dash-progress"><div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${card.color}"></div></div></div>
           <div class="progress-label">${probes.length} check${probes.length!==1?'s':''} today</div>
+        </div>
+        <div class="dash-card-status ${statCls}">${statText}</div>
+      </div>`;
+    }
+    if (card.id === 'goods_in') {
+      const deliveries = dr.filter(r => r.type==='goods_in');
+      const hasFail    = deliveries.some(r => r.fields?.gi_outcome === 'rejected' || r.fields?.gi_temp_status === 'FAIL');
+      const hasWarn    = deliveries.some(r => r.fields?.gi_temp_status === 'WARNING');
+      const pct        = deliveries.length > 0 ? 100 : 0;
+      const statText   = hasFail ? '⚠ Issue logged' : hasWarn ? '! Temp warning' : deliveries.length>0 ? `✓ ${deliveries.length} deliver${deliveries.length!==1?'ies':'y'}` : '—';
+      const statCls    = hasFail ? 'overdue' : hasWarn ? 'partial' : deliveries.length>0 ? 'complete' : '';
+      return `<div class="dash-card" onclick="showTab('goods-in')">
+        <div class="dash-card-icon" style="color:${card.color}">${card.icon}</div>
+        <div class="dash-card-body"><h3>${card.label}</h3>
+          <div class="dash-progress"><div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${card.color}"></div></div></div>
+          <div class="progress-label">${deliveries.length} deliver${deliveries.length!==1?'ies':'y'} today</div>
         </div>
         <div class="dash-card-status ${statCls}">${statText}</div>
       </div>`;
@@ -1486,7 +1520,7 @@ function initGoodsInTab() {
   // Rebuild signed-by — kitchen staff only
   const signedEl = document.getElementById('gi-signed-by');
   if (signedEl) {
-    const kitchenStaff = (state.settings.staff || []).filter(s => s.enabled && s.dept === 'kitchen');
+    const kitchenStaff = (state.settings.staff || []).filter(s => s.enabled !== false && s.dept === 'kitchen');
     const me = currentStaffMember();
     signedEl.innerHTML = '<option value="">Select staff...</option>' +
       kitchenStaff.map(s => `<option value="${s.name}">${s.name} — ${s.role || ''}</option>`).join('');
