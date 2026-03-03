@@ -132,6 +132,9 @@
         </div>
         <div class="field-group">
           <label>Probe / method used</label>
+          <!-- EQUIPMENT TAB ONLY: Built-in Gauge + Infrared Gun
+               DO NOT copy options from the Food Probe tab (id=probe-instrument).
+               These two dropdowns are intentionally different. -->
           <select class="select-field" id="equip-probe">
             <option value="Built-in Gauge" selected>Built-in Gauge</option>
             <option value="Infrared Gun">Infrared Gun</option>
@@ -278,8 +281,12 @@
           </div>
           <div class="field-group">
             <label>Probe Used</label>
+            <!-- FOOD PROBE TAB ONLY: Digital Probe 1, Digital Probe 2, Infrared Gun
+                 DO NOT copy options from the Equipment tab (id=equip-probe).
+                 These two dropdowns are intentionally different. -->
             <select class="select-field" id="probe-instrument">
-              <option value="Built-in Gauge" selected>Built-in Gauge</option>
+              <option value="Digital Probe 1" selected>Digital Probe 1</option>
+              <option value="Digital Probe 2">Digital Probe 2</option>
               <option value="Infrared Gun">Infrared Gun</option>
             </select>
           </div>

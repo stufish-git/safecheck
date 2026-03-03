@@ -545,7 +545,8 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
         const fg = pass ? '#166534' : '#991b1b';
         const actionHtml = !pass && r.action && r.action !== 'None required'
           ? '<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:4px;background:#fef2f2;border-radius:4px;border:1px solid #fecaca"><tr><td style="padding:6px 10px;font-size:11px;color:#991b1b;font-family:Arial,sans-serif">Action: ' + r.action + '</td></tr></table>' : '';
-        return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:6px 0"><p style="margin:0;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + r.product + '</p>' + actionHtml + '</td>' +
+        const coolingHtml = r.cooling ? '<p style="margin:3px 0 0;font-size:11px;color:#60a5fa;font-family:Arial,sans-serif">❄️ Cooled for ' + r.cooling + '</p>' : '';
+        return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:6px 0"><p style="margin:0;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + r.product + '</p>' + coolingHtml + actionHtml + '</td>' +
           '<td style="text-align:right;vertical-align:top;padding:6px 0;font-size:12px;font-family:Arial,sans-serif"><strong style="color:#334155">' + r.temp + '°C</strong> <span style="background:' + bg + ';color:' + fg + ';padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;margin-left:6px">' + r.status + '</span> <span style="color:#94a3b8;margin-left:6px">' + r.staff + '</span></td></tr>';
       }).join('');
 
@@ -706,13 +707,15 @@ function getTodayRecords(ss, tabName, today) {
         time:     String(row[timeCol]   || ''),
       });
     } else if (tabName === 'Food Probe Log') {
+      const coolingCol = headers.indexOf('Cooling Time');
       results.push({
-        product: String(row[prodCol]    || ''),
-        temp:    String(row[tempCol]    || ''),
-        status:  String(row[statusCol]  || ''),
-        action:  String(row[actionCol]  || ''),
-        staff:   String(row[staffCol]   || ''),
-        time:    String(row[timeCol]    || ''),
+        product: String(row[prodCol]                          || ''),
+        temp:    String(row[tempCol]                          || ''),
+        status:  String(row[statusCol]                        || ''),
+        action:  String(row[actionCol]                        || ''),
+        cooling: String(coolingCol >= 0 ? (row[coolingCol] || '') : ''),
+        staff:   String(row[staffCol]                         || ''),
+        time:    String(row[timeCol]                          || ''),
       });
     } else if (tabName === 'Goods In Log') {
       // Goods In — parse Fields JSON
