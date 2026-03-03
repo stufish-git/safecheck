@@ -1483,13 +1483,13 @@ function initGoodsInTab() {
   if (notesEl) notesEl.value = '';
   // Populate supplier dropdown
   rebuildSupplierDropdown();
-  // Rebuild signed-by
+  // Rebuild signed-by — kitchen staff only
   const signedEl = document.getElementById('gi-signed-by');
   if (signedEl) {
-    const staff = (state.settings.staff || []).filter(s => s.enabled);
-    signedEl.innerHTML = '<option value="">Select staff...</option>' +
-      staff.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+    const kitchenStaff = (state.settings.staff || []).filter(s => s.enabled && s.dept === 'kitchen');
     const me = currentStaffMember();
+    signedEl.innerHTML = '<option value="">Select staff...</option>' +
+      kitchenStaff.map(s => `<option value="${s.name}">${s.name} — ${s.role || ''}</option>`).join('');
     if (me) signedEl.value = me.name;
   }
   // Render today's log

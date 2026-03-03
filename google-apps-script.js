@@ -1,6 +1,11 @@
 /**
  * ═══════════════════════════════════════════════════════
- *  SAFECHECKS — Google Apps Script v5.2
+ *  SAFECHECKS — Google Apps Script v5.3
+ *
+ *  CHANGES FROM v5.2:
+ *  - Added Goods In Log tab to setupSheets
+ *  - getTodayRecords now handles Goods In Log tab correctly
+ *  - setupSheets alert updated
  *
  *  CHANGES FROM v5:
  *  - doGet now converts Date cell values back to YYYY-MM-DD strings
@@ -11,7 +16,7 @@
  *  - setupSheets updated to match new compact checklist headers
  *    (with Fields JSON column for full round-trip reconstruction)
  *
- *  HOW TO UPDATE (you've already deployed v5):
+ *  HOW TO UPDATE (you've already deployed v5.2):
  *  1. Open your Google Sheet
  *  2. Extensions → Apps Script
  *  3. Replace ALL code with this file → Save
@@ -194,6 +199,15 @@ function setupSheets() {
       name: 'Task Completions',
       headers: ['ID','Date','Time','Department','Task ID','Week Start','Completed By'],
     },
+    {
+      name: 'Goods In Log',
+      headers: [
+        'ID','Date','Time','Department',
+        'Supplier','Type','Temperature (°C)','Temp Status',
+        'Expiry Checked','Outcome','Notes','Signed By',
+        'Fields JSON',
+      ],
+    },
   ];
 
   configs.forEach(config => {
@@ -218,10 +232,10 @@ function setupSheets() {
   } catch(e) {}
 
   SpreadsheetApp.getUi().alert(
-    '✅ SafeChecks v5.2 — All sheets recreated!\n\n' +
+    '✅ SafeChecks v5.3 — All sheets recreated!\n\n' +
     'Tabs: Opening Checks, Closing Checks, Temperature Log,\n' +
     'Food Probe Log, Cleaning Schedule, Weekly Review,\n' +
-    'Task Completions, Settings\n\n' +
+    'Task Completions, Goods In Log, Settings\n\n' +
     'Now: Deploy → Manage deployments → Edit → New version → Deploy'
   );
 }
@@ -700,6 +714,37 @@ function getTodayRecords(ss, tabName, today) {
         staff:   String(row[staffCol]   || ''),
         time:    String(row[timeCol]    || ''),
       });
+    } else if (tabName === 'Goods In Log') {
+      // Goods In — parse Fields JSON
+      let fields = {};
+      try { fields = JSON.parse(String(row[fieldsCol] || '{}')); } catch(e) {}
+      // Fall back to named columns if no Fields JSON
+      if (!Object.keys(fields).length) {
+        const supCol   = headers.indexOf('Supplier');
+        const typeCol  = headers.indexOf('Type');
+        const tmpCol   = headers.indexOf('Temperature (°C)');
+        const stCol    = headers.indexOf('Temp Status');
+        const expCol   = headers.indexOf('Expiry Checked');
+        const outCol   = headers.indexOf('Outcome');
+        const notCol   = headers.indexOf('Notes');
+        const sgnCol   = headers.indexOf('Signed By');
+        fields = {
+          gi_supplier:      String(row[supCol]  || ''),
+          gi_type:          String(row[typeCol] || ''),
+          gi_temp:          String(row[tmpCol]  || ''),
+          gi_temp_status:   String(row[stCol]   || ''),
+          gi_expiry_checked:String(row[expCol]  || ''),
+          gi_outcome:       String(row[outCol]  || ''),
+          gi_notes:         String(row[notCol]  || ''),
+          gi_signed_by:     String(row[sgnCol]  || ''),
+        };
+      }
+      results.push({
+        dept:   String(row[deptCol] || '').toLowerCase(),
+        time:   String(row[timeCol] || ''),
+        fields,
+      });
+
     } else {
       // Opening / Closing Checks — parse Fields JSON for individual items
       let fields = {};
