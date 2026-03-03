@@ -289,6 +289,24 @@
           <input type="text" class="text-field" id="probe-action"
             placeholder="e.g. Returned to oven, cooked further 5 mins..."/>
         </div>
+        <div class="probe-cooling-wrap">
+          <div class="probe-cooling-header">
+            <span class="probe-cooling-icon">❄️</span>
+            <label class="probe-cooling-label">Cooling time</label>
+            <span class="probe-cooling-optional">optional</span>
+          </div>
+          <select class="select-field" id="probe-cooling-time">
+            <option value="">— Served immediately</option>
+            <option value="30 mins">30 mins</option>
+            <option value="1 hr">1 hr</option>
+            <option value="1 hr 30">1 hr 30</option>
+            <option value="2 hrs">2 hrs</option>
+            <option value="2 hrs 30">2 hrs 30</option>
+            <option value="3 hrs">3 hrs</option>
+            <option value="3 hrs 30">3 hrs 30</option>
+            <option value="4 hrs">4 hrs</option>
+          </select>
+        </div>
         <button class="btn-submit" onclick="logFoodProbe()">
           <span>Log Food Probe Check</span><span class="btn-icon">+</span>
         </button>

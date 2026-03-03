@@ -271,11 +271,13 @@ function buildProbeTable(probes) {
     const passed = f.probe_status === 'PASS';
     const cls = passed ? 'status-ok' : 'status-fail';
     const hasAction = f.probe_action && f.probe_action !== 'None required';
+    const cooling = f.probe_cooling_time || '';
     return `
       <tr>
         <td>${f.probe_product || '—'}</td>
         <td class="report-temp-val">${f.probe_temp ? f.probe_temp + '°C' : '—'}</td>
         <td><span class="report-status-badge ${cls}">${f.probe_status || '—'}</span></td>
+        <td>${cooling ? `<span style="color:var(--temp)">❄️ ${cooling}</span>` : '<span style="color:var(--text-dim)">— served</span>'}</td>
         <td class="report-action-col">${hasAction ? `<span class="report-action-text">⚠ ${f.probe_action}</span>` : '<span class="report-ok-text">—</span>'}</td>
         <td class="report-meta">${f.probe_staff || '—'}<br><span class="report-time">${r.timestamp?.split(' ')[1] || ''}</span></td>
       </tr>`;
@@ -284,7 +286,7 @@ function buildProbeTable(probes) {
   return `
     <table class="report-table">
       <thead><tr>
-        <th>Product</th><th>Temp</th><th>Status</th><th>Corrective Action</th><th>Staff</th>
+        <th>Product</th><th>Temp</th><th>Status</th><th>Cooling Time</th><th>Corrective Action</th><th>Staff</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;

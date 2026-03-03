@@ -266,7 +266,11 @@ function showTab(tabId) {
       const me = currentStaffMember();
       probeStaffEl.innerHTML = '<option value="">Select staff member...</option>' +
         kitchenStaff.map(s => `<option value="${s.name}">${s.name} — ${s.role || ''}</option>`).join('');
-      if (me && me.dept === 'kitchen') probeStaffEl.value = me.name;
+      // Try signed-in user first; if not in this list fall back to first kitchen staff member
+      probeStaffEl.value = me ? me.name : '';
+      if (!probeStaffEl.value && kitchenStaff.length) {
+        probeStaffEl.value = kitchenStaff[0].name;
+      }
     }
     renderFoodProbeLog();
     updateFoodProbeDayStatus();
@@ -784,11 +788,12 @@ function updateEquipDayStatus() {
 
 // ── Food Probe (Probe tab) ────────────────────────────
 function logFoodProbe() {
-  const product = document.getElementById('probe-product')?.value.trim();
-  const tempVal = document.getElementById('probe-temp')?.value;
-  const probe   = document.getElementById('probe-instrument')?.value;
-  const staff   = document.getElementById('probe-staff')?.value?.trim();
-  const action  = document.getElementById('probe-action')?.value?.trim();
+  const product  = document.getElementById('probe-product')?.value.trim();
+  const tempVal  = document.getElementById('probe-temp')?.value;
+  const probe    = document.getElementById('probe-instrument')?.value;
+  const staff    = document.getElementById('probe-staff')?.value?.trim();
+  const action   = document.getElementById('probe-action')?.value?.trim();
+  const cooling  = document.getElementById('probe-cooling-time')?.value || '';
 
   if (!product)    { showToast('Select a product / dish', 'error'); return; }
   if (tempVal === '') { showToast('Enter a temperature', 'error'); return; }
@@ -806,23 +811,25 @@ function logFoodProbe() {
     timestamp: nowTimestamp(),
     iso:       nowISO(),
     fields: {
-      probe_product: product,
-      probe_temp:    temp.toString(),
-      probe_status:  status,
-      probe_used:    probe,
-      probe_action:  action || (passed ? 'None required' : ''),
-      probe_staff:   staff,
+      probe_product:      product,
+      probe_temp:         temp.toString(),
+      probe_status:       status,
+      probe_used:         probe,
+      probe_action:       action || (passed ? 'None required' : ''),
+      probe_staff:        staff,
+      probe_cooling_time: cooling,
     },
-    summary: `${product}: ${temp}°C (${status}) · ${staff}`,
+    summary: `${product}: ${temp}°C (${status})${cooling ? ' · ❄️ ' + cooling : ''} · ${staff}`,
   };
 
   state.records.push(record);
   saveState();
   syncRecordToSheets(record);
 
-  document.getElementById('probe-product').value = '';
-  document.getElementById('probe-temp').value    = '';
-  document.getElementById('probe-action').value  = '';
+  document.getElementById('probe-product').value       = '';
+  document.getElementById('probe-temp').value          = '';
+  document.getElementById('probe-action').value        = '';
+  document.getElementById('probe-cooling-time').value  = '';
 
   const actionGroup = document.getElementById('probe-action-group');
   if (actionGroup) actionGroup.style.display = passed ? 'none' : 'block';
@@ -847,12 +854,14 @@ function renderFoodProbeLog() {
   list.innerHTML = entries.map(r => {
     const passed = r.fields.probe_status === 'PASS';
     const cls    = passed ? 'ok' : 'fail';
-    const hasAction = r.fields.probe_action && r.fields.probe_action !== 'None required';
+    const hasAction  = r.fields.probe_action && r.fields.probe_action !== 'None required';
+    const cooling    = r.fields.probe_cooling_time || '';
     return `
       <div class="temp-log-entry">
         <div style="flex:1">
           <div class="temp-entry-location">${r.fields.probe_product}</div>
           <div class="temp-entry-detail">${r.fields.probe_used} · ${r.fields.probe_staff}${hasAction ? ` · <span style="color:var(--warning)">Action: ${r.fields.probe_action}</span>` : ''}</div>
+          ${cooling ? `<div class="probe-log-cooling">❄️ Cooled for ${cooling}</div>` : ''}
         </div>
         <div class="temp-value-badge ${cls}">${r.fields.probe_temp}°C</div>
         <div class="temp-entry-time">${r.timestamp.split(',')[1]?.trim()||''}</div>
@@ -1533,7 +1542,10 @@ function initGoodsInTab() {
     const me = currentStaffMember();
     signedEl.innerHTML = '<option value="">Select staff...</option>' +
       kitchenStaff.map(s => `<option value="${s.name}">${s.name} — ${s.role || ''}</option>`).join('');
-    if (me) signedEl.value = me.name;
+    signedEl.value = me ? me.name : '';
+    if (!signedEl.value && kitchenStaff.length) {
+      signedEl.value = kitchenStaff[0].name;
+    }
   }
   // Render today's log
   renderGoodsInLog();

@@ -306,6 +306,39 @@ body {
 .temp-log-entry:last-child { border-bottom: none; }
 .temp-entry-location { font-size: 14px; font-weight: 500; }
 .temp-entry-detail { font-size: 12px; color: var(--text-muted); margin-top: 2px; font-family: var(--mono); }
+.probe-log-cooling { font-size: 11px; color: var(--temp); margin-top: 3px; }
+
+/* ── Probe cooling time field ── */
+.probe-cooling-wrap {
+  background: rgba(59,130,246,0.06);
+  border: 1px solid rgba(59,130,246,0.2);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 14px;
+}
+.probe-cooling-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.probe-cooling-icon { font-size: 15px; }
+.probe-cooling-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+.probe-cooling-optional {
+  font-size: 10px;
+  color: var(--text-dim);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin-left: auto;
+  font-family: var(--mono);
+}
 .temp-value-badge {
   font-family: var(--mono); font-size: 17px; font-weight: 500;
   padding: 4px 10px; border-radius: 6px;
@@ -1282,7 +1315,7 @@ body.theme-light .quick-date-btn { background: #f4f6fa; border-color: #d0d6e0; c
   white-space: nowrap;
 }
 .day-pill-label-set {
-  color: var(--accent);
+  color: var(--success);
 }
 .day-pill {
   width: 22px;
@@ -1302,11 +1335,12 @@ body.theme-light .quick-date-btn { background: #f4f6fa; border-color: #d0d6e0; c
 }
 .day-pill:hover { background: var(--border); color: var(--text); }
 .day-pill-active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--success);
+  border-color: var(--success);
+  color: #000;
+  font-weight: 700;
 }
-.day-pill-active:hover { background: var(--accent); opacity: 0.85; }
+.day-pill-active:hover { background: var(--success); opacity: 0.85; }
 
 
 body.theme-light .check-info-btn { border-color: var(--success); color: var(--success); }

@@ -36,7 +36,7 @@ const SHEET_HEADERS = {
   ],
   food_probe: [
     'ID','Date','Time','Department',
-    'Product / Dish','Core Temperature (°C)','Status','Probe Used','Corrective Action','Logged By',
+    'Product / Dish','Core Temperature (°C)','Status','Probe Used','Corrective Action','Cooling Time','Logged By',
     'Fields JSON',
   ],
   task_completion: ['ID','Date','Time','Department','Task ID','Week Start','Completed By'],
@@ -85,7 +85,7 @@ function buildPayload(record) {
   } else if (record.type === 'food_probe') {
     rowData = [record.id, record.date, record.timestamp, dept,
       f.probe_product, f.probe_temp, f.probe_status, f.probe_used,
-      f.probe_action, f.probe_staff, json];
+      f.probe_action, f.probe_cooling_time || '', f.probe_staff, json];
 
   } else if (record.type === 'task_completion') {
     rowData = [record.id, record.date, record.timestamp, dept,
@@ -212,12 +212,13 @@ function parseSheetRow(row, type) {
     // Fallback for food_probe (named columns, no JSON)
     if (!Object.keys(fields).length && type === 'food_probe') {
       fields = {
-        probe_product: row['Product / Dish']         || '',
-        probe_temp:    row['Core Temperature (°C)']  || '',
-        probe_status:  row['Status']                 || '',
-        probe_used:    row['Probe Used']             || '',
-        probe_action:  row['Corrective Action']      || '',
-        probe_staff:   row['Logged By']              || '',
+        probe_product:      row['Product / Dish']         || '',
+        probe_temp:         row['Core Temperature (°C)']  || '',
+        probe_status:       row['Status']                 || '',
+        probe_used:         row['Probe Used']             || '',
+        probe_action:       row['Corrective Action']      || '',
+        probe_cooling_time: row['Cooling Time']           || '',
+        probe_staff:        row['Logged By']              || '',
       };
     }
 
