@@ -1251,15 +1251,63 @@ body.theme-light .quick-date-btn { background: #f4f6fa; border-color: #d0d6e0; c
 }
 .check-edit-label-group {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 4px;
   flex: 1;
+  min-width: 0;
 }
 .check-edit-has-info {
   font-size: 11px;
   color: var(--success);
   opacity: 0.8;
 }
+
+.check-edit-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.day-pill-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.day-pill-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-right: 4px;
+  white-space: nowrap;
+}
+.day-pill-label-set {
+  color: var(--accent);
+}
+.day-pill {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.day-pill:hover { background: var(--border); color: var(--text); }
+.day-pill-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.day-pill-active:hover { background: var(--accent); opacity: 0.85; }
+
 
 body.theme-light .check-info-btn { border-color: var(--success); color: var(--success); }
 body.theme-light .set-btn-info   { background: #f4f6fa; border-color: #d0d6e0; }

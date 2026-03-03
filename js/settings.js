@@ -404,9 +404,13 @@ function deepMergeSettings(def, saved) {
 }
 
 // ── Active checks (shared + dept-specific) ────────────
-function getActiveChecks(dept, section) {
-  const shared   = (state.settings.sharedChecks?.[section] || []).filter(c => c.enabled);
-  const specific = (state.settings.checks?.[dept]?.[section] || []).filter(c => c.enabled);
+function getActiveChecks(dept, section, dateStr) {
+  const d        = new Date(((dateStr || todayStr()) + 'T12:00:00'));
+  const DAY_KEYS = ['sun','mon','tue','wed','thu','fri','sat'];
+  const today    = DAY_KEYS[d.getDay()];
+  const dayMatch = c => !c.days || c.days.length === 0 || c.days.includes(today);
+  const shared   = (state.settings.sharedChecks?.[section] || []).filter(c => c.enabled && dayMatch(c));
+  const specific = (state.settings.checks?.[dept]?.[section] || []).filter(c => c.enabled && dayMatch(c));
   return [...shared, ...specific];
 }
 
@@ -696,7 +700,7 @@ function addStaff() {
   const role = document.getElementById('new-staff-role').value;
   const dept = document.getElementById('new-staff-dept').value;
   if (!name) { showToast('Enter a name', 'error'); return; }
-  state.settings.staff.push({ id:'su_'+Date.now(), name, role, dept });
+  state.settings.staff.push({ id:'su_'+Date.now(), name, role, dept, enabled:true });
   document.getElementById('new-staff-name').value='';
   saveSettings(); syncSettingsToSheets(); renderStaffList();
   showToast(`${name} added ✓`, 'success');
@@ -799,15 +803,29 @@ function getChecksRef(path) {
 function renderChecklistEditor(editorId, path, section) {
   const container = document.getElementById(`checklist-editor-${editorId}`); if (!container) return;
   const checks = getChecksRef(path)?.[section]||[];
-  container.innerHTML = checks.map((c,i)=>`
+  const DAY_LABELS = ['M','T','W','T','F','S','S'];
+  const DAY_KEYS   = ['mon','tue','wed','thu','fri','sat','sun'];
+  container.innerHTML = checks.map((c,i)=>{
+    const activeDays = c.days && c.days.length ? c.days : [];
+    const dayPills = DAY_KEYS.map((dk,di)=>{
+      const active = activeDays.includes(dk);
+      return `<button type="button" class="day-pill${active?' day-pill-active':''}" onclick="toggleCheckDay('${path}','${section}','${c.id}','${dk}')" title="${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][di]}">${DAY_LABELS[di]}</button>`;
+    }).join('');
+    const dayNote = activeDays.length === 0
+      ? `<span class="day-pill-label">Every day</span>`
+      : `<span class="day-pill-label day-pill-label-set">Specific days</span>`;
+    return `
     <div class="check-edit-item ${c.enabled?'':'disabled'}">
       <label class="check-edit-toggle">
         <input type="checkbox" ${c.enabled?'checked':''} onchange="toggleCheck('${path}','${section}','${c.id}',this.checked)"/>
         <span class="toggle-slider"></span>
       </label>
       <div class="check-edit-label-group">
-        <span class="check-edit-label">${c.label}</span>
-        ${c.info ? '<span class="check-edit-has-info" title="Has info text">ⓘ</span>' : ''}
+        <div class="check-edit-label-row">
+          <span class="check-edit-label">${c.label}</span>
+          ${c.info ? '<span class="check-edit-has-info" title="Has info text">ⓘ</span>' : ''}
+        </div>
+        <div class="day-pill-row">${dayNote}${dayPills}</div>
       </div>
       <div class="check-edit-actions">
         <button class="set-btn-info" onclick="editCheckInfo('${path}','${section}','${c.id}')" title="Edit info text">ⓘ</button>
@@ -815,7 +833,8 @@ function renderChecklistEditor(editorId, path, section) {
         <button class="set-btn-move" onclick="moveCheck('${path}','${section}','${c.id}',1)"  ${i===checks.length-1?'disabled':''}>↓</button>
         ${c.id.startsWith('cu_')||c.id.startsWith('sh_cu_')?`<button class="set-btn-delete" onclick="deleteCheck('${path}','${section}','${c.id}')">✕</button>`:''}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function editCheckInfo(path, section, id) {
@@ -868,6 +887,15 @@ function saveCheckInfo(path, section, id, text) {
 function toggleCheck(path,section,id,enabled) {
   const checks=getChecksRef(path)?.[section]; const c=checks?.find(c=>c.id===id);
   if (c) { c.enabled=enabled; saveSettings(); syncSettingsToSheets(); rebuildAllChecklists(); renderCheckEditors(); }
+}
+function toggleCheckDay(path, section, id, day) {
+  const checks = getChecksRef(path)?.[section]; const c = checks?.find(c => c.id === id);
+  if (!c) return;
+  if (!c.days) c.days = [];
+  const idx = c.days.indexOf(day);
+  if (idx === -1) c.days.push(day);
+  else c.days.splice(idx, 1);
+  saveSettings(); syncSettingsToSheets(); rebuildAllChecklists(); renderCheckEditors();
 }
 function moveCheck(path,section,id,dir) {
   const checks=getChecksRef(path)?.[section]; if (!checks) return;

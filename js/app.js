@@ -63,6 +63,7 @@ function bootSheets() {
       rebuildSignedByDropdowns();
       rebuildTempLocationDropdown();
       rebuildProbeProductDropdown();
+      rebuildSupplierDropdown();
       applyDeviceIdentity();
     });
     pullAllRecords(true).then(() => {
@@ -259,6 +260,14 @@ function showTab(tabId) {
     if (state.config.sheetsUrl) pullAllRecords().then(() => { renderEquipmentLog(dept); updateEquipDayStatus(); });
   }
   if (tabId === 'probe') {
+    const probeStaffEl = document.getElementById('probe-staff');
+    if (probeStaffEl) {
+      const kitchenStaff = (state.settings.staff || []).filter(s => s.enabled !== false && s.dept === 'kitchen');
+      const me = currentStaffMember();
+      probeStaffEl.innerHTML = '<option value="">Select staff member...</option>' +
+        kitchenStaff.map(s => `<option value="${s.name}">${s.name} — ${s.role || ''}</option>`).join('');
+      if (me && me.dept === 'kitchen') probeStaffEl.value = me.name;
+    }
     renderFoodProbeLog();
     updateFoodProbeDayStatus();
     if (state.config.sheetsUrl) pullAllRecords().then(() => { renderFoodProbeLog(); updateFoodProbeDayStatus(); });
@@ -712,7 +721,6 @@ function submitAllEquipment() {
     const id = row.dataset.equipId;
     row.classList.remove('status-ok','status-warn','status-fail','needs-action');
     row.querySelectorAll('.equip-btn').forEach(b => b.classList.remove('selected'));
-    document.getElementById(`equip-detail-${id}`)?.classList.add('hidden');
     const tempEl   = document.getElementById(`equip-temp-${id}`);
     const actionEl = document.getElementById(`equip-action-${id}`);
     if (tempEl)   tempEl.value   = '';
@@ -1282,7 +1290,7 @@ function saveSheetConnection() {
   closeModal(); checkConnectionStatus(); showToast('Connecting…');
   pullSettingsFromSheets().then(()=>{
     rebuildAllChecklists(); rebuildSignedByDropdowns();
-    rebuildTempLocationDropdown(); rebuildProbeProductDropdown();
+    rebuildTempLocationDropdown(); rebuildProbeProductDropdown(); rebuildSupplierDropdown();
   });
   pullAllRecords(true).then(()=>{
     updateDashboard(); renderEquipmentLog();
@@ -1483,8 +1491,9 @@ function clearDraft(type, dept) {
 // Progress indicator — how many boxes ticked today (for dashboard)
 function getDraftProgress(type, dept) {
   const draft   = loadDraft(type, dept);
-  const ticked  = Object.values(draft).filter(v => v === true).length;
   const checks  = getActiveChecks(dept, type);
+  const activeIds = new Set(checks.map(c => c.id));
+  const ticked  = Object.entries(draft).filter(([k, v]) => v === true && activeIds.has(k)).length;
   return { ticked, total: checks.length };
 }
 
