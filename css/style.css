@@ -917,17 +917,42 @@ body.theme-light .temp-section-icon { background: #fff; border-color: #d8dde8; }
   flex-direction: column;
   gap: 8px;
 }
-.equip-row-detail.hidden { display: none; }
+
+.equip-temp-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.equip-stepper {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.1s, border-color 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+.equip-stepper:active { background: var(--border); border-color: var(--text-muted); }
 
 .equip-temp-input {
-  width: 180px;
+  width: 110px;
   padding: 9px 12px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 8px;
   color: var(--text);
-  font-size: 14px;
+  font-size: 18px;
   font-family: var(--mono);
+  text-align: center;
 }
 .equip-temp-input:focus { outline: none; border-color: var(--success); }
 
@@ -1824,3 +1849,201 @@ body.theme-light .week-selector-select { background: #fff; border-color: #d0d6e0
   margin-bottom: 10px;
 }
 .report-output { transition: opacity 0.2s ease; }
+
+/* ── Trading schedule settings ─────────────────── */
+.trading-dept-row {
+  margin-bottom: 8px;
+}
+.trading-dept-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.trading-day-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.trading-day-toggle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+}
+.trading-day-toggle input[type="checkbox"] {
+  width: 32px;
+  height: 32px;
+  accent-color: var(--success);
+  cursor: pointer;
+  border-radius: 6px;
+}
+.trading-day-toggle span {
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Dashboard closed state ─────────────────────── */
+.dept-column.dept-closed {
+  opacity: 0.45;
+  pointer-events: none;
+  filter: grayscale(0.5);
+}
+.dept-closed-banner {
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-align: center;
+  padding: 6px 0 10px;
+}
+.staff-closed-wrap { display: block !important; }
+.staff-closed-banner {
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  text-align: center;
+  padding: 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  grid-column: 1 / -1;
+}
+
+/* ── Weekly report closed cell ──────────────────── */
+.wg-cell.wg-closed {
+  background: rgba(255,255,255,0.02);
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+/* ── Daily report closed banner ─────────────────── */
+.report-closed-banner {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 12px 16px;
+  margin: 0 0 16px;
+  text-align: center;
+}
+
+/* ── Goods In tab ───────────────────────────────────── */
+.gi-view-toggle {
+  display: flex; gap: 8px; padding: 4px 16px 12px;
+}
+.gi-vt-btn {
+  flex: 1; padding: 9px 8px; border-radius: 8px;
+  background: var(--bg-input); border: 1px solid var(--border);
+  color: var(--text-muted); font-size: 12px; font-weight: 600;
+  font-family: var(--font); cursor: pointer;
+}
+.gi-vt-btn.active {
+  background: rgba(6,182,212,0.12); border-color: rgba(6,182,212,0.4); color: #06b6d4;
+}
+.gi-count-badge {
+  background: rgba(6,182,212,0.15); color: #06b6d4;
+  padding: 1px 6px; border-radius: 10px; font-size: 10px;
+}
+
+/* Fresh / Frozen type toggle */
+.gi-type-toggle { display: flex; gap: 10px; padding: 4px 16px 12px; }
+.gi-type-btn {
+  flex: 1; padding: 14px 8px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--bg-input);
+  font-size: 13px; font-weight: 600; font-family: var(--font);
+  cursor: pointer; color: var(--text-muted); text-align: center;
+  transition: all 0.15s;
+}
+.gi-type-icon { font-size: 22px; display: block; margin-bottom: 4px; }
+.gi-fresh-sel  { background: rgba(34,197,94,0.1);  border-color: var(--success); color: var(--success); }
+.gi-frozen-sel { background: rgba(59,130,246,0.1); border-color: #3b82f6; color: #60a5fa; }
+
+/* Temp row */
+.gi-temp-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 16px 12px; overflow: hidden;
+}
+.gi-temp-input { min-width: 0; text-align: center; }
+.gi-temp-hint {
+  font-size: 11px; font-family: var(--mono); font-weight: 700;
+  padding: 4px 8px; border-radius: 4px; flex-shrink: 0; min-width: 44px; text-align: center;
+  color: var(--text-dim);
+}
+.gi-hint-ok   { background: rgba(34,197,94,0.15);  color: var(--success); }
+.gi-hint-warn { background: rgba(245,158,11,0.15); color: var(--warning); }
+.gi-hint-fail { background: rgba(239,68,68,0.15);  color: var(--danger); }
+
+/* Expiry checkbox */
+.gi-checkbox-row {
+  display: flex; align-items: center; gap: 12px;
+  cursor: pointer; user-select: none;
+}
+.gi-checkbox {
+  width: 24px; height: 24px; border-radius: 6px;
+  border: 2px solid var(--border); background: var(--bg-input);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+/* Outcome buttons */
+.gi-outcome-btns { display: flex; gap: 10px; padding: 4px 16px 12px; }
+.gi-outcome-btn {
+  flex: 1; padding: 12px 8px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--bg-input);
+  font-size: 13px; font-weight: 600; font-family: var(--font);
+  cursor: pointer; color: var(--text-muted); transition: all 0.15s;
+}
+.gi-accept-sel { background: rgba(34,197,94,0.12);  border-color: var(--success); color: var(--success); }
+.gi-reject-sel { background: rgba(239,68,68,0.12);  border-color: var(--danger);  color: var(--danger); }
+
+/* Log entries */
+.gi-log-entry {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 14px; margin-bottom: 8px;
+}
+.gi-accepted { border-left: 3px solid var(--success); }
+.gi-rejected  { border-left: 3px solid var(--danger); }
+.gi-log-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.gi-log-supplier { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+.gi-log-meta { font-size: 11px; color: var(--text-muted); font-family: var(--mono); }
+.gi-log-temp { font-size: 15px; font-weight: 700; font-family: var(--mono); text-align: right; }
+.gi-log-temp.status-ok   { color: var(--success); }
+.gi-log-temp.status-warn { color: var(--warning); }
+.gi-log-temp.status-fail { color: var(--danger); }
+.gi-log-outcome { font-size: 10px; font-family: var(--mono); font-weight: 700; text-align: right; margin-top: 2px; }
+.outcome-accepted { color: var(--success); }
+.outcome-rejected  { color: var(--danger); }
+.gi-log-notes { font-size: 12px; color: var(--text-muted); font-style: italic; margin-top: 6px; }
+.gi-log-footer { font-size: 11px; color: var(--text-dim); font-family: var(--mono); margin-top: 6px; border-top: 1px solid var(--border); padding-top: 6px; }
+
+/* Reports — Goods In */
+.gi-report-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.gi-chip { font-size: 11px; font-family: var(--mono); font-weight: 600; padding: 3px 10px; border-radius: 20px; }
+.gi-chip-count { background: rgba(74,85,104,0.2);   color: var(--text-muted); }
+.gi-chip-ok    { background: rgba(34,197,94,0.12);  color: var(--success); }
+.gi-chip-rej   { background: rgba(239,68,68,0.12);  color: var(--danger); }
+.gi-chip-fail  { background: rgba(239,68,68,0.15);  color: var(--danger); font-weight: 700; }
+.gi-report-row {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 12px;
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 8px;
+}
+.gi-row-accepted { border-left: 3px solid var(--success); }
+.gi-row-rejected  { border-left: 3px solid var(--danger); }
+.gi-rr-left { flex: 1; }
+.gi-rr-supplier { font-size: 13px; font-weight: 600; }
+.gi-rr-meta { font-size: 11px; color: var(--text-muted); font-family: var(--mono); margin-top: 2px; }
+.gi-rr-notes { font-size: 11px; color: var(--text-muted); font-style: italic; margin-top: 3px; }
+.gi-rr-right { text-align: right; flex-shrink: 0; margin-left: 12px; }
+.gi-rr-temp { font-size: 14px; font-weight: 700; font-family: var(--mono); }
+.gi-rr-outcome { font-size: 11px; font-family: var(--mono); font-weight: 600; margin-top: 2px; }
+.gi-rr-expiry { font-size: 10px; font-family: var(--mono); margin-top: 2px; }

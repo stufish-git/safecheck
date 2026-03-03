@@ -33,6 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
       rebuildSignedByDropdowns();
       rebuildTempLocationDropdown();
       rebuildProbeProductDropdown();
+      rebuildSupplierDropdown();
       renderTodayDate();
       populateWeekSelector();
       updateDashboard();
@@ -86,6 +87,27 @@ function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.re
 
 // ── Date helpers ──────────────────────────────────────
 function todayStr()     { return new Date().toISOString().split('T')[0]; }
+
+// ── Trading calendar ──────────────────────────────────
+// Returns true if a given dept is expected to trade on dateStr (YYYY-MM-DD).
+// 'dateStr' defaults to today. Dept 'mgmt' is always treated as trading.
+// Falls back to open if tradingDays is not configured.
+function isTrading(dept, dateStr) {
+  if (dept === 'mgmt') return true;
+  const td = state.settings?.tradingDays;
+  if (!td) return true;                      // no config — assume open
+
+  // Master switch — single boolean; false = entire site closed (e.g. holidays)
+  if (td.open === false) return false;
+
+  // Per-day-of-week dept schedule
+  const d = new Date((dateStr || todayStr()) + 'T12:00:00');
+  const dayNames = ['sun','mon','tue','wed','thu','fri','sat'];
+  const day = dayNames[d.getDay()];
+  if (td[dept] && td[dept][day] === false) return false;
+
+  return true;
+}
 function weekEndingStr(dateStr) {
   // Given any date string, return the Sunday of that week formatted as "1 Mar 2026"
   const d = new Date(dateStr + 'T12:00:00');
@@ -248,6 +270,10 @@ function showTab(tabId) {
   if (tabId === 'reports') {
     if (state.config.sheetsUrl) pullAllRecords().then(initReportsTab);
     else initReportsTab();
+  }
+  if (tabId === 'goods-in') {
+    initGoodsInTab();
+    if (state.config.sheetsUrl) pullAllRecords().then(() => { renderGoodsInLog(); updateGILogBadge(); });
   }
 }
 
@@ -538,10 +564,14 @@ function buildEquipmentCheckUI(dept) {
                   <button class="equip-btn equip-fail" onclick="selectEquipStatus('${e.id}','FAIL')">✗<span> Fail</span></button>
                 </div>
               </div>
-              <div class="equip-row-detail hidden" id="equip-detail-${e.id}">
-                <input type="number" step="0.1" class="equip-temp-input"
-                  id="equip-temp-${e.id}" placeholder="Temperature °C (optional)"
-                  oninput="autoStatusFromTemp('${e.id}','${t}',this.value)"/>
+              <div class="equip-row-detail" id="equip-detail-${e.id}">
+                <div class="equip-temp-row">
+                  <button class="equip-stepper" type="button" onclick="stepTemp('${e.id}','${t}',-1)">−</button>
+                  <input type="number" step="0.1" class="equip-temp-input"
+                    id="equip-temp-${e.id}" placeholder="°C"
+                    oninput="autoStatusFromTemp('${e.id}','${t}',this.value)"/>
+                  <button class="equip-stepper" type="button" onclick="stepTemp('${e.id}','${t}',+1)">+</button>
+                </div>
                 <textarea class="equip-action-input hidden"
                   id="equip-action-${e.id}"
                   placeholder="Corrective action taken — e.g. Adjusted thermostat, moved stock to backup fridge..." rows="2"></textarea>
@@ -572,8 +602,7 @@ function selectEquipStatus(equipId, status) {
   row.classList.remove('status-ok','status-warn','status-fail','needs-action');
   row.classList.add(status === 'OK' ? 'status-ok' : status === 'WARNING' ? 'status-warn' : 'status-fail');
 
-  // Show/hide detail section
-  detail?.classList.remove('hidden');
+  // Show corrective action only on FAIL
   if (actionEl) {
     actionEl.classList.toggle('hidden', status !== 'FAIL');
     actionEl.required = status === 'FAIL';
@@ -581,6 +610,17 @@ function selectEquipStatus(equipId, status) {
 
   if (!state.equipChecks[equipId]) state.equipChecks[equipId] = {};
   state.equipChecks[equipId].status = status;
+}
+
+// ── Stepper: nudge temperature up or down by 1°C ────────
+function stepTemp(equipId, type, delta) {
+  const input = document.getElementById(`equip-temp-${equipId}`);
+  if (!input) return;
+  const current = parseFloat(input.value) || 0;
+  const next = Math.round((current + delta) * 10) / 10;
+  input.value = next;
+  autoStatusFromTemp(equipId, type, String(next));
+  input.focus();
 }
 
 // ── Auto-set status when temperature is typed ─────────
@@ -955,9 +995,14 @@ function renderManagerDashboard() {
       </div>`;
     }).join('');
 
+    const trading = isTrading(deptId, today);
+    const closedOverlay = !trading
+      ? `<div class="dept-closed-banner">Closed today</div>`
+      : '';
     return `
-      <div class="dept-column">
+      <div class="dept-column${!trading ? ' dept-closed' : ''}">
         <div class="dept-col-header" style="color:${deptInfo.color}">${deptInfo.icon} ${deptInfo.label}</div>
+        ${closedOverlay}
         ${cards}
       </div>`;
   }).join('');
@@ -982,6 +1027,17 @@ function renderStaffDashboard() {
   const grid = document.getElementById('dashboard-grid');
   if (!grid) return;
 
+  const staffTrading = isTrading(dept, today);
+  if (!staffTrading) {
+    grid.innerHTML = `<div class="dashboard-grid-2col staff-closed-wrap">
+      <div class="staff-closed-banner">🔒 Closed today — no checks required</div>
+      <div class="dashboard-grid-2col" style="opacity:0.35;pointer-events:none">${cards.map(card => {
+        return `<div class="dash-card"><div class="dash-card-icon" style="color:#4a5568">—</div>
+          <div class="dash-card-body"><h3>${card.label}</h3><div class="progress-label">Closed today</div></div>
+          <div class="dash-card-status">—</div></div>`;
+      }).join('')}</div></div>`;
+    return;
+  }
   grid.innerHTML = `<div class="dashboard-grid-2col">${cards.map(card => {
     const tab     = card.tab || card.id;
     const recType = card.recType || card.id;
@@ -1108,20 +1164,24 @@ function renderDashAlerts() {
   const closeHour = parseInt(closeTime.split(':')[0]);
 
   if (!isManagement()) {
-    if (hour >= openHour && !dr.find(r=>r.type==='opening'))
-      alerts.push(`⚠ Opening checks not yet completed today`);
-    // Equipment: alert if fewer than 2 checks done after 15:00, or 0 done after opening
-    const tempCount = dr.filter(r=>r.type==='temperature').length;
-    if (hour >= openHour && tempCount === 0)
-      alerts.push(`⚠ No equipment temperature checks logged today`);
-    else if (hour >= 15 && tempCount < 2)
-      alerts.push(`⚠ Only ${tempCount} of 2 required equipment checks done today`);
-    if (dept === 'kitchen' && hour >= 12 && !hasFoodProbeToday())
-      alerts.push(`⚠ No food probe check logged today — at least 1 required`);
-    if (hour >= closeHour && !dr.find(r=>r.type==='closing'))
-      alerts.push(`⚠ Closing checks not yet completed`);
+    if (!isTrading(dept, today)) {
+      // Closed today — no alerts, just a quiet note
+    } else {
+      if (hour >= openHour && !dr.find(r=>r.type==='opening'))
+        alerts.push(`⚠ Opening checks not yet completed today`);
+      const tempCount = dr.filter(r=>r.type==='temperature').length;
+      if (hour >= openHour && tempCount === 0)
+        alerts.push(`⚠ No equipment temperature checks logged today`);
+      else if (hour >= 15 && tempCount < 2)
+        alerts.push(`⚠ Only ${tempCount} of 2 required equipment checks done today`);
+      if (dept === 'kitchen' && hour >= 12 && !hasFoodProbeToday())
+        alerts.push(`⚠ No food probe check logged today — at least 1 required`);
+      if (hour >= closeHour && !dr.find(r=>r.type==='closing'))
+        alerts.push(`⚠ Closing checks not yet completed`);
+    }
   } else {
     ['kitchen','foh'].forEach(d => {
+      if (!isTrading(d, today)) return;      // closed today — no alerts
       const ddr   = state.records.filter(r=>r.date===today&&r.dept===d);
       const dInfo = DEPARTMENTS[d];
       const oh    = parseInt((state.settings.openingTimes?.[d]||'08:00').split(':')[0]);
@@ -1130,14 +1190,13 @@ function renderDashAlerts() {
         alerts.push(`⚠ ${dInfo.icon} ${dInfo.label}: Opening checks not done`);
       if (hour>=ch && !ddr.find(r=>r.type==='closing'))
         alerts.push(`⚠ ${dInfo.icon} ${dInfo.label}: Closing checks not done`);
-      // Equipment temp alerts per dept
       const dTemps = ddr.filter(r=>r.type==='temperature').length;
       if (hour >= oh && dTemps === 0)
         alerts.push(`⚠ ${dInfo.icon} ${dInfo.label}: No equipment checks logged today`);
       else if (hour >= 15 && dTemps < 2)
         alerts.push(`⚠ ${dInfo.icon} ${dInfo.label}: Only ${dTemps} of 2 required equipment checks done`);
     });
-    if (hour >= 12 && !hasFoodProbeToday())
+    if (isTrading('kitchen', today) && hour >= 12 && !hasFoodProbeToday())
       alerts.push(`⚠ 🍳 Kitchen: No food probe check logged today`);
   }
 
@@ -1393,4 +1452,210 @@ function getDraftProgress(type, dept) {
   const ticked  = Object.values(draft).filter(v => v === true).length;
   const checks  = getActiveChecks(dept, type);
   return { ticked, total: checks.length };
+}
+
+// ═══════════════════════════════════════════════════════
+//  GOODS IN — Delivery logging
+// ═══════════════════════════════════════════════════════
+
+let giType    = 'fresh';    // 'fresh' | 'frozen'
+let giOutcome = 'accepted'; // 'accepted' | 'rejected'
+let giExpiry  = false;
+
+// Temp thresholds
+const GI_THRESHOLDS = {
+  fresh:  { warn: 5, fail: 8 },
+  frozen: { warn: -15, fail: -12 },
+};
+
+function initGoodsInTab() {
+  giType = 'fresh'; giOutcome = 'accepted'; giExpiry = false;
+  // Reset UI
+  setGIType('fresh');
+  setGIOutcome('accepted');
+  const expBox = document.getElementById('gi-expiry-box');
+  if (expBox) { expBox.style.background=''; expBox.style.borderColor=''; expBox.innerHTML=''; }
+  const tempEl = document.getElementById('gi-temp');
+  if (tempEl) { tempEl.value=''; }
+  const hintEl = document.getElementById('gi-temp-hint');
+  if (hintEl) { hintEl.textContent='—'; hintEl.className='gi-temp-hint'; }
+  const notesEl = document.getElementById('gi-notes');
+  if (notesEl) notesEl.value = '';
+  // Populate supplier dropdown
+  rebuildSupplierDropdown();
+  // Rebuild signed-by
+  const signedEl = document.getElementById('gi-signed-by');
+  if (signedEl) {
+    const staff = (state.settings.staff || []).filter(s => s.enabled);
+    signedEl.innerHTML = '<option value="">Select staff...</option>' +
+      staff.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+    const me = currentStaffMember();
+    if (me) signedEl.value = me.name;
+  }
+  // Render today's log
+  renderGoodsInLog();
+  // Update log count badge
+  updateGILogBadge();
+}
+
+function showGoodsInView(view) {
+  document.getElementById('gi-view-new').style.display = view === 'new' ? '' : 'none';
+  document.getElementById('gi-view-log').style.display = view === 'log' ? '' : 'none';
+  document.getElementById('gi-vt-new').classList.toggle('active', view === 'new');
+  document.getElementById('gi-vt-log').classList.toggle('active', view === 'log');
+  if (view === 'log') renderGoodsInLog();
+}
+
+function setGIType(type) {
+  giType = type;
+  document.getElementById('gi-btn-fresh').className  = 'gi-type-btn' + (type==='fresh'  ? ' gi-fresh-sel'  : '');
+  document.getElementById('gi-btn-frozen').className = 'gi-type-btn' + (type==='frozen' ? ' gi-frozen-sel' : '');
+  // Re-evaluate hint with new thresholds
+  const tempVal = document.getElementById('gi-temp')?.value;
+  if (tempVal) updateGITempHint(tempVal);
+}
+
+function stepGITemp(delta) {
+  const inp = document.getElementById('gi-temp');
+  if (!inp) return;
+  const current = parseFloat(inp.value) || 0;
+  inp.value = Math.round((current + delta) * 10) / 10;
+  updateGITempHint(inp.value);
+  inp.focus();
+}
+
+function updateGITempHint(val) {
+  const hint = document.getElementById('gi-temp-hint');
+  if (!hint) return;
+  const t   = parseFloat(val);
+  const thr = GI_THRESHOLDS[giType];
+  if (isNaN(t) || val === '') {
+    hint.textContent = '—'; hint.className = 'gi-temp-hint'; return;
+  }
+  if (giType === 'fresh') {
+    if (t > thr.fail)      { hint.textContent='FAIL'; hint.className='gi-temp-hint gi-hint-fail'; }
+    else if (t > thr.warn) { hint.textContent='WARN'; hint.className='gi-temp-hint gi-hint-warn'; }
+    else                   { hint.textContent='OK';   hint.className='gi-temp-hint gi-hint-ok'; }
+  } else {
+    // Frozen: lower is better — fail if warmer than fail threshold
+    if (t > thr.fail)      { hint.textContent='FAIL'; hint.className='gi-temp-hint gi-hint-fail'; }
+    else if (t > thr.warn) { hint.textContent='WARN'; hint.className='gi-temp-hint gi-hint-warn'; }
+    else                   { hint.textContent='OK';   hint.className='gi-temp-hint gi-hint-ok'; }
+  }
+}
+
+function toggleGIExpiry(row) {
+  giExpiry = !giExpiry;
+  const box = document.getElementById('gi-expiry-box');
+  if (!box) return;
+  box.style.background  = giExpiry ? 'var(--success)' : '';
+  box.style.borderColor = giExpiry ? 'var(--success)' : '';
+  box.innerHTML = giExpiry ? '<span style="color:#000;font-size:13px;font-weight:700">&#10003;</span>' : '';
+}
+
+function setGIOutcome(outcome) {
+  giOutcome = outcome;
+  const accBtn = document.getElementById('gi-btn-accept');
+  const rejBtn = document.getElementById('gi-btn-reject');
+  if (accBtn) accBtn.className = 'gi-outcome-btn' + (outcome==='accepted' ? ' gi-accept-sel' : '');
+  if (rejBtn) rejBtn.className = 'gi-outcome-btn' + (outcome==='rejected' ? ' gi-reject-sel' : '');
+}
+
+function submitGoodsIn() {
+  const supplier = document.getElementById('gi-supplier')?.value;
+  const tempVal  = document.getElementById('gi-temp')?.value;
+  const signedBy = document.getElementById('gi-signed-by')?.value;
+
+  if (!supplier) { showToast('Select a supplier', 'error'); return; }
+  if (!tempVal)  { showToast('Enter delivery temperature', 'error'); return; }
+  if (!signedBy) { showToast('Select staff member', 'error'); return; }
+
+  const temp   = parseFloat(tempVal);
+  const thr    = GI_THRESHOLDS[giType];
+  const status = temp > thr.fail ? 'FAIL' : temp > thr.warn ? 'WARNING' : 'OK';
+
+  const record = {
+    id:        crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
+    type:      'goods_in',
+    dept:      'kitchen',
+    date:      todayStr(),
+    timestamp: nowTimestamp(),
+    iso:       nowISO(),
+    fields: {
+      gi_supplier:     supplier,
+      gi_type:         giType,
+      gi_temp:         tempVal,
+      gi_temp_status:  status,
+      gi_expiry_checked: giExpiry ? 'Yes' : 'No',
+      gi_outcome:      giOutcome,
+      gi_notes:        document.getElementById('gi-notes')?.value.trim() || '',
+      gi_signed_by:    signedBy,
+    },
+    summary: `${supplier} · ${giType} · ${tempVal}°C ${status} · ${giOutcome} · ${signedBy}`,
+  };
+
+  state.records.push(record);
+  saveState();
+  syncRecordToSheets(record);
+
+  showToast(`Delivery logged ✓`, 'success');
+
+  // Reset form
+  document.getElementById('gi-temp').value = '';
+  document.getElementById('gi-notes').value = '';
+  giExpiry = false;
+  const box = document.getElementById('gi-expiry-box');
+  if (box) { box.style.background=''; box.style.borderColor=''; box.innerHTML=''; }
+  document.getElementById('gi-temp-hint').textContent = '—';
+  document.getElementById('gi-temp-hint').className = 'gi-temp-hint';
+  setGIOutcome('accepted');
+
+  updateGILogBadge();
+  showGoodsInView('log');
+}
+
+function renderGoodsInLog() {
+  const el = document.getElementById('gi-log-list');
+  if (!el) return;
+  const today = todayStr();
+  const records = state.records
+    .filter(r => r.type === 'goods_in' && r.date === today)
+    .sort((a, b) => new Date(b.iso) - new Date(a.iso));
+
+  if (!records.length) {
+    el.innerHTML = '<p style="padding:20px 16px;color:var(--text-muted);font-size:13px">No deliveries logged today</p>';
+    return;
+  }
+
+  el.innerHTML = records.map(r => {
+    const f = r.fields || {};
+    const isAccepted = f.gi_outcome === 'accepted';
+    const statusCls  = f.gi_temp_status === 'FAIL' ? 'status-fail' : f.gi_temp_status === 'WARNING' ? 'status-warn' : 'status-ok';
+    const typeIcon   = f.gi_type === 'frozen' ? '❄️' : '🌿';
+    return `
+      <div class="gi-log-entry ${isAccepted ? 'gi-accepted' : 'gi-rejected'}">
+        <div class="gi-log-top">
+          <div>
+            <div class="gi-log-supplier">${f.gi_supplier || '—'}</div>
+            <div class="gi-log-meta">${typeIcon} ${f.gi_type || ''} · ${r.timestamp?.split(' ')[1] || ''} · ${f.gi_signed_by || ''}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="gi-log-temp ${statusCls}">${f.gi_temp ? f.gi_temp+'°C' : '—'}</div>
+            <div class="gi-log-outcome ${isAccepted ? 'outcome-accepted' : 'outcome-rejected'}">${isAccepted ? 'Accepted' : 'Rejected'}</div>
+          </div>
+        </div>
+        ${f.gi_notes ? `<div class="gi-log-notes">${f.gi_notes}</div>` : ''}
+        <div class="gi-log-footer">
+          Expiry dates: <span style="color:${f.gi_expiry_checked==='Yes'?'var(--success)':'var(--text-dim)'}">${f.gi_expiry_checked==='Yes'?'✓ Checked':'Not checked'}</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function updateGILogBadge() {
+  const badge = document.getElementById('gi-log-count');
+  if (!badge) return;
+  const count = state.records.filter(r => r.type === 'goods_in' && r.date === todayStr()).length;
+  badge.textContent = count > 0 ? count : '';
+  badge.style.display = count > 0 ? 'inline' : 'none';
 }

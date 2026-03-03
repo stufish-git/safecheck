@@ -359,6 +359,20 @@ function removeDailyEmailTrigger() {
   });
 }
 
+// ── Trading calendar check (Apps Script side) ───────────
+function isTradingAS(dept, settings) {
+  if (dept === 'mgmt') return true;
+  const td = settings.tradingDays;
+  if (!td) return true;
+  // Master switch
+  if (td.open === false) return false;
+  // Per-day dept schedule
+  const dayNames = ['sun','mon','tue','wed','thu','fri','sat'];
+  const day = dayNames[new Date().getDay()];
+  if (td[dept] && td[dept][day] === false) return false;
+  return true;
+}
+
 // ── Main send function ────────────────────────────────
 function sendDailySummary() {
   const settings = getSettingsObj();
@@ -378,12 +392,14 @@ function sendDailySummary() {
   const closing    = getTodayRecords(ss, 'Closing Checks',  today);
   const temps      = getTodayRecords(ss, 'Temperature Log', today);
   const probes     = getTodayRecords(ss, 'Food Probe Log',  today);
+  const goodsIn    = getTodayRecords(ss, 'Goods In Log',   today);
   const tasks      = getTodayTasks(ss, today, settings);
 
   // ── Determine subject prefix ────────────────────────
   const depts = ['kitchen', 'foh'];
   const hasAnyMissing = depts.some(d => {
-    const noOpen  = !opening.find(r  => r.dept === d);
+    if (!isTradingAS(d, settings)) return false;  // closed — not missing
+    const noOpen  = !opening.find(r => r.dept === d);
     const noClose = !closing.find(r => r.dept === d);
     return noOpen || noClose;
   });
@@ -431,16 +447,18 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
 
   // ── Overview section ──────────────────────────────
   const overviewRows = depts.map(d => {
+    const trading = isTradingAS(d, settings);
     const op = opening.find(r => r.dept === d);
     const cl = closing.find(r => r.dept === d);
-    const missing = !op || !cl;
+    const missing = trading && (!op || !cl);
     const deptFail = (op && op.failCount > 0) || (cl && cl.failCount > 0);
     const tempFail = temps.filter(r => r.dept === d).some(r => r.status === 'FAIL' || r.status === 'WARNING');
 
     let pill, bg, color;
-    if (missing)          { pill = '⛔ ' + (!op ? 'Opening' : '') + (!op && !cl ? ' & ' : '') + (!cl ? 'Closing' : '') + ' missing'; bg = '#fee2e2'; color = '#991b1b'; }
+    if (!trading)                  { pill = '— Closed today'; bg = '#1e293b'; color = '#64748b'; }
+    else if (missing)              { pill = '⛔ ' + (!op ? 'Opening' : '') + (!op && !cl ? ' & ' : '') + (!cl ? 'Closing' : '') + ' missing'; bg = '#fee2e2'; color = '#991b1b'; }
     else if (deptFail || tempFail) { pill = '⚠ Issues recorded · ' + pct + '%'; bg = '#fef3c7'; color = '#92400e'; }
-    else                  { pill = '✓ All clear · 100%'; bg = '#dcfce7'; color = '#166534'; }
+    else                           { pill = '✓ All clear · 100%'; bg = '#dcfce7'; color = '#166534'; }
 
     return '<tr><td style="padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:13px;color:#1e293b;font-family:Arial,sans-serif"><strong>' + DEPT_LABELS[d] + '</strong></td>' +
       '<td style="text-align:right"><span style="background:' + bg + ';color:' + color + ';padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + pill + '</span></td></tr>';
@@ -451,6 +469,10 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
     const rows = depts.map(d => {
       const rec = records.find(r => r.dept === d);
       if (!rec) {
+        if (!isTradingAS(d, settings)) {
+          return '<tr><td style="padding:5px 0;font-size:13px;color:#64748b;font-family:Arial,sans-serif;font-style:italic">' + DEPT_LABELS[d] + '</td>' +
+            '<td style="text-align:right"><span style="background:#1e293b;color:#64748b;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;font-family:Arial,sans-serif">Closed</span></td></tr>';
+        }
         return '<tr><td style="padding:5px 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">' + DEPT_LABELS[d] + '</td>' +
           '<td style="text-align:right"><span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">Not submitted</span></td></tr>';
       }
@@ -517,6 +539,37 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
     '<tr><td style="padding:14px 24px 4px"><p style="margin:0;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8;font-family:Arial,sans-serif">Food Probes &nbsp;<span style="font-weight:400;color:#cbd5e1">' + (probeCount > 0 ? probeCount + ' reading' + (probeCount !== 1 ? 's' : '') : '') + '</span></p></td></tr>' +
     '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0">' + probeRows + '</table></td></tr></table>';
 
+  // ── Goods In section ──────────────────────────────
+  var giRows = '';
+  if (!goodsIn.length) {
+    giRows = '<tr><td colspan="5" style="padding:10px 8px;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No deliveries recorded today</td></tr>';
+  } else {
+    goodsIn.forEach(function(r) {
+      var f = r.fields || {};
+      var isAcc = f.gi_outcome === 'accepted';
+      var tempColor = f.gi_temp_status === 'FAIL' ? '#ef4444' : f.gi_temp_status === 'WARNING' ? '#f59e0b' : '#22c55e';
+      giRows += '<tr>' +
+        '<td style="padding:6px 8px;font-size:13px;font-family:Arial,sans-serif;font-weight:600">' + (f.gi_supplier||'—') + '</td>' +
+        '<td style="padding:6px 8px;font-size:12px;font-family:Arial,sans-serif;color:#94a3b8">' + (f.gi_type==='frozen'?'❄':'🌿') + ' ' + (f.gi_type||'') + '</td>' +
+        '<td style="padding:6px 8px;font-size:13px;font-family:monospace;font-weight:600;color:' + tempColor + '">' + (f.gi_temp ? f.gi_temp+'°C' : '—') + '</td>' +
+        '<td style="padding:6px 8px"><span style="background:' + (isAcc?'#dcfce7':'#fee2e2') + ';color:' + (isAcc?'#166534':'#991b1b') + ';padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + (isAcc?'Accepted':'Rejected') + '</span></td>' +
+        '<td style="padding:6px 8px;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif">' + (f.gi_signed_by||'—') + '</td>' +
+        '</tr>';
+      if (f.gi_notes) {
+        giRows += '<tr><td colspan="5" style="padding:0 8px 8px;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">↳ ' + f.gi_notes + '</td></tr>';
+      }
+    });
+  }
+  var giSection = sectionHeader('📦 Goods In') +
+    '<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:4px">' +
+    '<thead><tr>' +
+    '<th style="text-align:left;padding:6px 8px;font-size:10px;font-family:Arial,sans-serif;color:#64748b;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #1e293b">Supplier</th>' +
+    '<th style="text-align:left;padding:6px 8px;font-size:10px;font-family:Arial,sans-serif;color:#64748b;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #1e293b">Type</th>' +
+    '<th style="text-align:left;padding:6px 8px;font-size:10px;font-family:Arial,sans-serif;color:#64748b;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #1e293b">Temp</th>' +
+    '<th style="text-align:left;padding:6px 8px;font-size:10px;font-family:Arial,sans-serif;color:#64748b;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #1e293b">Outcome</th>' +
+    '<th style="text-align:left;padding:6px 8px;font-size:10px;font-family:Arial,sans-serif;color:#64748b;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #1e293b">Signed By</th>' +
+    '</tr></thead><tbody>' + giRows + '</tbody></table>';
+
   // ── Tasks section ─────────────────────────────────
   const doneCount = tasks.filter(t => t.done).length;
   const taskRows = tasks.length === 0
@@ -562,8 +615,8 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
   buildCheckSection('Opening Checks', opening) +
   buildCheckSection('Closing Checks', closing) +
 
-  // Temps, Probes, Tasks
-  tempSection + probeSection + taskSection +
+  // Temps, Probes, Goods In, Tasks
+  tempSection + probeSection + giSection + taskSection +
 
   // Footer
   '<table width="100%" cellpadding="0" cellspacing="0" style="background:#1a2332;border-radius:0 0 8px 8px;margin-top:2px">' +

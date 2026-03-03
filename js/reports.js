@@ -86,6 +86,11 @@ function renderDailyReport() {
   const container = document.getElementById('report-output');
   if (!container) return;
 
+  // Check if the site was closed on this date (either dept closed = site closed)
+  const kitchenOpen = isTrading('kitchen', date);
+  const fohOpen     = isTrading('foh', date);
+  const siteClosed  = !kitchenOpen && !fohOpen;
+
   const fmtDate = new Date(date + 'T12:00:00').toLocaleDateString('en-GB', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
   });
@@ -131,6 +136,10 @@ function renderDailyReport() {
     new Date(a.iso) - new Date(b.iso));
   const probeHTML = buildProbeTable(probes);
 
+  // ── Goods In ─────────────────────────────────────
+  const goodsIn = dr.filter(r => r.type === 'goods_in').sort((a, b) => new Date(a.iso) - new Date(b.iso));
+  const goodsInHTML = buildGoodsInSection(goodsIn);
+
   // ── Tasks ─────────────────────────────────────────
   const taskHTML = buildDailyTaskGrid(date);
 
@@ -141,14 +150,18 @@ function renderDailyReport() {
           <div class="report-restaurant-name">${state.settings.restaurantName || 'SafeChecks'}</div>
           <div class="report-doc-date">${fmtDate}</div>
         </div>
-        <div class="report-compliance-badge" style="border-color:${complianceColor};color:${complianceColor}">
-          ${compliancePct !== null
-            ? `<span class="report-compliance-pct">${compliancePct}%</span><span class="report-compliance-label">Compliance</span>`
-            : `<span class="report-compliance-label">No checks recorded</span>`}
+        <div class="report-compliance-badge" style="border-color:${siteClosed ? 'var(--text-dim)' : complianceColor};color:${siteClosed ? 'var(--text-dim)' : complianceColor}">
+          ${siteClosed
+            ? `<span class="report-compliance-label">Closed</span>`
+            : compliancePct !== null
+              ? `<span class="report-compliance-pct">${compliancePct}%</span><span class="report-compliance-label">Compliance</span>`
+              : `<span class="report-compliance-label">No checks recorded</span>`}
         </div>
       </div>
 
-      ${compliancePct !== null ? `
+      ${siteClosed ? `<div class="report-closed-banner">🔒 Closed day — no checks expected. Any records below were submitted voluntarily.</div>` : ''}
+
+      ${!siteClosed && compliancePct !== null ? `
       <div class="report-score-bar-wrap">
         <div class="report-score-bar-track">
           <div class="report-score-bar-fill" style="width:${compliancePct}%;background:${complianceColor}"></div>
@@ -167,6 +180,9 @@ function renderDailyReport() {
 
       <div class="report-section-title">Food Probes</div>
       ${probeHTML}
+
+      <div class="report-section-title">Goods In</div>
+      ${goodsInHTML}
 
       <div class="report-section-title">Tasks</div>
       ${taskHTML}
@@ -404,8 +420,55 @@ function renderWeeklyReport() {
 
       <div class="report-section-title">Weekly Management Review</div>
       ${weeklyReviewHTML}
+
+      <div class="report-section-title">Goods In — Week Summary</div>
+      ${buildWeeklyGoodsInTable(weekDates)}
     </div>
   `;
+}
+
+// ── Goods In section (daily report) ─────────────────
+function buildGoodsInSection(records) {
+  if (!records.length) {
+    return `<div class="report-empty-row">— No deliveries recorded</div>`;
+  }
+
+  const total    = records.length;
+  const accepted = records.filter(r => r.fields?.gi_outcome === 'accepted').length;
+  const rejected = total - accepted;
+  const hasFail  = records.some(r => r.fields?.gi_temp_status === 'FAIL');
+
+  const chips = `
+    <div class="gi-report-chips">
+      <span class="gi-chip gi-chip-count">${total} deliver${total !== 1 ? 'ies' : 'y'}</span>
+      ${accepted > 0 ? `<span class="gi-chip gi-chip-ok">${accepted} accepted</span>` : ''}
+      ${rejected > 0 ? `<span class="gi-chip gi-chip-rej">${rejected} rejected</span>` : ''}
+      ${hasFail   ? `<span class="gi-chip gi-chip-fail">Temp breach</span>` : ''}
+    </div>`;
+
+  const rows = records.map(r => {
+    const f = r.fields || {};
+    const isAccepted = f.gi_outcome === 'accepted';
+    const tempCls = f.gi_temp_status === 'FAIL' ? 'status-fail' : f.gi_temp_status === 'WARNING' ? 'status-warn' : 'status-ok';
+    const typeIcon = f.gi_type === 'frozen' ? '❄' : '🌿';
+    return `
+      <div class="gi-report-row ${isAccepted ? 'gi-row-accepted' : 'gi-row-rejected'}">
+        <div class="gi-rr-left">
+          <div class="gi-rr-supplier">${f.gi_supplier || '—'}</div>
+          <div class="gi-rr-meta">${typeIcon} ${f.gi_type || ''} · ${r.timestamp?.split(' ')[1] || ''} · ${f.gi_signed_by || ''}</div>
+          ${f.gi_notes ? `<div class="gi-rr-notes">${f.gi_notes}</div>` : ''}
+        </div>
+        <div class="gi-rr-right">
+          <div class="gi-rr-temp report-temp-val ${tempCls}">${f.gi_temp ? f.gi_temp + '°C' : '—'}</div>
+          <div class="gi-rr-outcome ${isAccepted ? 'report-ok-text' : ''}" style="${!isAccepted?'color:var(--danger)':''}">${isAccepted ? '✓ Accepted' : '✗ Rejected'}</div>
+          <div class="gi-rr-expiry" style="color:${f.gi_expiry_checked==='Yes'?'var(--success)':'var(--text-dim)'}">
+            ${f.gi_expiry_checked === 'Yes' ? '✓ Expiry checked' : 'Expiry not checked'}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  return chips + rows;
 }
 
 // ── Weekly day-by-day grid ────────────────────────────
@@ -427,7 +490,7 @@ function buildWeeklyGrid(weekDates, dayLabels, shortDates, allDepts) {
     const deptInfo = DEPARTMENTS[dept];
     const cells = weekDates.map(date => {
       const rec = findRec(date, 'opening', dept);
-      return gridCell(rec);
+      return gridCell(rec, date, dept);
     }).join('');
     rows.push(`<tr><td class="wg-label-col"><span style="color:${deptInfo.color}">${deptInfo.icon}</span> Opening</td>${cells}</tr>`);
   });
@@ -437,7 +500,7 @@ function buildWeeklyGrid(weekDates, dayLabels, shortDates, allDepts) {
     const deptInfo = DEPARTMENTS[dept];
     const cells = weekDates.map(date => {
       const rec = findRec(date, 'closing', dept);
-      return gridCell(rec);
+      return gridCell(rec, date, dept);
     }).join('');
     rows.push(`<tr><td class="wg-label-col"><span style="color:${deptInfo.color}">${deptInfo.icon}</span> Closing</td>${cells}</tr>`);
   });
@@ -465,11 +528,75 @@ function buildWeeklyGrid(weekDates, dayLabels, shortDates, allDepts) {
   }).join('');
   rows.push(`<tr><td class="wg-label-col">🍖 Probes</td>${probeCells}</tr>`);
 
+  // Goods in deliveries per day
+  const giCells = weekDates.map(date => {
+    const recs = state.records.filter(r => r.date === date && r.type === 'goods_in');
+    if (!recs.length) return `<td class="wg-cell wg-notrecorded">—</td>`;
+    const hasFail = recs.some(r => r.fields?.gi_temp_status === 'FAIL');
+    const hasRej  = recs.some(r => r.fields?.gi_outcome === 'rejected');
+    const cls = hasFail ? 'wg-issues' : hasRej ? 'wg-warn' : 'wg-complete';
+    const icon = hasFail || hasRej ? '⚠' : '✓';
+    return `<td class="wg-cell ${cls}" title="${recs.length} deliver${recs.length!==1?'ies':'y'}">${icon}<span class="wg-count">${recs.length}</span></td>`;
+  }).join('');
+  rows.push(`<tr><td class="wg-label-col">📦 Goods In</td>${giCells}</tr>`);
+
   return rows.join('');
 }
 
-function gridCell(rec) {
-  if (!rec) return `<td class="wg-cell wg-notrecorded">—</td>`;
+function buildWeeklyGoodsInTable(weekDates) {
+  const records = [];
+  weekDates.forEach(date => {
+    state.records.filter(r => r.date === date && r.type === 'goods_in')
+      .sort((a, b) => new Date(a.iso) - new Date(b.iso))
+      .forEach(r => records.push(r));
+  });
+
+  if (!records.length) {
+    return `<div class="report-empty-row">— No deliveries this week</div>`;
+  }
+
+  const total    = records.length;
+  const accepted = records.filter(r => r.fields?.gi_outcome === 'accepted').length;
+  const rejected = total - accepted;
+
+  const chips = `<div class="gi-report-chips">
+    <span class="gi-chip gi-chip-count">${total} deliver${total !== 1 ? 'ies' : 'y'}</span>
+    ${accepted > 0 ? `<span class="gi-chip gi-chip-ok">${accepted} accepted</span>` : ''}
+    ${rejected > 0 ? `<span class="gi-chip gi-chip-rej">${rejected} rejected</span>` : ''}
+  </div>`;
+
+  const DAY_ABBR = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const rows = records.map(r => {
+    const f = r.fields || {};
+    const isAcc   = f.gi_outcome === 'accepted';
+    const tempCls = f.gi_temp_status === 'FAIL' ? 'status-fail' : f.gi_temp_status === 'WARNING' ? 'status-warn' : 'status-ok';
+    const dayName = DAY_ABBR[new Date(r.date + 'T12:00:00').getDay()];
+    const typeIcon = f.gi_type === 'frozen' ? '❄' : '🌿';
+    return `<tr>
+      <td><div style="font-weight:600;font-size:12px">${f.gi_supplier || '—'}</div>
+          ${f.gi_notes ? `<div class="report-action-text" style="font-style:italic;font-size:11px">${f.gi_notes}</div>` : ''}</td>
+      <td style="font-family:var(--mono);font-size:11px;color:var(--text-muted)">${dayName}</td>
+      <td>${typeIcon} <span style="font-size:11px;color:var(--text-muted)">${f.gi_type || ''}</span></td>
+      <td class="report-temp-val ${tempCls}">${f.gi_temp ? f.gi_temp + '°C' : '—'}</td>
+      <td><span class="report-status-badge ${isAcc ? 'status-ok' : 'status-fail'}">${isAcc ? 'Accepted' : 'Rejected'}</span></td>
+    </tr>`;
+  }).join('');
+
+  return chips + `<table class="report-table">
+    <thead><tr>
+      <th>Supplier</th><th>Day</th><th>Type</th><th>Temp</th><th>Outcome</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function gridCell(rec, date, dept) {
+  if (!rec) {
+    if (date && dept && !isTrading(dept, date)) {
+      return `<td class="wg-cell wg-closed" title="Closed">—</td>`;
+    }
+    return `<td class="wg-cell wg-notrecorded">—</td>`;
+  }
   const checks = Object.entries(rec.fields || {}).filter(([, v]) => v === 'Yes' || v === 'No');
   const passed = checks.filter(([, v]) => v === 'Yes').length;
   const total = checks.length;

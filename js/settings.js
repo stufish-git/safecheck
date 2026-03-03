@@ -31,6 +31,11 @@ const DEFAULT_SETTINGS = {
   openingTimes: { kitchen:'08:00', foh:'09:00' },
   emailEnabled: false,
   emailRecipients: [],
+  tradingDays: {
+    open:    true,
+    kitchen: { mon:true, tue:true, wed:true, thu:true, fri:true, sat:true, sun:true },
+    foh:     { mon:true, tue:true, wed:true, thu:true, fri:true, sat:true, sun:true },
+  },
   closingTimes:  { kitchen:'23:00', foh:'23:30' },
 
   staff: [
@@ -77,6 +82,13 @@ const DEFAULT_SETTINGS = {
   },
 
   // Food probe products — kitchen only
+  suppliers: [
+    { id:'sup1', name:'Fresh Direct Ltd',    enabled:true },
+    { id:'sup2', name:'Premier Foods',       enabled:true },
+    { id:'sup3', name:'City Dairy',          enabled:true },
+    { id:'sup4', name:'Ocean Catch Seafood', enabled:true },
+  ],
+
   probeProducts: [
     { id:'pp1',  name:'Chicken breast',       enabled:true },
     { id:'pp2',  name:'Chicken thigh',        enabled:true },
@@ -367,6 +379,16 @@ function deepMergeSettings(def, saved) {
   if (saved.openingTimes)    m.openingTimes    = { ...m.openingTimes, ...saved.openingTimes };
   if (saved.emailEnabled !== undefined) m.emailEnabled = saved.emailEnabled;
   if (Array.isArray(saved.emailRecipients)) m.emailRecipients = saved.emailRecipients;
+  if (Array.isArray(saved.suppliers)) m.suppliers = saved.suppliers;
+  if (saved.tradingDays) {
+    m.tradingDays = JSON.parse(JSON.stringify(saved.tradingDays));
+    // Migrate old 'master' dict structure to new 'open' boolean
+    if (m.tradingDays.master !== undefined && m.tradingDays.open === undefined) {
+      const masterDays = m.tradingDays.master;
+      m.tradingDays.open = Object.values(masterDays).some(v => v !== false);
+      delete m.tradingDays.master;
+    }
+  }
   if (saved.closingTimes)   m.closingTimes   = { ...m.closingTimes, ...saved.closingTimes };
   if (saved.staff)          m.staff          = saved.staff;
   if (saved.equipment)      m.equipment      = saved.equipment;
@@ -616,7 +638,7 @@ function renderSettingsPage() {
   document.getElementById('set-foh-close').value       = s.closingTimes?.foh||'23:30';
   updateThemeButtons(currentTheme());
   renderStaffList(); renderEquipmentList(); renderCheckEditors(); renderTaskEditor(); renderProbeProductList();
-  renderEmailSettings();
+  renderSupplierList(); renderEmailSettings(); renderTradingSchedule();
   showSettingsSection('restaurant');
 }
 
@@ -910,6 +932,14 @@ function rebuildProbeProductDropdown() {
     products.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
 }
 
+function rebuildSupplierDropdown() {
+  const select = document.getElementById('gi-supplier');
+  if (!select) return;
+  const suppliers = (state.settings.suppliers || []).filter(s => s.enabled);
+  select.innerHTML = `<option value="">Select supplier…</option>` +
+    suppliers.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+}
+
 function renderProbeProductList() {
   const list = document.getElementById('probe-product-list');
   if (!list) return;
@@ -1165,4 +1195,127 @@ function saveEmailSettings() {
   state.settings.emailEnabled = !!document.getElementById('set-email-enabled')?.checked;
   saveSettings(); syncSettingsToSheets();
   showToast('Saved ✓', 'success');
+}
+
+// ── Trading Schedule Settings ─────────────────────────
+const TRADING_DAYS = ['mon','tue','wed','thu','fri','sat','sun'];
+const TRADING_DAY_LABELS = { mon:'Mon', tue:'Tue', wed:'Wed', thu:'Thu', fri:'Fri', sat:'Sat', sun:'Sun' };
+
+function renderTradingSchedule() {
+  const td = state.settings.tradingDays || {};
+  const masterOpen = td.open !== false;   // single boolean — true unless explicitly false
+
+  // Master toggle
+  const masterEl = document.getElementById('trading-master-toggle');
+  if (masterEl) masterEl.checked = masterOpen;
+
+  // Dept toggles — show their actual per-day values but disable when master is off
+  ['kitchen','foh'].forEach(dept => {
+    TRADING_DAYS.forEach(day => {
+      const el = document.getElementById(`trading-${dept}-${day}`);
+      if (el) {
+        el.checked = td[dept]?.[day] !== false;
+        el.disabled = !masterOpen;
+      }
+    });
+  });
+
+  // Grey out dept rows when master is off
+  document.querySelectorAll('.trading-dept-row').forEach(row => {
+    row.style.opacity = masterOpen ? '1' : '0.4';
+    row.style.pointerEvents = masterOpen ? '' : 'none';
+  });
+}
+
+function saveTradingMaster() {
+  const open = !!document.getElementById('trading-master-toggle')?.checked;
+  const td = state.settings.tradingDays || {};
+  td.open = open;   // single boolean — does not touch per-dept day schedules
+  state.settings.tradingDays = td;
+  saveSettings(); syncSettingsToSheets();
+  renderTradingSchedule();
+  showToast(open ? 'Open for trading ✓' : 'Closed for trading', open ? 'success' : 'error');
+}
+
+function saveTradingDay(dept, day) {
+  const td = state.settings.tradingDays || {};
+  td[dept] = td[dept] || {};
+  td[dept][day] = !!document.getElementById(`trading-${dept}-${day}`)?.checked;
+  state.settings.tradingDays = td;
+  saveSettings(); syncSettingsToSheets();
+  showToast('Saved ✓', 'success');
+}
+
+// ── Supplier Settings ──────────────────────────────────
+function renderSupplierList() {
+  const list = document.getElementById('supplier-list');
+  if (!list) return;
+  const suppliers = state.settings.suppliers || [];
+  if (!suppliers.length) {
+    list.innerHTML = '<p class="empty-state" style="padding:20px">No suppliers added yet</p>';
+    return;
+  }
+  list.innerHTML = suppliers.map((s, i) => `
+    <div class="check-edit-item ${s.enabled ? '' : 'disabled'}">
+      <label class="check-edit-toggle">
+        <input type="checkbox" ${s.enabled ? 'checked' : ''}
+          onchange="toggleSupplier('${s.id}', this.checked)"/>
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="check-edit-label">${s.name}</span>
+      <div class="check-edit-actions">
+        <button class="set-btn-move" onclick="moveSupplier('${s.id}',-1)" ${i===0?'disabled':''}>↑</button>
+        <button class="set-btn-move" onclick="moveSupplier('${s.id}', 1)" ${i===suppliers.length-1?'disabled':''}>↓</button>
+        <button class="set-btn-edit"   onclick="editSupplier('${s.id}')">Edit</button>
+        <button class="set-btn-delete" onclick="deleteSupplier('${s.id}')">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function addSupplier() {
+  const input = document.getElementById('new-supplier');
+  const name  = input?.value.trim();
+  if (!name) { showToast('Enter a supplier name', 'error'); return; }
+  if (!state.settings.suppliers) state.settings.suppliers = [];
+  if (state.settings.suppliers.some(s => s.name.toLowerCase() === name.toLowerCase())) {
+    showToast('Supplier already exists', 'error'); return;
+  }
+  state.settings.suppliers.push({ id: 'sup_' + Date.now(), name, enabled: true });
+  input.value = '';
+  saveSettings(); syncSettingsToSheets();
+  renderSupplierList(); rebuildSupplierDropdown();
+  showToast(`${name} added ✓`, 'success');
+}
+
+function editSupplier(id) {
+  const s = (state.settings.suppliers || []).find(s => s.id === id);
+  if (!s) return;
+  const name = prompt('Supplier name:', s.name);
+  if (name === null) return;
+  s.name = name.trim() || s.name;
+  saveSettings(); syncSettingsToSheets();
+  renderSupplierList(); rebuildSupplierDropdown();
+  showToast('Updated ✓', 'success');
+}
+
+function toggleSupplier(id, enabled) {
+  const s = (state.settings.suppliers || []).find(s => s.id === id);
+  if (s) { s.enabled = enabled; saveSettings(); syncSettingsToSheets(); renderSupplierList(); rebuildSupplierDropdown(); }
+}
+
+function moveSupplier(id, dir) {
+  const suppliers = state.settings.suppliers || [];
+  const idx = suppliers.findIndex(s => s.id === id);
+  const ni  = idx + dir;
+  if (ni < 0 || ni >= suppliers.length) return;
+  [suppliers[idx], suppliers[ni]] = [suppliers[ni], suppliers[idx]];
+  saveSettings(); renderSupplierList(); rebuildSupplierDropdown();
+}
+
+function deleteSupplier(id) {
+  const s = (state.settings.suppliers || []).find(s => s.id === id);
+  if (!s || !confirm(`Remove "${s.name}"?`)) return;
+  state.settings.suppliers = state.settings.suppliers.filter(s => s.id !== id);
+  saveSettings(); syncSettingsToSheets();
+  renderSupplierList(); rebuildSupplierDropdown();
 }

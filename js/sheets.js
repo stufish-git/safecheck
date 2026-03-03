@@ -19,6 +19,7 @@ const SHEET_TABS = {
   cleaning:        'Cleaning Schedule',
   weekly:          'Weekly Review',
   task_completion: 'Task Completions',
+  goods_in:         'Goods In Log',
 };
 
 // Checklist types use a compact schema + Fields JSON for full reconstruction.
@@ -39,6 +40,12 @@ const SHEET_HEADERS = {
     'Fields JSON',
   ],
   task_completion: ['ID','Date','Time','Department','Task ID','Week Start','Completed By'],
+  goods_in: [
+    'ID','Date','Time','Department',
+    'Supplier','Type','Temperature (°C)','Temp Status',
+    'Expiry Checked','Outcome','Notes','Signed By',
+    'Fields JSON',
+  ],
 };
 
 // ── PUSH ──────────────────────────────────────────────
@@ -92,6 +99,12 @@ function buildPayload(record) {
       f.weekly_rating  || '',
       f.weekly_signed_by || '',
       json];
+
+  } else if (record.type === 'goods_in') {
+    rowData = [record.id, record.date, record.timestamp, record.dept || 'kitchen',
+      f.gi_supplier, f.gi_type, f.gi_temp, f.gi_temp_status,
+      f.gi_expiry_checked, f.gi_outcome, f.gi_notes, f.gi_signed_by,
+      JSON.stringify(f)];
 
   } else {
     // opening / closing / cleaning
@@ -205,6 +218,20 @@ function parseSheetRow(row, type) {
         probe_used:    row['Probe Used']             || '',
         probe_action:  row['Corrective Action']      || '',
         probe_staff:   row['Logged By']              || '',
+      };
+    }
+
+    // Fallback for goods_in (named columns)
+    if (!Object.keys(fields).length && type === 'goods_in') {
+      fields = {
+        gi_supplier:       row['Supplier']           || '',
+        gi_type:           row['Type']               || '',
+        gi_temp:           row['Temperature (°C)']   || '',
+        gi_temp_status:    row['Temp Status']         || '',
+        gi_expiry_checked: row['Expiry Checked']      || '',
+        gi_outcome:        row['Outcome']             || '',
+        gi_notes:          row['Notes']               || '',
+        gi_signed_by:      row['Signed By']           || '',
       };
     }
 
