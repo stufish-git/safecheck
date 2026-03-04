@@ -821,13 +821,18 @@ async function sendReportEmail() {
     }
 
     const resp = await fetch(url, { method: 'GET', mode: 'cors' });
-    const data = await resp.json();
+    const raw = await resp.text();
+    let data;
+    try { data = JSON.parse(raw); } catch(e) {
+      showToast('Bad response: ' + raw.substring(0, 120), 'error');
+      return;
+    }
 
     if (data.status === 'ok') {
       closeEmailModal();
       showToast('Email sent to ' + recipients.join(', '), 'success');
     } else {
-      showToast('Error: ' + (data.message || 'Unknown error'), 'error');
+      showToast('Error: ' + (data.message || JSON.stringify(data)), 'error');
     }
   } catch(err) {
     showToast('Failed to send: ' + err.message, 'error');

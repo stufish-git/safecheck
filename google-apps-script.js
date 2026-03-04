@@ -236,7 +236,7 @@ function setupSheets() {
   } catch(e) {}
 
   SpreadsheetApp.getUi().alert(
-    '✅ SafeChecks v5.3 — All sheets recreated!\n\n' +
+    '&#x2705; SafeChecks v5.3 — All sheets recreated!\n\n' +
     'Tabs: Opening Checks, Closing Checks, Temperature Log,\n' +
     'Food Probe Log, Cleaning Schedule, Weekly Review,\n' +
     'Task Completions, Goods In Log, Settings\n\n' +
@@ -368,7 +368,7 @@ function installDailyEmailTrigger() {
     .nearMinute(59)
     .everyDays(1)
     .create();
-  SpreadsheetApp.getUi().alert('✅ Daily email trigger installed — will fire at 23:59 every night.');
+  SpreadsheetApp.getUi().alert('&#x2705; Daily email trigger installed — will fire at 23:59 every night.');
 }
 
 function removeDailyEmailTrigger() {
@@ -444,7 +444,7 @@ function sendDailySummary() {
 
 // ── HTML builder ──────────────────────────────────────
 function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, goodsIn, tasks, depts, settings) {
-  const DEPT_LABELS = { kitchen: '🍳 Kitchen', foh: '🍽 Front of House' };
+  const DEPT_LABELS = { kitchen: '&#x1F373; Kitchen', foh: '&#x1F37D; Front of House' };
 
   // Compliance score
   let totalChecks = 0, passedChecks = 0;
@@ -510,7 +510,7 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
       }
       return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:5px 0"><p style="margin:0;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + DEPT_LABELS[d] +
         ' &nbsp;<span style="color:' + scoreColor + ';font-size:12px;font-weight:600">' + rec.passed + '/' + rec.total + '</span>' +
-        ' &nbsp;<span style="color:#94a3b8;font-size:12px">' + rec.signedBy + ' · ' + rec.time + '</span></p>' + failHtml + '</td></tr>';
+        ' &nbsp;<span style="color:#94a3b8;font-size:12px">' + rec.signedBy + ' · ' + fmtTime(rec.time) + '</span></p>' + failHtml + '</td></tr>';
     }).join('');
 
     return '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' +
@@ -532,7 +532,7 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
           '<td style="padding:7px 8px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + r.location + '</td>' +
           '<td style="padding:7px 8px;font-size:13px;font-weight:600;color:#334155;font-family:Arial,sans-serif">' + r.temp + '°C</td>' +
           '<td style="padding:7px 8px"><span style="background:' + badgeBg + ';color:' + badgeFg + ';padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + r.status + '</span>' + actionHtml + '</td>' +
-          '<td style="padding:7px 8px;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">' + r.time + '</td></tr>';
+          '<td style="padding:7px 8px;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">' + fmtTime(r.time) + '</td></tr>';
       }).join('');
 
   const expectedChecks = 2;
@@ -556,7 +556,7 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
         const fg = pass ? '#166534' : '#991b1b';
         const actionHtml = !pass && r.action && r.action !== 'None required'
           ? '<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:4px;background:#fef2f2;border-radius:4px;border:1px solid #fecaca"><tr><td style="padding:6px 10px;font-size:11px;color:#991b1b;font-family:Arial,sans-serif">Action: ' + r.action + '</td></tr></table>' : '';
-        const coolingHtml = r.cooling ? '<p style="margin:3px 0 0;font-size:11px;color:#60a5fa;font-family:Arial,sans-serif">❄️ Cooled for ' + r.cooling + '</p>' : '';
+        const coolingHtml = r.cooling ? '<p style="margin:3px 0 0;font-size:11px;color:#60a5fa;font-family:Arial,sans-serif">&#x2744; Cooled for ' + r.cooling + '</p>' : '';
         return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:6px 0"><p style="margin:0;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + r.product + '</p>' + coolingHtml + actionHtml + '</td>' +
           '<td style="text-align:right;vertical-align:top;padding:6px 0;font-size:12px;font-family:Arial,sans-serif"><strong style="color:#334155">' + r.temp + '°C</strong> <span style="background:' + bg + ';color:' + fg + ';padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;margin-left:6px">' + r.status + '</span> <span style="color:#94a3b8;margin-left:6px">' + r.staff + '</span></td></tr>';
       }).join('');
@@ -576,7 +576,7 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
       var tempColor = f.gi_temp_status === 'FAIL' ? '#ef4444' : f.gi_temp_status === 'WARNING' ? '#f59e0b' : '#22c55e';
       giRows += '<tr>' +
         '<td style="padding:6px 8px;font-size:13px;font-family:Arial,sans-serif;font-weight:600">' + (f.gi_supplier||'—') + '</td>' +
-        '<td style="padding:6px 8px;font-size:12px;font-family:Arial,sans-serif;color:#94a3b8">' + (f.gi_type==='frozen'?'❄':'🌿') + ' ' + (f.gi_type||'') + '</td>' +
+        '<td style="padding:6px 8px;font-size:12px;font-family:Arial,sans-serif;color:#94a3b8">' + (f.gi_type==='frozen'?'&#x2744;':'&#x1F33F;') + ' ' + (f.gi_type||'') + '</td>' +
         '<td style="padding:6px 8px;font-size:13px;font-family:monospace;font-weight:600;color:' + tempColor + '">' + (f.gi_temp ? f.gi_temp+'°C' : '—') + '</td>' +
         '<td style="padding:6px 8px"><span style="background:' + (isAcc?'#dcfce7':'#fee2e2') + ';color:' + (isAcc?'#166534':'#991b1b') + ';padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + (isAcc?'Accepted':'Rejected') + '</span></td>' +
         '<td style="padding:6px 8px;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif">' + (f.gi_signed_by||'—') + '</td>' +
@@ -586,7 +586,7 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
       }
     });
   }
-  var giSection = sectionHeader('📦 Goods In') +
+  var giSection = sectionHeader('&#x1F4E6; Goods In') +
     '<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:4px">' +
     '<thead><tr>' +
     '<th style="text-align:left;padding:6px 8px;font-size:10px;font-family:Arial,sans-serif;color:#64748b;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #1e293b">Supplier</th>' +
@@ -662,6 +662,20 @@ function sectionHeader(title) {
 }
 
 // ── Data helpers ──────────────────────────────────────
+// ── Format time for display — extracts HH:MM from any timestamp string ──
+function fmtTime(t) {
+  if (!t) return '';
+  // Already HH:MM or HH:MM:SS
+  var m = String(t).match(/(\d{2}:\d{2})(?::\d{2})?/);
+  if (m) return m[1];
+  // JS Date string: "Tue Mar 03 2026 09:40:25 GMT+0000..."
+  var d = new Date(t);
+  if (!isNaN(d)) {
+    return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  }
+  return String(t);
+}
+
 function getDateStr(d) {
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
@@ -858,7 +872,7 @@ function handleSendDailyEmail(data) {
     const depts   = ['kitchen', 'foh'];
 
     const hasAnyFail = [...temps, ...probes].some(r => r.status === 'FAIL' || r.status === 'WARNING');
-    const subject    = '📋 Daily Report — ' + name + ' — ' + Utilities.formatDate(dateObj, Session.getScriptTimeZone(), "EEE d MMM yyyy");
+    const subject    = 'Daily Report — ' + name + ' — ' + Utilities.formatDate(dateObj, Session.getScriptTimeZone(), "EEE d MMM yyyy");
     const html       = buildEmailHtml(name, dayLabel, date, opening, closing, temps, probes, goodsIn, tasks, depts, settings);
 
     recipients.forEach(addr => {
@@ -929,7 +943,7 @@ function handleSendWeeklyEmail(data) {
       }
     }
 
-    const subject = '📋 Weekly Report — ' + name + ' — w/c ' + weekLabel;
+    const subject = 'Weekly Report — ' + name + ' — w/c ' + weekLabel;
     const html    = buildWeeklyEmailHtml(name, weekLabel, weekDates, allOpening, allClosing, allTemps, allProbes, allGoodsIn, allTasks, weeklyRec, settings);
 
     recipients.forEach(function(addr) {
@@ -996,15 +1010,15 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
     return '<td style="text-align:center;padding:5px 4px;font-size:13px;color:' + color + '">' + icon + count + '</td>';
   }
 
-  const DEPT_LABELS = { kitchen: '🍳 Kitchen', foh: '🍽 FOH' };
+  const DEPT_LABELS = { kitchen: '&#x1F373; Kitchen', foh: '&#x1F37D; FOH' };
   const gridRows = [
-    ['opening',     'kitchen', '🍳 Opening'],
-    ['opening',     'foh',     '🍽 Opening'],
-    ['closing',     'kitchen', '🍳 Closing'],
-    ['closing',     'foh',     '🍽 Closing'],
-    ['temperature', null,      '🌡 Temps'],
-    ['probe',       null,      '🍖 Probes'],
-    ['goodsin',     null,      '📦 Goods In'],
+    ['opening',     'kitchen', '&#x1F373; Opening'],
+    ['opening',     'foh',     '&#x1F37D; Opening'],
+    ['closing',     'kitchen', '&#x1F373; Closing'],
+    ['closing',     'foh',     '&#x1F37D; Closing'],
+    ['temperature', null,      '&#x1F321; Temps'],
+    ['probe',       null,      '&#x1F356; Probes'],
+    ['goodsin',     null,      '&#x1F4E6; Goods In'],
   ].map(function(row) {
     const cells = weekDates.map(function(date) { return dayCell(date, row[0], row[1]); }).join('');
     return '<tr><td style="padding:5px 8px;font-size:12px;color:#7d8da8;font-family:Arial,sans-serif;white-space:nowrap">' + row[2] + '</td>' + cells + '</tr>';
@@ -1033,10 +1047,10 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
         '<td style="padding:6px 8px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + r.location + '</td>' +
         '<td style="padding:6px 8px;font-size:13px;font-weight:600;color:#334155;font-family:Arial,sans-serif">' + r.temp + '°C</td>' +
         '<td style="padding:6px 8px"><span style="background:' + bg + ';color:' + fg + ';padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + r.status + '</span></td>' +
-        '<td style="padding:6px 8px;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">' + r.time + '</td></tr>';
+        '<td style="padding:6px 8px;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">' + fmtTime(r.time) + '</td></tr>';
     });
   }
-  const tempSection = sectionHeader('🌡 Equipment Temperatures · ' + temps.length + ' reading' + (temps.length!==1?'s':'')) +
+  const tempSection = sectionHeader('&#x1F321; Equipment Temperatures · ' + temps.length + ' reading' + (temps.length!==1?'s':'')) +
     '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
     '<tr style="background:#f8fafc"><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Day</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Location</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Temp</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Status</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Time</td></tr>' +
     tempRows + '</table></td></tr>';
@@ -1052,7 +1066,7 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
       const pass = r.status === 'PASS';
       const bg = pass ? '#dcfce7' : '#fee2e2';
       const fg = pass ? '#166534' : '#991b1b';
-      const coolingHtml = r.cooling ? '<p style="margin:3px 0 0;font-size:11px;color:#60a5fa;font-family:Arial,sans-serif">❄️ Cooled for ' + r.cooling + '</p>' : '';
+      const coolingHtml = r.cooling ? '<p style="margin:3px 0 0;font-size:11px;color:#60a5fa;font-family:Arial,sans-serif">&#x2744; Cooled for ' + r.cooling + '</p>' : '';
       return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:6px 0">' +
         '<p style="margin:0;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + dayStr + '</p>' +
         '<p style="margin:2px 0 0;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + r.product + '</p>' +
@@ -1063,7 +1077,7 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
         '<span style="color:#94a3b8;margin-left:6px">' + r.staff + '</span></td></tr>';
     }).join('');
   }
-  const probeSection = sectionHeader('🍖 Food Probes · ' + (probes.length || 'none') ) +
+  const probeSection = sectionHeader('&#x1F356; Food Probes · ' + (probes.length || 'none') ) +
     '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0">' + probeRows + '</table></td></tr>';
 
   // ── Goods In summary ──────────────────────────────
@@ -1076,7 +1090,7 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
       const dayStr = DAY_ABBR[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth()+1);
       const f = r.fields || {};
       const isAcc = f.gi_outcome === 'accepted';
-      const typeIcon = f.gi_type === 'frozen' ? '❄' : '🌿';
+      const typeIcon = f.gi_type === 'frozen' ? '&#x2744;' : '&#x1F33F;';
       giRows += '<tr style="border-bottom:1px solid #f1f5f9">' +
         '<td style="padding:6px 8px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + dayStr + '</td>' +
         '<td style="padding:6px 8px;font-size:13px;font-weight:600;font-family:Arial,sans-serif">' + (f.gi_supplier||'—') + '</td>' +
@@ -1086,7 +1100,7 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
       if (f.gi_notes) giRows += '<tr><td colspan="5" style="padding:0 8px 6px;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">↳ ' + f.gi_notes + '</td></tr>';
     });
   }
-  const giSection = sectionHeader('📦 Goods In · ' + (goodsIn.length || 'none')) +
+  const giSection = sectionHeader('&#x1F4E6; Goods In · ' + (goodsIn.length || 'none')) +
     '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
     '<tr style="background:#f8fafc"><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Day</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Supplier</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Type</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Temp</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Outcome</td></tr>' +
     giRows + '</table></td></tr>';
@@ -1106,7 +1120,7 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
         '<td style="text-align:right"><span style="font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">' + (t.done ? (t.doneBy||'') : '<span style="background:#f1f5f9;color:#94a3b8;padding:2px 8px;border-radius:4px;font-size:11px">Not done</span>') + '</span></td></tr>';
     }).join('');
   }
-  const taskSection = sectionHeader('✅ Tasks · ' + doneCount + ' / ' + tasks.length + ' complete') +
+  const taskSection = sectionHeader('&#x2705; Tasks · ' + doneCount + ' / ' + tasks.length + ' complete') +
     '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0">' + taskRows + '</table></td></tr>';
 
   // ── Weekly management review ───────────────────────
@@ -1128,7 +1142,7 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
       (signed  ? '<p style="margin:0;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">Signed by: ' + signed + ' · ' + (weeklyRec.time||'') + '</p>' : '') +
       '</td></tr>';
   }
-  const reviewSection = sectionHeader('📋 Weekly Management Review') + reviewHtml;
+  const reviewSection = sectionHeader('&#x1F4CB; Weekly Management Review') + reviewHtml;
 
   // ── Assemble ──────────────────────────────────────
   const sheetsUrl = getSheetsUrl();
