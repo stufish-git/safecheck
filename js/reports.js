@@ -760,3 +760,79 @@ function buildWeeklyReviewSection(rec) {
 function printReport() {
   window.print();
 }
+
+// ─────────────────────────────────────────────────────
+//  EMAIL REPORT
+// ─────────────────────────────────────────────────────
+
+function openEmailModal() {
+  const modal = document.getElementById('email-report-modal');
+  const subtitle = document.getElementById('email-modal-subtitle');
+  const recipientsEl = document.getElementById('email-modal-recipients');
+
+  // Set subtitle based on current mode
+  if (reportMode === 'daily') {
+    const date = document.getElementById('report-daily-date')?.value || todayStr();
+    const fmtDate = new Date(date + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    subtitle.textContent = 'Daily report · ' + fmtDate;
+  } else {
+    const weekStart = document.getElementById('report-week-select')?.value || '';
+    const fmtWeek = weekStart ? new Date(weekStart + 'T12:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' }) : '';
+    subtitle.textContent = 'Weekly report · w/c ' + fmtWeek;
+  }
+
+  // Pre-fill recipients from settings
+  const recipients = state.settings?.emailRecipients || [];
+  recipientsEl.value = recipients.join(', ');
+
+  modal.style.display = 'flex';
+  recipientsEl.focus();
+}
+
+function closeEmailModal() {
+  document.getElementById('email-report-modal').style.display = 'none';
+}
+
+async function sendReportEmail() {
+  if (!state.config.sheetsUrl) {
+    showToast('No Sheets URL configured in Settings', 'error');
+    return;
+  }
+
+  const recipientsRaw = document.getElementById('email-modal-recipients').value;
+  const recipients = recipientsRaw.split(',').map(r => r.trim()).filter(Boolean);
+  if (!recipients.length) {
+    showToast('Please enter at least one recipient', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('email-modal-send-btn');
+  btn.textContent = 'Sending…';
+  btn.disabled = true;
+
+  try {
+    let payload;
+    if (reportMode === 'daily') {
+      const date = document.getElementById('report-daily-date')?.value || todayStr();
+      payload = { action: 'sendDailyEmail', date, recipients };
+    } else {
+      const weekStart = document.getElementById('report-week-select')?.value;
+      payload = { action: 'sendWeeklyEmail', weekStart, recipients };
+    }
+
+    const resp = await fetch(state.config.sheetsUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    closeEmailModal();
+    showToast('Email sent to ' + recipients.join(', '), 'success');
+  } catch(err) {
+    showToast('Failed to send: ' + err.message, 'error');
+  } finally {
+    btn.textContent = 'Send';
+    btn.disabled = false;
+  }
+}

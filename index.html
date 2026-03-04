@@ -502,6 +502,21 @@
         <button id="report-mode-weekly" class="report-mode-btn" onclick="switchReportMode('weekly')">Weekly Report</button>
         <button id="report-refresh-btn" class="report-print-btn" onclick="refreshReport()">↻ Refresh</button>
         <button class="report-print-btn" onclick="printReport()">🖨 Print</button>
+        <button class="report-print-btn report-email-btn" onclick="openEmailModal()">✉ Email</button>
+      </div>
+
+      <!-- Email modal -->
+      <div id="email-report-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:90%;max-width:420px">
+          <p style="margin:0 0 4px;font-weight:700;font-size:15px">Email Report</p>
+          <p id="email-modal-subtitle" style="margin:0 0 16px;font-size:12px;color:var(--text-muted)"></p>
+          <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:6px">Recipients (comma-separated)</label>
+          <textarea id="email-modal-recipients" class="text-field" rows="3" style="width:100%;box-sizing:border-box;font-size:13px;resize:vertical"></textarea>
+          <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
+            <button class="btn-secondary" onclick="closeEmailModal()">Cancel</button>
+            <button class="submit-btn" id="email-modal-send-btn" onclick="sendReportEmail()" style="min-width:80px">Send</button>
+          </div>
+        </div>
       </div>
 
       <!-- Daily controls -->

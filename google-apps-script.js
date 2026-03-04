@@ -35,7 +35,9 @@ function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
 
-    if (data.action === 'saveSettings') return handleSaveSettings(data);
+    if (data.action === 'saveSettings')   return handleSaveSettings(data);
+    if (data.action === 'sendDailyEmail')   return handleSendDailyEmail(data);
+    if (data.action === 'sendWeeklyEmail')  return handleSendWeeklyEmail(data);
 
     const ss      = SpreadsheetApp.getActiveSpreadsheet();
     const tabName = data.sheetTab || 'General';
@@ -425,7 +427,7 @@ function sendDailySummary() {
   const subject = prefix + ' Daily Summary — ' + name + ' — ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "EEE d MMM yyyy");
 
   // ── Build HTML ──────────────────────────────────────
-  const html = buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, tasks, depts, settings);
+  const html = buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, goodsIn, tasks, depts, settings);
 
   // ── Send ────────────────────────────────────────────
   recipients.forEach(addr => {
@@ -439,7 +441,7 @@ function sendDailySummary() {
 }
 
 // ── HTML builder ──────────────────────────────────────
-function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, tasks, depts, settings) {
+function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, goodsIn, tasks, depts, settings) {
   const DEPT_LABELS = { kitchen: '🍳 Kitchen', foh: '🍽 Front of House' };
 
   // Compliance score
@@ -447,14 +449,21 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
   [...opening, ...closing].forEach(r => { totalChecks += r.total; passedChecks += r.passed; });
   const pct = totalChecks > 0 ? Math.round(passedChecks / totalChecks * 100) : null;
 
-  const anyMissing = depts.some(d => !opening.find(r => r.dept === d) || !closing.find(r => r.dept === d));
+  // Count submitted vs expected checks (2 per trading dept: opening + closing)
+  const tradingDepts   = depts.filter(d => isTradingAS(d, settings));
+  const expectedCheckCount = tradingDepts.length * 2;
+  const submittedChecks = tradingDepts.reduce((n, d) => {
+    return n + (opening.find(r => r.dept === d) ? 1 : 0) + (closing.find(r => r.dept === d) ? 1 : 0);
+  }, 0);
+  const anyMissing = submittedChecks < expectedCheckCount;
+
   const headerBorder = anyMissing ? '#ef4444' : pct === null ? '#4a5568' : pct >= 90 ? '#22c55e' : pct >= 70 ? '#f59e0b' : '#ef4444';
   const headerBg     = anyMissing ? '#2d0a0a' : pct === null ? '#1a2332' : pct >= 90 ? '#0d3320' : pct >= 70 ? '#2d1c07' : '#2d0a0a';
   const pctColor     = headerBorder;
   const barWidth     = pct !== null ? pct : 0;
 
   const badgeHtml = anyMissing
-    ? '<div style="display:inline-block;background:#2d0a0a;border:2px solid #ef4444;border-radius:8px;padding:8px 16px;text-align:center"><p style="margin:0;font-size:14px;font-weight:700;color:#ef4444;font-family:Arial,sans-serif;line-height:1.3">Checks<br>Missing</p></div>'
+    ? '<div style="display:inline-block;background:#2d0a0a;border:2px solid #ef4444;border-radius:8px;padding:8px 16px;text-align:center"><p style="margin:0;font-size:14px;font-weight:700;color:#ef4444;font-family:Arial,sans-serif;line-height:1.3">Incomplete</p></div>'
     : pct !== null
       ? '<div style="display:inline-block;background:' + headerBg + ';border:2px solid ' + pctColor + ';border-radius:8px;padding:8px 16px;text-align:center"><p style="margin:0;font-size:22px;font-weight:700;color:' + pctColor + ';font-family:Arial,sans-serif;line-height:1">' + pct + '%</p><p style="margin:2px 0 0;font-size:10px;color:' + pctColor + ';font-family:Arial,sans-serif;letter-spacing:.05em;text-transform:uppercase;opacity:.8">Compliance</p></div>'
       : '<div style="display:inline-block;background:#1a2332;border:2px solid #4a5568;border-radius:8px;padding:8px 16px;text-align:center"><p style="margin:0;font-size:11px;color:#7d8da8;font-family:Arial,sans-serif">No checks<br>recorded</p></div>';
@@ -615,7 +624,9 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
   '<p style="margin:4px 0 0;font-size:20px;font-weight:700;color:#e6edf3;font-family:Arial,sans-serif">' + name + '</p>' +
   '<p style="margin:4px 0 0;font-size:13px;color:#7d8da8;font-family:Arial,sans-serif">' + dayLabel + ' &nbsp;·&nbsp; Generated 23:59</p></td>' +
   '<td style="padding:20px 24px;text-align:right;vertical-align:middle">' + badgeHtml + '</td></tr>' +
-  (pct !== null ? '<tr><td colspan="2" style="padding:0 24px 16px"><table width="100%" cellpadding="0" cellspacing="0"><tr>' +
+  (anyMissing
+  ? '<tr><td colspan="2" style="padding:0 24px 16px"><p style="margin:0;font-size:11px;color:#ef4444;font-family:Arial,sans-serif">' + submittedChecks + ' of ' + expectedCheckCount + ' checks submitted &nbsp;&middot;&nbsp; score excluded</p></td></tr>'
+  : pct !== null ? '<tr><td colspan="2" style="padding:0 24px 16px"><table width="100%" cellpadding="0" cellspacing="0"><tr>' +
   '<td style="background:' + headerBg + ';border-radius:3px;height:6px"><div style="width:' + barWidth + '%;height:6px;background:' + pctColor + ';border-radius:3px"></div></td>' +
   '<td style="width:110px;padding-left:12px;font-size:11px;color:' + pctColor + ';font-family:Arial,sans-serif;white-space:nowrap">' + passedChecks + '/' + totalChecks + ' checks</td>' +
   '</tr></table></td></tr>' : '') +
@@ -775,14 +786,15 @@ function getTodayRecords(ss, tabName, today) {
 
 function getTodayTasks(ss, today, settings) {
   // Determine today's day name for scheduled tasks
+  // Use the passed-in today date, not new Date(), so historical reports work correctly
   const dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
-  const todayName = dayNames[new Date().getDay()];
+  const d = new Date(today + 'T12:00:00');
+  const todayName = dayNames[d.getDay()];
 
   const scheduledTasks = (settings.tasks || []).filter(t => t.enabled && t.day === todayName);
   if (!scheduledTasks.length) return [];
 
-  // Get current week start (Monday)
-  const d = new Date();
+  // Get week start (Monday) for the given date
   const monOffset = (d.getDay() + 6) % 7;
   const mon = new Date(d); mon.setDate(d.getDate() - monOffset);
   const weekStart = getDateStr(mon);
@@ -812,4 +824,347 @@ function getTodayTasks(ss, today, settings) {
     done:   completions.hasOwnProperty(t.id),
     doneBy: completions[t.id] || '',
   }));
+}
+
+// ════════════════════════════════════════════════════════
+//  ON-DEMAND EMAIL HANDLERS
+// ════════════════════════════════════════════════════════
+
+// ── Daily email for any date ──────────────────────────
+function handleSendDailyEmail(data) {
+  try {
+    const date       = data.date;
+    const settings   = getSettingsObj();
+    if (!settings)   return jsonResponse({ status: 'error', message: 'No settings found' });
+
+    const recipients = (data.recipients && data.recipients.length)
+      ? data.recipients
+      : (settings.emailRecipients || []);
+    if (!recipients.length) return jsonResponse({ status: 'error', message: 'No recipients' });
+
+    const ss       = SpreadsheetApp.getActiveSpreadsheet();
+    const dateObj  = new Date(date + 'T12:00:00');
+    const dayLabel = Utilities.formatDate(dateObj, Session.getScriptTimeZone(), "EEEE d MMMM yyyy");
+    const name     = settings.restaurantName || 'SafeChecks';
+
+    const opening = getTodayRecords(ss, 'Opening Checks',  date);
+    const closing = getTodayRecords(ss, 'Closing Checks',  date);
+    const temps   = getTodayRecords(ss, 'Temperature Log', date);
+    const probes  = getTodayRecords(ss, 'Food Probe Log',  date);
+    const goodsIn = getTodayRecords(ss, 'Goods In Log',    date);
+    const tasks   = getTodayTasks(ss, date, settings);
+    const depts   = ['kitchen', 'foh'];
+
+    const hasAnyFail = [...temps, ...probes].some(r => r.status === 'FAIL' || r.status === 'WARNING');
+    const subject    = '📋 Daily Report — ' + name + ' — ' + Utilities.formatDate(dateObj, Session.getScriptTimeZone(), "EEE d MMM yyyy");
+    const html       = buildEmailHtml(name, dayLabel, date, opening, closing, temps, probes, goodsIn, tasks, depts, settings);
+
+    recipients.forEach(addr => {
+      try { GmailApp.sendEmail(addr, subject, '', { htmlBody: html, name: name + ' · SafeChecks' }); }
+      catch(e) { Logger.log('Failed to send to ' + addr + ': ' + e); }
+    });
+
+    return jsonResponse({ status: 'ok', sent: recipients.length });
+  } catch(err) {
+    return jsonResponse({ status: 'error', message: err.toString() });
+  }
+}
+
+// ── Weekly email for a week starting on weekStart ────
+function handleSendWeeklyEmail(data) {
+  try {
+    const weekStart  = data.weekStart;
+    const settings   = getSettingsObj();
+    if (!settings)   return jsonResponse({ status: 'error', message: 'No settings found' });
+
+    const recipients = (data.recipients && data.recipients.length)
+      ? data.recipients
+      : (settings.emailRecipients || []);
+    if (!recipients.length) return jsonResponse({ status: 'error', message: 'No recipients' });
+
+    const ss   = SpreadsheetApp.getActiveSpreadsheet();
+    const name = settings.restaurantName || 'SafeChecks';
+
+    // Build the 7 dates of the week (Mon–Sun)
+    const weekDates = [];
+    const mon = new Date(weekStart + 'T12:00:00');
+    for (var i = 0; i < 7; i++) {
+      var d = new Date(mon); d.setDate(mon.getDate() + i);
+      weekDates.push(getDateStr(d));
+    }
+    const sun     = new Date(mon); sun.setDate(mon.getDate() + 6);
+    const weekLabel = Utilities.formatDate(mon, Session.getScriptTimeZone(), "d MMM") + ' – ' +
+                      Utilities.formatDate(sun, Session.getScriptTimeZone(), "d MMM yyyy");
+
+    // Pull all records for the week
+    var allTemps  = [], allProbes = [], allGoodsIn = [], allOpening = [], allClosing = [], allTasks = [];
+    weekDates.forEach(function(date) {
+      getTodayRecords(ss, 'Temperature Log', date).forEach(function(r) { r.date = date; allTemps.push(r); });
+      getTodayRecords(ss, 'Food Probe Log',  date).forEach(function(r) { r.date = date; allProbes.push(r); });
+      getTodayRecords(ss, 'Goods In Log',    date).forEach(function(r) { r.date = date; allGoodsIn.push(r); });
+      getTodayRecords(ss, 'Opening Checks',  date).forEach(function(r) { r.date = date; allOpening.push(r); });
+      getTodayRecords(ss, 'Closing Checks',  date).forEach(function(r) { r.date = date; allClosing.push(r); });
+      getTodayTasks(ss, date, settings).forEach(function(t)  { t.date = date; allTasks.push(t); });
+    });
+
+    // Weekly review record
+    const sheet = ss.getSheetByName('Weekly Review');
+    var weeklyRec = null;
+    if (sheet && sheet.getLastRow() >= 2) {
+      const data2   = sheet.getDataRange().getValues();
+      const headers = data2[0].map(function(h) { return String(h).trim(); });
+      const dateCol = headers.indexOf('Date');
+      for (var j = 1; j < data2.length; j++) {
+        var d = data2[j][dateCol];
+        if (d instanceof Date) d = getDateStr(d);
+        if (String(d) === weekStart) {
+          const fieldsCol = headers.indexOf('Fields JSON');
+          var fields = {};
+          try { fields = JSON.parse(String(data2[j][fieldsCol] || '{}')); } catch(e) {}
+          weeklyRec = { fields, time: String(data2[j][headers.indexOf('Time')] || '') };
+          break;
+        }
+      }
+    }
+
+    const subject = '📋 Weekly Report — ' + name + ' — w/c ' + weekLabel;
+    const html    = buildWeeklyEmailHtml(name, weekLabel, weekDates, allOpening, allClosing, allTemps, allProbes, allGoodsIn, allTasks, weeklyRec, settings);
+
+    recipients.forEach(function(addr) {
+      try { GmailApp.sendEmail(addr, subject, '', { htmlBody: html, name: name + ' · SafeChecks' }); }
+      catch(e) { Logger.log('Failed to send to ' + addr + ': ' + e); }
+    });
+
+    return jsonResponse({ status: 'ok', sent: recipients.length });
+  } catch(err) {
+    return jsonResponse({ status: 'error', message: err.toString() });
+  }
+}
+
+// ── Weekly email HTML builder ─────────────────────────
+function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temps, probes, goodsIn, tasks, weeklyRec, settings) {
+  const DAY_ABBR = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  // ── Overall compliance across the week ──────────────
+  var totalChecks = 0, passedChecks = 0;
+  [...opening, ...closing].forEach(function(r) {
+    Object.entries(r.fields || {}).forEach(function(e) {
+      if (e[1] === 'Yes' || e[1] === 'No') { totalChecks++; if (e[1] === 'Yes') passedChecks++; }
+    });
+  });
+  const pct        = totalChecks > 0 ? Math.round(passedChecks / totalChecks * 100) : null;
+  const pctColor   = pct === null ? '#4a5568' : pct >= 90 ? '#22c55e' : pct >= 70 ? '#f59e0b' : '#ef4444';
+  const headerBg   = pct === null ? '#1a2332' : pct >= 90 ? '#0d3320' : pct >= 70 ? '#2d1c07' : '#2d0a0a';
+  const barWidth   = pct !== null ? pct : 0;
+
+  const badgeHtml = pct !== null
+    ? '<div style="display:inline-block;background:' + headerBg + ';border:2px solid ' + pctColor + ';border-radius:8px;padding:8px 16px;text-align:center"><p style="margin:0;font-size:22px;font-weight:700;color:' + pctColor + ';font-family:Arial,sans-serif;line-height:1">' + pct + '%</p><p style="margin:2px 0 0;font-size:10px;color:' + pctColor + ';font-family:Arial,sans-serif;letter-spacing:.05em;text-transform:uppercase;opacity:.8">Weekly Compliance</p></div>'
+    : '<div style="display:inline-block;background:#1a2332;border:2px solid #4a5568;border-radius:8px;padding:8px 16px;text-align:center"><p style="margin:0;font-size:11px;color:#7d8da8;font-family:Arial,sans-serif">No checks<br>recorded</p></div>';
+
+  // ── Day-by-day overview table ─────────────────────
+  const dayHeaders = weekDates.map(function(date) {
+    const d = new Date(date + 'T12:00:00');
+    return DAY_ABBR[d.getDay()] + '<br><span style="font-size:10px;font-weight:400;color:#7d8da8">' + d.getDate() + '/' + (d.getMonth()+1) + '</span>';
+  }).join('');
+
+  function dayCell(date, type, dept) {
+    var recs = [];
+    if (type === 'opening') recs = opening.filter(function(r) { return r.date === date && r.dept === dept; });
+    else if (type === 'closing') recs = closing.filter(function(r) { return r.date === date && r.dept === dept; });
+    else if (type === 'temperature') recs = temps.filter(function(r) { return r.date === date; });
+    else if (type === 'probe')   recs = probes.filter(function(r) { return r.date === date; });
+    else if (type === 'goodsin') recs = goodsIn.filter(function(r) { return r.date === date; });
+
+    if (!recs.length) return '<td style="text-align:center;padding:5px 4px;font-size:13px;color:#4a6080">—</td>';
+
+    var hasFail = false;
+    if (type === 'opening' || type === 'closing') {
+      recs.forEach(function(r) { Object.entries(r.fields||{}).forEach(function(e) { if (e[1]==='No') hasFail=true; }); });
+    } else if (type === 'temperature') {
+      hasFail = recs.some(function(r) { return r.status==='FAIL'||r.status==='WARNING'; });
+    } else if (type === 'probe') {
+      hasFail = recs.some(function(r) { return r.status==='FAIL'; });
+    } else if (type === 'goodsin') {
+      hasFail = recs.some(function(r) { return r.outcome==='rejected'||r.temp_status==='FAIL'; });
+    }
+
+    const icon = hasFail ? '⚠' : '✓';
+    const color = hasFail ? '#f59e0b' : '#22c55e';
+    const count = (type === 'temperature' || type === 'probe' || type === 'goodsin') ? '<span style="font-size:9px;display:block;color:#7d8da8">' + recs.length + '</span>' : '';
+    return '<td style="text-align:center;padding:5px 4px;font-size:13px;color:' + color + '">' + icon + count + '</td>';
+  }
+
+  const DEPT_LABELS = { kitchen: '🍳 Kitchen', foh: '🍽 FOH' };
+  const gridRows = [
+    ['opening',     'kitchen', '🍳 Opening'],
+    ['opening',     'foh',     '🍽 Opening'],
+    ['closing',     'kitchen', '🍳 Closing'],
+    ['closing',     'foh',     '🍽 Closing'],
+    ['temperature', null,      '🌡 Temps'],
+    ['probe',       null,      '🍖 Probes'],
+    ['goodsin',     null,      '📦 Goods In'],
+  ].map(function(row) {
+    const cells = weekDates.map(function(date) { return dayCell(date, row[0], row[1]); }).join('');
+    return '<tr><td style="padding:5px 8px;font-size:12px;color:#7d8da8;font-family:Arial,sans-serif;white-space:nowrap">' + row[2] + '</td>' + cells + '</tr>';
+  }).join('');
+
+  const gridHtml = '<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-family:Arial,sans-serif">' +
+    '<tr><th style="text-align:left;padding:5px 8px;font-size:10px;color:#4a6080;text-transform:uppercase;letter-spacing:.05em">Check</th>' +
+    weekDates.map(function(date) {
+      const d = new Date(date + 'T12:00:00');
+      return '<th style="text-align:center;padding:5px 4px;font-size:11px;color:#4a6080;min-width:36px">' + DAY_ABBR[d.getDay()] + '<br><span style="font-weight:400;font-size:9px">' + d.getDate() + '/' + (d.getMonth()+1) + '</span></th>';
+    }).join('') + '</tr>' + gridRows + '</table>';
+
+  // ── Temperature summary ────────────────────────────
+  var tempRows = '';
+  if (!temps.length) {
+    tempRows = '<tr><td colspan="5" style="padding:10px 8px;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No temperature readings this week</td></tr>';
+  } else {
+    temps.forEach(function(r) {
+      const d = new Date(r.date + 'T12:00:00');
+      const dayStr = DAY_ABBR[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth()+1);
+      const bg = r.status==='OK' ? '#dcfce7' : r.status==='WARNING' ? '#fef3c7' : '#fee2e2';
+      const fg = r.status==='OK' ? '#166534' : r.status==='WARNING' ? '#92400e' : '#991b1b';
+      const rowBg = r.status==='FAIL' ? 'background:#fef2f2' : r.status==='WARNING' ? 'background:#fffbeb' : '';
+      tempRows += '<tr style="border-bottom:1px solid #f1f5f9;' + rowBg + '">' +
+        '<td style="padding:6px 8px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + dayStr + '</td>' +
+        '<td style="padding:6px 8px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + r.location + '</td>' +
+        '<td style="padding:6px 8px;font-size:13px;font-weight:600;color:#334155;font-family:Arial,sans-serif">' + r.temp + '°C</td>' +
+        '<td style="padding:6px 8px"><span style="background:' + bg + ';color:' + fg + ';padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + r.status + '</span></td>' +
+        '<td style="padding:6px 8px;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">' + r.time + '</td></tr>';
+    });
+  }
+  const tempSection = sectionHeader('🌡 Equipment Temperatures · ' + temps.length + ' reading' + (temps.length!==1?'s':'')) +
+    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
+    '<tr style="background:#f8fafc"><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Day</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Location</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Temp</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Status</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Time</td></tr>' +
+    tempRows + '</table></td></tr>';
+
+  // ── Food probe summary ─────────────────────────────
+  var probeRows = '';
+  if (!probes.length) {
+    probeRows = '<td colspan="2" style="padding:10px 0"><span style="font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No food probes this week</span></td>';
+  } else {
+    probeRows = probes.map(function(r) {
+      const d = new Date(r.date + 'T12:00:00');
+      const dayStr = DAY_ABBR[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth()+1);
+      const pass = r.status === 'PASS';
+      const bg = pass ? '#dcfce7' : '#fee2e2';
+      const fg = pass ? '#166534' : '#991b1b';
+      const coolingHtml = r.cooling ? '<p style="margin:3px 0 0;font-size:11px;color:#60a5fa;font-family:Arial,sans-serif">❄️ Cooled for ' + r.cooling + '</p>' : '';
+      return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:6px 0">' +
+        '<p style="margin:0;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + dayStr + '</p>' +
+        '<p style="margin:2px 0 0;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + r.product + '</p>' +
+        coolingHtml + '</td>' +
+        '<td style="text-align:right;vertical-align:top;padding:6px 0;font-size:12px;font-family:Arial,sans-serif">' +
+        '<strong style="color:#334155">' + r.temp + '°C</strong> ' +
+        '<span style="background:' + bg + ';color:' + fg + ';padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;margin-left:6px">' + r.status + '</span> ' +
+        '<span style="color:#94a3b8;margin-left:6px">' + r.staff + '</span></td></tr>';
+    }).join('');
+  }
+  const probeSection = sectionHeader('🍖 Food Probes · ' + (probes.length || 'none') ) +
+    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0">' + probeRows + '</table></td></tr>';
+
+  // ── Goods In summary ──────────────────────────────
+  var giRows = '';
+  if (!goodsIn.length) {
+    giRows = '<tr><td colspan="5" style="padding:10px 8px;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No deliveries this week</td></tr>';
+  } else {
+    goodsIn.forEach(function(r) {
+      const d = new Date(r.date + 'T12:00:00');
+      const dayStr = DAY_ABBR[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth()+1);
+      const f = r.fields || {};
+      const isAcc = f.gi_outcome === 'accepted';
+      const typeIcon = f.gi_type === 'frozen' ? '❄' : '🌿';
+      giRows += '<tr style="border-bottom:1px solid #f1f5f9">' +
+        '<td style="padding:6px 8px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + dayStr + '</td>' +
+        '<td style="padding:6px 8px;font-size:13px;font-weight:600;font-family:Arial,sans-serif">' + (f.gi_supplier||'—') + '</td>' +
+        '<td style="padding:6px 8px;font-size:12px;font-family:Arial,sans-serif;color:#94a3b8">' + typeIcon + ' ' + (f.gi_type||'') + '</td>' +
+        '<td style="padding:6px 8px;font-size:13px;font-family:monospace;font-weight:600">' + (f.gi_temp ? f.gi_temp+'°C' : '—') + '</td>' +
+        '<td style="padding:6px 8px"><span style="background:' + (isAcc?'#dcfce7':'#fee2e2') + ';color:' + (isAcc?'#166534':'#991b1b') + ';padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + (isAcc?'Accepted':'Rejected') + '</span></td></tr>';
+      if (f.gi_notes) giRows += '<tr><td colspan="5" style="padding:0 8px 6px;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">↳ ' + f.gi_notes + '</td></tr>';
+    });
+  }
+  const giSection = sectionHeader('📦 Goods In · ' + (goodsIn.length || 'none')) +
+    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
+    '<tr style="background:#f8fafc"><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Day</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Supplier</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Type</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Temp</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Outcome</td></tr>' +
+    giRows + '</table></td></tr>';
+
+  // ── Tasks summary ─────────────────────────────────
+  const doneCount  = tasks.filter(function(t) { return t.done; }).length;
+  var taskRows = '';
+  if (!tasks.length) {
+    taskRows = '<tr><td colspan="3" style="padding:10px 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No tasks scheduled this week</td></tr>';
+  } else {
+    taskRows = tasks.map(function(t) {
+      const d = new Date((t.date||'') + 'T12:00:00');
+      const dayStr = t.date ? DAY_ABBR[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth()+1) : '';
+      return '<tr style="border-bottom:1px solid #f1f5f9">' +
+        '<td style="padding:5px 0;font-size:12px;color:#64748b;font-family:Arial,sans-serif;width:60px">' + dayStr + '</td>' +
+        '<td style="padding:5px 8px;font-size:13px;color:' + (t.done?'#334155':'#94a3b8') + ';font-family:Arial,sans-serif;font-style:' + (t.done?'normal':'italic') + '">' + (t.done?'✓ ':'') + t.label + '</td>' +
+        '<td style="text-align:right"><span style="font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">' + (t.done ? (t.doneBy||'') : '<span style="background:#f1f5f9;color:#94a3b8;padding:2px 8px;border-radius:4px;font-size:11px">Not done</span>') + '</span></td></tr>';
+    }).join('');
+  }
+  const taskSection = sectionHeader('✅ Tasks · ' + doneCount + ' / ' + tasks.length + ' complete') +
+    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0">' + taskRows + '</table></td></tr>';
+
+  // ── Weekly management review ───────────────────────
+  var reviewHtml = '';
+  if (!weeklyRec) {
+    reviewHtml = '<tr><td style="padding:10px 24px;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No weekly review submitted</td></tr>';
+  } else {
+    const f       = weeklyRec.fields || {};
+    const rating  = f.weekly_rating  || '';
+    const issues  = f.weekly_issues  || '';
+    const actions = f.weekly_actions || '';
+    const signed  = f.weekly_signed_by || '';
+    const ratingColor = rating === 'Good' ? '#22c55e' : rating === 'Satisfactory' ? '#f59e0b' : rating === 'Needs Improvement' ? '#ef4444' : '#94a3b8';
+    reviewHtml =
+      '<tr><td style="padding:8px 24px 14px">' +
+      (rating ? '<div style="display:inline-block;border:2px solid ' + ratingColor + ';color:' + ratingColor + ';border-radius:8px;padding:6px 14px;font-size:13px;font-weight:700;font-family:Arial,sans-serif;margin-bottom:8px">' + rating + '</div><br>' : '') +
+      (issues  ? '<p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#94a3b8;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:.05em">Issues</p><p style="margin:0 0 10px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + issues + '</p>' : '') +
+      (actions ? '<p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#94a3b8;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:.05em">Actions</p><p style="margin:0 0 10px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + actions + '</p>' : '') +
+      (signed  ? '<p style="margin:0;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">Signed by: ' + signed + ' · ' + (weeklyRec.time||'') + '</p>' : '') +
+      '</td></tr>';
+  }
+  const reviewSection = sectionHeader('📋 Weekly Management Review') + reviewHtml;
+
+  // ── Assemble ──────────────────────────────────────
+  const sheetsUrl = getSheetsUrl();
+
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif">' +
+  '<div style="background:#f1f5f9;padding:24px 16px">' +
+  '<table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto"><tr><td>' +
+
+  // Header
+  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#1a2332;border-radius:8px 8px 0 0">' +
+  '<tr><td style="padding:20px 24px"><p style="margin:0;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#4a6080;font-family:Arial,sans-serif">Weekly Food Safety Report</p>' +
+  '<p style="margin:4px 0 0;font-size:20px;font-weight:700;color:#e6edf3;font-family:Arial,sans-serif">' + name + '</p>' +
+  '<p style="margin:4px 0 0;font-size:13px;color:#7d8da8;font-family:Arial,sans-serif">Week: ' + weekLabel + '</p></td>' +
+  '<td style="padding:20px 24px;text-align:right;vertical-align:middle">' + badgeHtml + '</td></tr>' +
+  (pct !== null ? '<tr><td colspan="2" style="padding:0 24px 16px"><table width="100%" cellpadding="0" cellspacing="0"><tr>' +
+  '<td style="background:' + headerBg + ';border-radius:3px;height:6px"><div style="width:' + barWidth + '%;height:6px;background:' + pctColor + ';border-radius:3px"></div></td>' +
+  '<td style="width:130px;padding-left:12px;font-size:11px;color:' + pctColor + ';font-family:Arial,sans-serif;white-space:nowrap">' + passedChecks + '/' + totalChecks + ' checks</td>' +
+  '</tr></table></td></tr>' : '') +
+  '</table>' +
+
+  // Day grid
+  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' +
+  sectionHeader('Daily Overview') +
+  '<tr><td style="padding:4px 24px 14px">' + gridHtml + '</td></tr></table>' +
+
+  // Sections
+  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' + tempSection + '</table>' +
+  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' + probeSection + '</table>' +
+  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' + giSection + '</table>' +
+  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' + taskSection + '</table>' +
+  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' + reviewSection + '</table>' +
+
+  // Footer
+  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#1a2332;border-radius:0 0 8px 8px;margin-top:2px">' +
+  '<tr><td style="padding:16px 24px">' +
+  (sheetsUrl ? '<p style="margin:0;font-size:12px;color:#4a6080;font-family:Arial,sans-serif">Full records &nbsp;·&nbsp; <a href="' + sheetsUrl + '" style="color:#60a5fa;text-decoration:none">Open in Google Sheets</a></p>' : '') +
+  '<p style="margin:6px 0 0;font-size:11px;color:#334a60;font-family:Arial,sans-serif">Sent by SafeChecks &nbsp;·&nbsp; On-demand weekly report</p>' +
+  '</td></tr></table>' +
+
+  '</td></tr></table></div></body></html>';
 }
