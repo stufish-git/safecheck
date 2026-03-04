@@ -811,24 +811,24 @@ async function sendReportEmail() {
   btn.disabled = true;
 
   try {
-    let payload;
+    let url;
     if (reportMode === 'daily') {
       const date = document.getElementById('report-daily-date')?.value || todayStr();
-      payload = { action: 'sendDailyEmail', date, recipients };
+      url = state.config.sheetsUrl + '?action=sendDailyEmail&date=' + encodeURIComponent(date) + '&recipients=' + encodeURIComponent(recipients.join(','));
     } else {
       const weekStart = document.getElementById('report-week-select')?.value;
-      payload = { action: 'sendWeeklyEmail', weekStart, recipients };
+      url = state.config.sheetsUrl + '?action=sendWeeklyEmail&weekStart=' + encodeURIComponent(weekStart) + '&recipients=' + encodeURIComponent(recipients.join(','));
     }
 
-    const resp = await fetch(state.config.sheetsUrl, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    const resp = await fetch(url, { method: 'GET', mode: 'cors' });
+    const data = await resp.json();
 
-    closeEmailModal();
-    showToast('Email sent to ' + recipients.join(', '), 'success');
+    if (data.status === 'ok') {
+      closeEmailModal();
+      showToast('Email sent to ' + recipients.join(', '), 'success');
+    } else {
+      showToast('Error: ' + (data.message || 'Unknown error'), 'error');
+    }
   } catch(err) {
     showToast('Failed to send: ' + err.message, 'error');
   } finally {

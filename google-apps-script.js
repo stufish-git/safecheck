@@ -79,8 +79,10 @@ function doGet(e) {
     const tabName = e.parameter.tab    || 'Opening Checks';
     const ss      = SpreadsheetApp.getActiveSpreadsheet();
 
-    if (action === 'readSettings') return handleReadSettings();
-    if (action === 'readDrafts')   return handleReadDrafts(ss);
+    if (action === 'readSettings')  return handleReadSettings();
+    if (action === 'readDrafts')    return handleReadDrafts(ss);
+    if (action === 'sendDailyEmail')  return handleSendDailyEmailGet(e, ss);
+    if (action === 'sendWeeklyEmail') return handleSendWeeklyEmailGet(e, ss);
 
     if (action === 'read') {
       const sheet = ss.getSheetByName(tabName);
@@ -1167,4 +1169,19 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
   '</td></tr></table>' +
 
   '</td></tr></table></div></body></html>';
+}
+
+// ── GET wrappers for on-demand email (called from PWA via GET) ────
+function handleSendDailyEmailGet(e, ss) {
+  const date       = e.parameter.date || getDateStr(new Date());
+  const recipStr   = e.parameter.recipients || '';
+  const recipients = recipStr.split(',').map(function(r) { return r.trim(); }).filter(Boolean);
+  return handleSendDailyEmail({ date: date, recipients: recipients });
+}
+
+function handleSendWeeklyEmailGet(e, ss) {
+  const weekStart  = e.parameter.weekStart || '';
+  const recipStr   = e.parameter.recipients || '';
+  const recipients = recipStr.split(',').map(function(r) { return r.trim(); }).filter(Boolean);
+  return handleSendWeeklyEmail({ weekStart: weekStart, recipients: recipients });
 }
