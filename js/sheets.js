@@ -241,9 +241,6 @@ async function pullAllRecords(force=false) {
   } catch(err) {
     console.error('Pull error:', err);
     setSyncStatus('error','Offline');
-  } catch(err) {
-    console.error('Pull error:', err);
-    setSyncStatus('error','Offline');
   }
 }
 
