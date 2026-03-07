@@ -44,7 +44,6 @@ const SYNC_QUEUE_KEY   = 'safechecks_sync_queue';
 const REMOTE_CACHE_KEY = 'safechecks_remote_records';
 const LAST_PULL_KEY    = 'safechecks_last_pull';
 const PULL_INTERVAL_MS = 15 * 1000;  // 15s — fast enough for multi-device, within Apps Script limits
-let isPulling = false;  // guard against concurrent pulls
 
 const SHEET_TABS = {
   opening:         'Opening Checks',
@@ -161,11 +160,9 @@ function buildPayload(record) {
 // ── PULL ──────────────────────────────────────────────
 async function pullAllRecords(force=false) {
   if (!state.config.sheetsUrl) return;
-  if (isPulling) return;  // already in flight — don't stack
   const lastPull = parseInt(localStorage.getItem(LAST_PULL_KEY)||'0');
   if (!force && Date.now()-lastPull < PULL_INTERVAL_MS) return;
 
-  isPulling = true;
   setSyncStatus('syncing','Refreshing…');
   try {
     const remoteRecords = [];
@@ -197,9 +194,6 @@ async function pullAllRecords(force=false) {
     await pullDraftsFromSheets();
 
     setSyncStatus('connected','Up to date');
-
-    // Pull updated settings (catches task/staff/equipment changes from other devices)
-    await pullSettingsFromSheets();
 
     updateDashboard();
     renderEquipmentLog();
@@ -247,8 +241,9 @@ async function pullAllRecords(force=false) {
   } catch(err) {
     console.error('Pull error:', err);
     setSyncStatus('error','Offline');
-  } finally {
-    isPulling = false;
+  } catch(err) {
+    console.error('Pull error:', err);
+    setSyncStatus('error','Offline');
   }
 }
 
@@ -509,14 +504,49 @@ function setSyncStatus(cls, label) {
   if (cls) el?.classList.add(cls);
   const lbl = el?.querySelector('.sync-label');
   if (lbl) lbl.textContent = label;
+  if (cls === 'connected') updateSyncInfoDisplay();
+}
+
+
+// ── Sync info display (Settings page) ────────────────
+function updateSyncInfoDisplay() {
+  const lastPull = parseInt(localStorage.getItem(LAST_PULL_KEY)||'0');
+  const syncEl   = document.getElementById('settings-last-sync');
+  const countEl  = document.getElementById('settings-record-count');
+  if (syncEl) {
+    syncEl.textContent = lastPull
+      ? new Date(lastPull).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit' })
+      : 'Never';
+  }
+  if (countEl) {
+    countEl.textContent = (state.records || []).length + ' records';
+  }
+}
+
+async function forceSyncNow() {
+  const btn = document.querySelector('#settings-panel-security .btn-submit');
+  if (btn) { btn.querySelector('span').textContent = 'Syncing…'; btn.disabled = true; }
+  await pullAllRecords(true);
+  await pullSettingsFromSheets();
+  updateSyncInfoDisplay();
+  if (btn) { btn.querySelector('span').textContent = 'Force Sync Now'; btn.disabled = false; }
+  showToast('Sync complete ✓', 'success');
 }
 
 let pullTimer = null;
+let settingsPollTimer = null;
+
 function startAutoPoll() {
   if (pullTimer) clearInterval(pullTimer);
   pullTimer = setInterval(() => {
     if (document.visibilityState === 'visible') pullAllRecords();
   }, PULL_INTERVAL_MS);
+
+  // Settings sync on a slower 60s interval — staff/tasks/equipment don't change every 15s
+  if (settingsPollTimer) clearInterval(settingsPollTimer);
+  settingsPollTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') pullSettingsFromSheets();
+  }, 60 * 1000);
 }
 
 document.addEventListener('visibilitychange', () => {

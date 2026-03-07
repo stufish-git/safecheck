@@ -879,9 +879,22 @@
       <div id="settings-panel-security" class="settings-panel">
         <div class="check-group" style="margin-bottom:16px">
           <h3 class="group-title">App Version</h3>
-          <div style="padding:14px 20px;display:flex;align-items:center;justify-content:space-between">
-            <span style="font-size:13px;color:var(--text-muted)">Running version</span>
-            <span id="settings-version-display" style="font-family:var(--mono);font-size:13px;color:var(--success);font-weight:700"></span>
+          <div style="padding:14px 20px;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span style="font-size:13px;color:var(--text-muted)">Running version</span>
+              <span id="settings-version-display" style="font-family:var(--mono);font-size:13px;color:var(--success);font-weight:700"></span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span style="font-size:13px;color:var(--text-muted)">Last synced</span>
+              <span id="settings-last-sync" style="font-family:var(--mono);font-size:13px;color:var(--text-muted)">—</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span style="font-size:13px;color:var(--text-muted)">Records in local cache</span>
+              <span id="settings-record-count" style="font-family:var(--mono);font-size:13px;color:var(--text-muted)">—</span>
+            </div>
+            <button class="btn-submit" style="margin-top:4px" onclick="forceSyncNow()">
+              <span>Force Sync Now</span><span class="btn-icon">↻</span>
+            </button>
           </div>
         </div>
         <div class="check-group">

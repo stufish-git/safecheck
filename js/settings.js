@@ -635,6 +635,7 @@ function pinKeyPress(key) {
 function renderSettingsPage() {
   const el = document.getElementById('settings-version-display');
   if (el) el.textContent = typeof APP_VERSION !== 'undefined' ? 'v' + APP_VERSION : '—';
+  updateSyncInfoDisplay();
   showTab('settings');
   const s = state.settings;
   document.getElementById('set-restaurant-name').value = s.restaurantName||'';
