@@ -809,7 +809,7 @@
       <!-- TASKS CONFIG -->
       <div id="settings-panel-tasks-cfg" class="settings-panel">
         <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
-          Recurring tasks appear every week on their assigned day. Staff can also add one-off tasks from the Tasks tab.
+          Recurring tasks appear on their assigned day according to their frequency. Staff can also add one-off tasks from the Tasks tab.
         </p>
         <div class="check-group" style="margin-bottom:16px">
           <h3 class="group-title">Add Recurring Task</h3>
@@ -837,6 +837,31 @@
                   <option value="kitchen">🍳 Kitchen</option>
                   <option value="foh">🍽 Front of House</option>
                 </select>
+              </div>
+            </div>
+            <div class="field-group">
+              <label class="fl">Frequency</label>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <label style="display:flex;align-items:center;gap:8px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:9px 12px;cursor:pointer">
+                  <input type="radio" name="new-task-freq" value="every" checked style="accent-color:var(--success)"/>
+                  <span style="font-size:13px;color:var(--text)">Every week</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:9px 12px;cursor:pointer">
+                  <input type="radio" name="new-task-freq" value="first" style="accent-color:var(--success)"/>
+                  <span style="font-size:13px;color:var(--text)">First week of month</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:9px 12px;cursor:pointer">
+                  <input type="radio" name="new-task-freq" value="last" style="accent-color:var(--success)"/>
+                  <span style="font-size:13px;color:var(--text)">Last week of month</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:9px 12px;cursor:pointer">
+                  <input type="radio" name="new-task-freq" value="odd" style="accent-color:var(--success)"/>
+                  <span style="font-size:13px;color:var(--text)">Fortnightly — weeks 1 &amp; 3</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:9px 12px;cursor:pointer">
+                  <input type="radio" name="new-task-freq" value="even" style="accent-color:var(--success)"/>
+                  <span style="font-size:13px;color:var(--text)">Fortnightly — weeks 2 &amp; 4</span>
+                </label>
               </div>
             </div>
             <button class="btn-submit" style="padding:12px" onclick="addRecurringTask()">

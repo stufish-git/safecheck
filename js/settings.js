@@ -1073,9 +1073,10 @@ function showResetTodayModal() {
       { id:'opening',     label:'Opening Checks',        icon:'☀' },
       { id:'closing',     label:'Closing Checks',         icon:'☽' },
       { id:'cleaning',    label:'Cleaning Schedule',      icon:'◎' },
-      { id:'temperature', label:'Equipment Temperatures', icon:'🌡' },
-      { id:'food_probe',  label:'Food Probe Checks',      icon:'🍖' },
-      { id:'weekly',      label:'Weekly Review',           icon:'▦' },
+      { id:'temperature',      label:'Equipment Temperatures', icon:'🌡' },
+      { id:'food_probe',        label:'Food Probe Checks',      icon:'🍖' },
+      { id:'goods_in',          label:'Goods In',               icon:'📦' },
+      { id:'weekly',            label:'Weekly Review',          icon:'▦' },
     ];
 
     const withCounts = types.map(t => {
@@ -1135,6 +1136,16 @@ function confirmResetToday() {
     showToast('Select at least one type to clear', 'error');
     return;
   }
+
+  // Identify records to remove and tombstone their IDs
+  const toRemove = state.records.filter(r => {
+    if (r.date !== today) return false;
+    if (!checked.includes(r.type)) return false;
+    if (!isManagement() && r.dept && r.dept !== dept) return false;
+    return true;
+  });
+  const removedIds = toRemove.map(r => r.id).filter(Boolean);
+  if (removedIds.length) addTombstones(removedIds);
 
   // Remove matching records from state
   const before = state.records.length;

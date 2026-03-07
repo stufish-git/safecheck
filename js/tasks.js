@@ -8,6 +8,16 @@
 const TASK_COMPLETIONS_KEY = 'safechecks_task_completions';
 const ONEOFF_TASKS_KEY     = 'safechecks_oneoff_tasks';
 
+
+const FREQ_LABELS = {
+  every: 'Every week',
+  first: '1st week of month',
+  last:  'Last week of month',
+  odd:   'Fortnightly W1 & W3',
+  even:  'Fortnightly W2 & W4',
+};
+function getFreqLabel(freq) { return FREQ_LABELS[freq] || 'Every week'; }
+
 const DAYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
 const DAY_LABELS = { monday:'Monday', tuesday:'Tuesday', wednesday:'Wednesday', thursday:'Thursday', friday:'Friday', saturday:'Saturday', sunday:'Sunday' };
 const DAY_SHORT  = { monday:'Mon', tuesday:'Tue', wednesday:'Wed', thursday:'Thu', friday:'Fri', saturday:'Sat', sunday:'Sun' };
@@ -128,10 +138,48 @@ function getThisWeekOneOffTasks() {
 }
 
 // ── Get all tasks for a dept/week ─────────────────────
+
+// ── Task frequency helpers ────────────────────────────
+// Returns which week-of-month (1-4) a given Monday-based weekStart falls in.
+// Week 1 = the week containing the 1st of the month.
+// If the month has a 5th week, it is treated as week 1.
+function getWeekOfMonth(weekStartStr) {
+  const mon = new Date(weekStartStr + 'T12:00:00');
+  // Find the Monday of the week containing the 1st of this month
+  const firstOfMonth = new Date(mon.getFullYear(), mon.getMonth(), 1);
+  const firstMonday  = new Date(firstOfMonth);
+  const dow = firstOfMonth.getDay(); // 0=Sun,1=Mon...
+  const offset = dow === 0 ? -6 : 1 - dow; // days back to get to Monday
+  firstMonday.setDate(firstOfMonth.getDate() + offset);
+  // How many weeks from firstMonday to mon?
+  const diff = Math.round((mon - firstMonday) / (7 * 24 * 60 * 60 * 1000));
+  const week = (diff % 4) + 1; // 1-4, wraps at 4
+  return week;
+}
+
+// Returns true if a recurring task should appear in the given week
+function taskMatchesFrequency(task, weekStartStr) {
+  const freq = task.frequency || 'every';
+  if (freq === 'every') return true;
+  const w = getWeekOfMonth(weekStartStr);
+  if (freq === 'first')  return w === 1;
+  if (freq === 'last') {
+    // Last week = week 4 (or week 1 if month only has 1-3 full weeks — edge case, use week 4)
+    // Check if next week is in a different month
+    const mon  = new Date(weekStartStr + 'T12:00:00');
+    const next = new Date(mon); next.setDate(mon.getDate() + 7);
+    return next.getMonth() !== mon.getMonth();
+  }
+  if (freq === 'odd')  return w === 1 || w === 3;
+  if (freq === 'even') return w === 2 || w === 4;
+  return true;
+}
+
 function getAllTasksForWeek(dept, weekStart) {
-  // Recurring tasks from settings
+  // Recurring tasks from settings — filtered by frequency for this week
   const recurring = (state.settings.tasks || [])
     .filter(t => t.enabled && (dept === 'mgmt' ? true : t.dept === dept))
+    .filter(t => taskMatchesFrequency(t, weekStart))
     .map(t => ({ ...t, isOneOff: false }));
 
   // One-off tasks for this week
@@ -388,7 +436,7 @@ function renderTaskEditor() {
           <div class="settings-item">
             <div class="settings-item-content">
               <div class="settings-item-main">${t.label}${t.info ? ' <span class="check-edit-has-info" title="Has info text">ⓘ</span>' : ''}</div>
-              <div class="settings-item-sub">${DAY_LABELS[t.day]} ${!t.enabled ? '· Disabled' : ''}</div>
+              <div class="settings-item-sub">${DAY_LABELS[t.day]} · ${getFreqLabel(t.frequency||'every')} ${!t.enabled ? '· Disabled' : ''}</div>
             </div>
             <div class="settings-item-actions">
               <label class="check-edit-toggle" title="${t.enabled ? 'Disable' : 'Enable'}">
@@ -405,24 +453,86 @@ function renderTaskEditor() {
 }
 
 function addRecurringTask() {
-  const label = document.getElementById('new-task-label')?.value.trim();
-  const day   = document.getElementById('new-task-day')?.value;
-  const dept  = document.getElementById('new-task-dept')?.value;
+  const label     = document.getElementById('new-task-label')?.value.trim();
+  const day       = document.getElementById('new-task-day')?.value;
+  const dept      = document.getElementById('new-task-dept')?.value;
+  const freqEl    = document.querySelector('input[name="new-task-freq"]:checked');
+  const frequency = freqEl ? freqEl.value : 'every';
   if (!label) { showToast('Enter a task description', 'error'); return; }
   if (!state.settings.tasks) state.settings.tasks = [];
-  state.settings.tasks.push({ id:'rt_'+Date.now(), label, day, dept, enabled:true });
+  state.settings.tasks.push({ id:'rt_'+Date.now(), label, day, dept, frequency, enabled:true });
   document.getElementById('new-task-label').value = '';
   saveSettings(); syncSettingsToSheets(); renderTaskEditor();
   showToast('Task added ✓', 'success');
 }
 
 function editRecurringTask(id) {
-  const t = (state.settings.tasks||[]).find(t => t.id===id); if (!t) return;
-  const label = prompt('Task description:', t.label); if (label===null) return;
-  const dayInput = prompt(`Day (${DAYS.join(', ')}):`, t.day); if (dayInput===null) return;
-  const day = DAYS.includes(dayInput.toLowerCase().trim()) ? dayInput.toLowerCase().trim() : t.day;
-  t.label = label.trim() || t.label;
-  t.day   = day;
+  const t = (state.settings.tasks||[]).find(t => t.id===id);
+  if (!t) return;
+
+  // Remove any existing edit modal
+  document.getElementById('edit-task-modal')?.remove();
+
+  const FREQ_OPTIONS = [
+    { value:'every', label:'Every week' },
+    { value:'first', label:'First week of month' },
+    { value:'last',  label:'Last week of month' },
+    { value:'odd',   label:'Fortnightly — weeks 1 & 3' },
+    { value:'even',  label:'Fortnightly — weeks 2 & 4' },
+  ];
+
+  const overlay = document.createElement('div');
+  overlay.id = 'edit-task-modal';
+  overlay.className = 'modal-overlay';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+
+  overlay.innerHTML = `
+    <div class="modal-box" style="max-width:400px">
+      <h2 class="modal-title">Edit Task</h2>
+      <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px">
+        <div class="field-group">
+          <label class="fl">Task Description</label>
+          <input type="text" id="edit-task-label" class="text-field" value="${t.label}"/>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="field-group">
+            <label class="fl">Day</label>
+            <select id="edit-task-day" class="select-field">
+              ${DAYS.map(d => `<option value="${d}" ${d===t.day?'selected':''}>${DAY_LABELS[d]}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="fl">Department</label>
+            <select id="edit-task-dept" class="select-field">
+              <option value="kitchen" ${t.dept==='kitchen'?'selected':''}>🍳 Kitchen</option>
+              <option value="foh"     ${t.dept==='foh'?'selected':''}>🍽 Front of House</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="fl">Frequency</label>
+          <select id="edit-task-freq" class="select-field">
+            ${FREQ_OPTIONS.map(f => `<option value="${f.value}" ${(t.frequency||'every')===f.value?'selected':''}>${f.label}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="document.getElementById('edit-task-modal').remove()">Cancel</button>
+        <button class="btn-submit" onclick="saveEditedTask('${id}')"><span>Save</span></button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(overlay);
+}
+
+function saveEditedTask(id) {
+  const t = (state.settings.tasks||[]).find(t => t.id===id);
+  if (!t) return;
+  t.label     = document.getElementById('edit-task-label')?.value.trim() || t.label;
+  t.day       = document.getElementById('edit-task-day')?.value || t.day;
+  t.dept      = document.getElementById('edit-task-dept')?.value || t.dept;
+  t.frequency = document.getElementById('edit-task-freq')?.value || 'every';
+  document.getElementById('edit-task-modal')?.remove();
   saveSettings(); syncSettingsToSheets(); renderTaskEditor();
   showToast('Task updated ✓', 'success');
 }

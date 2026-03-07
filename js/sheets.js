@@ -4,6 +4,40 @@
 //  1. Date format normalisation (Sheets returns dates as Date objects)
 //  2. Fields JSON column — full round-trip for all checklist types
 //  3. mergeRecords — never overwrites local fields with empty remote
+
+// ── Reset tombstones ──────────────────────────────────
+// When a record is cleared via Reset Today, its ID is stored here.
+// mergeRecords filters these out so syncs don't restore cleared records.
+// Tombstones auto-expire at end of day — they're only needed for the current day.
+
+const TOMBSTONE_KEY = 'safechecks_tombstones';
+
+function getTombstones() {
+  try {
+    const raw = localStorage.getItem(TOMBSTONE_KEY);
+    if (!raw) return {};
+    const data = JSON.parse(raw);
+    // Expire any tombstones from previous days
+    const today = todayStr();
+    const cleaned = {};
+    Object.entries(data).forEach(([id, date]) => {
+      if (date === today) cleaned[id] = date;
+    });
+    return cleaned;
+  } catch(e) { return {}; }
+}
+
+function addTombstones(ids) {
+  const today = todayStr();
+  const existing = getTombstones();
+  ids.forEach(id => { existing[id] = today; });
+  localStorage.setItem(TOMBSTONE_KEY, JSON.stringify(existing));
+}
+
+function isTombstoned(id) {
+  return !!getTombstones()[id];
+}
+
 // ═══════════════════════════════════════════════════════
 
 const SYNC_QUEUE_KEY   = 'safechecks_sync_queue';
@@ -332,12 +366,14 @@ function buildISO(dateStr, timeStr) {
 //  • Remote wins for metadata: source, summary (so history shows "remote" count correctly)
 function mergeRecords(local, remote) {
   const map = new Map();
+  const tombstones = getTombstones();
 
-  // Local records go in first
-  local.forEach(r => map.set(r.id, r));
+  // Local records go in first (skip tombstoned)
+  local.forEach(r => { if (!tombstones[r.id]) map.set(r.id, r); });
 
-  // Merge remote — never clobber non-empty local fields
+  // Merge remote — never clobber non-empty local fields, skip tombstoned
   remote.forEach(r => {
+    if (tombstones[r.id]) return;  // blocked — user cleared this today
     const existing = map.get(r.id);
     if (existing) {
       const remoteHasFields = r.fields && Object.keys(r.fields).length > 0;
