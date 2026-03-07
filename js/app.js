@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.11.0';
+const APP_VERSION = '5.13.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -239,17 +239,29 @@ function showTab(tabId) {
     if (state.config.sheetsUrl) pullAllRecords().then(updateDashboard);
     else updateDashboard();
   }
-  if (tabId === 'tasks') renderTasksTab();
+  if (tabId === 'tasks') {
+    renderTasksTab();
+    if (state.config.sheetsUrl) pullAllRecords().then(renderTasksTab);
+  }
   if (tabId === 'closing') renderUndoneTasksSection();
 
-  // Restore draft tick state when opening a checklist tab
-  if (['opening','closing'].includes(tabId)) {
+  // Restore draft tick state when opening a checklist tab + pull latest from Sheets
+  if (['opening','closing','cleaning'].includes(tabId)) {
     const dept = getFormDept(tabId);
     restoreDraft(tabId, dept);
     updateChecklistProgress(tabId, dept);
+    if (state.config.sheetsUrl) pullAllRecords().then(() => {
+      restoreDraft(tabId, dept);
+      updateChecklistProgress(tabId, dept);
+    });
   }
   if (tabId === 'weekly') {
     populateWeekSelector();
+    if (state.config.sheetsUrl) pullAllRecords().then(() => {
+      populateWeekSelector();
+      const dept = getFormDept('weekly');
+      updateChecklistProgress('weekly', dept);
+    });
   }
 
   if (tabId === 'equipment') {
@@ -683,7 +695,8 @@ function submitAllEquipment() {
   });
   if (missingAction) { showToast('Enter corrective actions for all failed items', 'error'); return; }
 
-  // Submit one record per row
+  // Build all records first, save locally, then send sequentially
+  const tempRecords = [];
   let submitted = 0;
   rows.forEach(row => {
     const equipId = row.dataset.equipId;
@@ -714,11 +727,19 @@ function submitAllEquipment() {
       summary: `${equip.name}: ${tempVal ? tempVal+'°C ' : ''}${status} · ${staff}`,
     };
     state.records.push(record);
-    syncRecordToSheets(record);
+    tempRecords.push(record);
     submitted++;
   });
 
   saveState();
+
+  // Send to Sheets sequentially — avoids Apps Script concurrent execution limits
+  (async () => {
+    for (const record of tempRecords) {
+      await syncRecordToSheets(record);
+      await new Promise(res => setTimeout(res, 300)); // small gap between requests
+    }
+  })();
 
   // Reset form
   rows.forEach(row => {

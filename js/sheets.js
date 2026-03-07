@@ -194,14 +194,52 @@ async function pullAllRecords(force=false) {
     await pullDraftsFromSheets();
 
     setSyncStatus('connected','Up to date');
+
+    // Pull updated settings (catches task/staff/equipment changes from other devices)
+    await pullSettingsFromSheets();
+
     updateDashboard();
     renderEquipmentLog();
     renderFoodProbeLog();
     updateFoodProbeDayStatus();
     updateEquipDayStatus();
-    // If tasks tab is open, refresh it
-    if (document.getElementById('tab-tasks')?.classList.contains('active')) {
+
+    // Refresh whichever checklist tab is currently open
+    for (const t of ['opening','closing','cleaning']) {
+      if (document.getElementById('tab-' + t)?.classList.contains('active')) {
+        const dept = getFormDept(t);
+        restoreDraft(t, dept);
+        updateChecklistProgress(t, dept);
+        break;
+      }
+    }
+    // Refresh whichever data tab is currently active
+    const activeTab = document.querySelector('.tab-section.active')?.id;
+
+    if (activeTab === 'tab-tasks') {
       renderTasksTab();
+    }
+    if (activeTab === 'tab-goods-in') {
+      renderGoodsInLog();
+      updateGILogBadge();
+    }
+    if (activeTab === 'tab-weekly') {
+      const dept = getFormDept('weekly');
+      updateChecklistProgress('weekly', dept);
+    }
+    if (activeTab === 'tab-closing') {
+      renderUndoneTasksSection();
+      const dept = getFormDept('closing');
+      updateChecklistProgress('closing', dept);
+    }
+    if (activeTab === 'tab-probe') {
+      updateFoodProbeDayStatus();
+    }
+    if (activeTab === 'tab-history') {
+      loadHistory();
+    }
+    if (activeTab === 'tab-reports') {
+      initReportsTab();
     }
   } catch(err) {
     console.error('Pull error:', err);
