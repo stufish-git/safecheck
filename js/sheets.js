@@ -44,6 +44,7 @@ const SYNC_QUEUE_KEY   = 'safechecks_sync_queue';
 const REMOTE_CACHE_KEY = 'safechecks_remote_records';
 const LAST_PULL_KEY    = 'safechecks_last_pull';
 const PULL_INTERVAL_MS = 15 * 1000;  // 15s — fast enough for multi-device, within Apps Script limits
+let isPulling = false;  // guard against concurrent pulls
 
 const SHEET_TABS = {
   opening:         'Opening Checks',
@@ -160,9 +161,11 @@ function buildPayload(record) {
 // ── PULL ──────────────────────────────────────────────
 async function pullAllRecords(force=false) {
   if (!state.config.sheetsUrl) return;
+  if (isPulling) return;  // already in flight — don't stack
   const lastPull = parseInt(localStorage.getItem(LAST_PULL_KEY)||'0');
   if (!force && Date.now()-lastPull < PULL_INTERVAL_MS) return;
 
+  isPulling = true;
   setSyncStatus('syncing','Refreshing…');
   try {
     const remoteRecords = [];
@@ -244,6 +247,8 @@ async function pullAllRecords(force=false) {
   } catch(err) {
     console.error('Pull error:', err);
     setSyncStatus('error','Offline');
+  } finally {
+    isPulling = false;
   }
 }
 

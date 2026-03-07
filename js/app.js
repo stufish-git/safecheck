@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.13.0';
+const APP_VERSION = '5.14.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -236,12 +236,12 @@ function showTab(tabId) {
   document.querySelector(`[data-tab="${tabId}"]`)?.classList.add('active');
 
   if (tabId === 'dashboard') {
-    if (state.config.sheetsUrl) pullAllRecords().then(updateDashboard);
+    if (state.config.sheetsUrl) pullAllRecords(true).then(updateDashboard);
     else updateDashboard();
   }
   if (tabId === 'tasks') {
     renderTasksTab();
-    if (state.config.sheetsUrl) pullAllRecords().then(renderTasksTab);
+    if (state.config.sheetsUrl) pullAllRecords(true).then(renderTasksTab);
   }
   if (tabId === 'closing') renderUndoneTasksSection();
 
@@ -250,14 +250,14 @@ function showTab(tabId) {
     const dept = getFormDept(tabId);
     restoreDraft(tabId, dept);
     updateChecklistProgress(tabId, dept);
-    if (state.config.sheetsUrl) pullAllRecords().then(() => {
+    if (state.config.sheetsUrl) pullAllRecords(true).then(() => {
       restoreDraft(tabId, dept);
       updateChecklistProgress(tabId, dept);
     });
   }
   if (tabId === 'weekly') {
     populateWeekSelector();
-    if (state.config.sheetsUrl) pullAllRecords().then(() => {
+    if (state.config.sheetsUrl) pullAllRecords(true).then(() => {
       populateWeekSelector();
       const dept = getFormDept('weekly');
       updateChecklistProgress('weekly', dept);
@@ -269,7 +269,7 @@ function showTab(tabId) {
     buildEquipmentCheckUI(dept);
     renderEquipmentLog(dept);
     updateEquipDayStatus();
-    if (state.config.sheetsUrl) pullAllRecords().then(() => { renderEquipmentLog(dept); updateEquipDayStatus(); });
+    if (state.config.sheetsUrl) pullAllRecords(true).then(() => { renderEquipmentLog(dept); updateEquipDayStatus(); });
   }
   if (tabId === 'probe') {
     const probeStaffEl = document.getElementById('probe-staff');
@@ -286,19 +286,19 @@ function showTab(tabId) {
     }
     renderFoodProbeLog();
     updateFoodProbeDayStatus();
-    if (state.config.sheetsUrl) pullAllRecords().then(() => { renderFoodProbeLog(); updateFoodProbeDayStatus(); });
+    if (state.config.sheetsUrl) pullAllRecords(true).then(() => { renderFoodProbeLog(); updateFoodProbeDayStatus(); });
   }
   if (tabId === 'history') {
-    if (state.config.sheetsUrl) pullAllRecords().then(loadHistory);
+    if (state.config.sheetsUrl) pullAllRecords(true).then(loadHistory);
     else loadHistory();
   }
   if (tabId === 'reports') {
-    if (state.config.sheetsUrl) pullAllRecords().then(initReportsTab);
+    if (state.config.sheetsUrl) pullAllRecords(true).then(initReportsTab);
     else initReportsTab();
   }
   if (tabId === 'goods-in') {
     initGoodsInTab();
-    if (state.config.sheetsUrl) pullAllRecords().then(() => { renderGoodsInLog(); updateGILogBadge(); });
+    if (state.config.sheetsUrl) pullAllRecords(true).then(() => { renderGoodsInLog(); updateGILogBadge(); });
   }
 }
 
