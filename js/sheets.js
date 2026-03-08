@@ -439,18 +439,17 @@ function syncRemoteTaskCompletions(remoteRecords) {
     const completions = loadTaskCompletions();
     let changed = false;
 
-    // Group by task key — find the single latest record per task
-    // This avoids timestamp comparison drift between local and remote
+    // Find the latest remote record per task key.
+    // We use the row order (last in sheet = most recent) since timestamps
+    // lose their time component when Sheets auto-formats the Time column.
     const latestByKey = {};
     taskRecs.forEach(r => {
       const taskId    = r.fields?.task_id   || '';
       const weekStart = r.fields?.task_week || '';
       if (!taskId || !weekStart) return;
       const key = `${weekStart}__${taskId}`;
-      const existing = latestByKey[key];
-      const rTs = new Date(r.iso || 0).getTime();
-      const eTs = existing ? new Date(existing.iso || 0).getTime() : 0;
-      if (rTs > eTs) latestByKey[key] = r;
+      // Later entries in the array overwrite earlier ones — last row wins
+      latestByKey[key] = r;
     });
 
     Object.entries(latestByKey).forEach(([key, r]) => {
@@ -459,23 +458,20 @@ function syncRemoteTaskCompletions(remoteRecords) {
       const staffName = r.fields.task_done_by || '';
       const action    = r.fields.task_action  || 'done';
 
-      const local   = completions[key];
-      const remoteTs = new Date(r.iso || 0).getTime();
-      const localTs  = local ? new Date(local.timestamp || 0).getTime() : 0;
+      const local = completions[key];
 
-      // Only let remote overwrite local if remote is strictly newer
-      // Give local a 2-second grace window to handle same-device clock drift
-      if (remoteTs <= localTs - 2000) return;
-
-      // If local is marked done and remote is an older untick — keep local
-      if (local?.done === true && action === 'untick' && remoteTs < localTs) return;
+      // NEVER overwrite a locally-made change with remote data.
+      // Local actions have no source field — they were set by this device's user.
+      // Remote-applied entries have source:'remote' — safe to overwrite.
+      // This avoids timestamp comparison which is unreliable (Sheets loses time component).
+      if (local && local.source !== 'remote') return;
 
       if (action === 'untick') {
         completions[key] = { taskId, weekStart, done: false, unticked: true,
-          timestamp: r.iso || new Date().toISOString(), source: 'remote' };
+          timestamp: new Date().toISOString(), source: 'remote' };
       } else {
         completions[key] = { taskId, weekStart, staffName, done: true,
-          timestamp: r.iso || new Date().toISOString(), source: 'remote' };
+          timestamp: new Date().toISOString(), source: 'remote' };
       }
       changed = true;
     });
