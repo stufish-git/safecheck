@@ -439,32 +439,41 @@ function syncRemoteTaskCompletions(remoteRecords) {
     const completions = loadTaskCompletions();
     let changed = false;
 
-    // Sort oldest-first so latest record wins when we process them in order
-    const sorted = [...taskRecs].sort((a, b) =>
-      new Date(a.iso || 0) - new Date(b.iso || 0)
-    );
-
-    sorted.forEach(r => {
-      const taskId    = r.fields?.task_id     || '';
-      const weekStart = r.fields?.task_week   || '';
-      const staffName = r.fields?.task_done_by || '';
-      const action    = r.fields?.task_action  || 'done';
+    // Group by task key — find the single latest record per task
+    // This avoids timestamp comparison drift between local and remote
+    const latestByKey = {};
+    taskRecs.forEach(r => {
+      const taskId    = r.fields?.task_id   || '';
+      const weekStart = r.fields?.task_week || '';
       if (!taskId || !weekStart) return;
+      const key = `${weekStart}__${taskId}`;
+      const existing = latestByKey[key];
+      const rTs = new Date(r.iso || 0).getTime();
+      const eTs = existing ? new Date(existing.iso || 0).getTime() : 0;
+      if (rTs > eTs) latestByKey[key] = r;
+    });
 
-      const key      = `${weekStart}__${taskId}`;
-      const existing = completions[key];
+    Object.entries(latestByKey).forEach(([key, r]) => {
+      const taskId    = r.fields.task_id;
+      const weekStart = r.fields.task_week;
+      const staffName = r.fields.task_done_by || '';
+      const action    = r.fields.task_action  || 'done';
+
+      const local   = completions[key];
       const remoteTs = new Date(r.iso || 0).getTime();
-      const localTs  = existing ? new Date(existing.timestamp || 0).getTime() : 0;
+      const localTs  = local ? new Date(local.timestamp || 0).getTime() : 0;
 
-      // Only apply if remote is newer than what we already have locally
-      if (remoteTs <= localTs) return;
+      // Only let remote overwrite local if remote is strictly newer
+      // Give local a 2-second grace window to handle same-device clock drift
+      if (remoteTs <= localTs - 2000) return;
+
+      // If local is marked done and remote is an older untick — keep local
+      if (local?.done === true && action === 'untick' && remoteTs < localTs) return;
 
       if (action === 'untick') {
-        // Remote untick — mark as tombstone so it stays unticked
         completions[key] = { taskId, weekStart, done: false, unticked: true,
           timestamp: r.iso || new Date().toISOString(), source: 'remote' };
       } else {
-        // Remote tick — mark as done
         completions[key] = { taskId, weekStart, staffName, done: true,
           timestamp: r.iso || new Date().toISOString(), source: 'remote' };
       }
