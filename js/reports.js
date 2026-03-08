@@ -306,7 +306,8 @@ function buildDailyTaskGrid(dateStr) {
   const dayName = dayNames[monOffset] || '';
 
   const allTasks = (state.settings.tasks || []).filter(t => t.enabled);
-  const dayTasks = allTasks.filter(t => t.day === dayName);
+  // taskMatchesFrequency filters out first/last/odd/even tasks on wrong weeks
+  const dayTasks = allTasks.filter(t => t.day === dayName && taskMatchesFrequency(t, weekStart));
 
   if (!dayTasks.length) {
     return `<div class="report-empty-row">No tasks scheduled for this day</div>`;

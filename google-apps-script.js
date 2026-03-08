@@ -1,6 +1,14 @@
 /**
  * ═══════════════════════════════════════════════════════
- *  SAFECHECKS — Google Apps Script v5.3
+ *  SAFECHECKS — Google Apps Script v5.4
+ *
+ *  CHANGES FROM v5.3:
+ *  - setupSheets: added missing 'Cooling Time' column to Food Probe Log
+ *  - setupSheets: added missing 'Action' column (col H) to Task Completions
+ *  - getTodayTasks: reads Action column — untick records no longer counted
+ *    as done in nightly and on-demand emails
+ *  - buildEmailHtml: fixed daily Goods In section — bare <tr> was outside
+ *    any <table>, producing invalid HTML and broken email rendering
  *
  *  CHANGES FROM v5.2:
  *  - Added Goods In Log tab to setupSheets
@@ -195,13 +203,13 @@ function setupSheets() {
       name: 'Food Probe Log',
       headers: [
         'ID','Date','Time','Department',
-        'Product / Dish','Core Temperature (°C)','Status','Probe Used','Corrective Action','Logged By',
+        'Product / Dish','Core Temperature (°C)','Status','Probe Used','Corrective Action','Cooling Time','Logged By',
         'Fields JSON',
       ],
     },
     {
       name: 'Task Completions',
-      headers: ['ID','Date','Time','Department','Task ID','Week Start','Completed By'],
+      headers: ['ID','Date','Time','Department','Task ID','Week Start','Completed By','Action'],
     },
     {
       name: 'Goods In Log',
@@ -236,10 +244,11 @@ function setupSheets() {
   } catch(e) {}
 
   SpreadsheetApp.getUi().alert(
-    '&#x2705; SafeChecks v5.3 — All sheets recreated!\n\n' +
+    '&#x2705; SafeChecks v5.4 — All sheets recreated!\n\n' +
     'Tabs: Opening Checks, Closing Checks, Temperature Log,\n' +
-    'Food Probe Log, Cleaning Schedule, Weekly Review,\n' +
-    'Task Completions, Goods In Log, Settings\n\n' +
+    'Food Probe Log (incl. Cooling Time), Cleaning Schedule,\n' +
+    'Weekly Review, Task Completions (incl. Action),\n' +
+    'Goods In Log, Settings\n\n' +
     'Now: Deploy → Manage deployments → Edit → New version → Deploy'
   );
 }
@@ -586,15 +595,16 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
       }
     });
   }
-  var giSection = sectionHeader('&#x1F4E6; Goods In') +
-    '<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:4px">' +
+  var giSection = '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' +
+    sectionHeader('&#x1F4E6; Goods In') +
+    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
     '<thead><tr>' +
     '<th style="text-align:left;padding:6px 8px;font-size:10px;font-family:Arial,sans-serif;color:#64748b;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #1e293b">Supplier</th>' +
     '<th style="text-align:left;padding:6px 8px;font-size:10px;font-family:Arial,sans-serif;color:#64748b;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #1e293b">Type</th>' +
     '<th style="text-align:left;padding:6px 8px;font-size:10px;font-family:Arial,sans-serif;color:#64748b;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #1e293b">Temp</th>' +
     '<th style="text-align:left;padding:6px 8px;font-size:10px;font-family:Arial,sans-serif;color:#64748b;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #1e293b">Outcome</th>' +
     '<th style="text-align:left;padding:6px 8px;font-size:10px;font-family:Arial,sans-serif;color:#64748b;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #1e293b">Signed By</th>' +
-    '</tr></thead><tbody>' + giRows + '</tbody></table>';
+    '</tr></thead><tbody>' + giRows + '</tbody></table></td></tr></table>';
 
   // ── Tasks section ─────────────────────────────────
   const doneCount = tasks.filter(t => t.done).length;
@@ -800,6 +810,36 @@ function getTodayRecords(ss, tabName, today) {
   return results;
 }
 
+// ── Task frequency helpers (mirrors tasks.js) ─────────────────────────────
+// Returns which week-of-month (1–4) a given Monday-based weekStart falls in.
+// Week 1 = the week containing the 1st of the month.
+// If the month has a 5th week it wraps back to week 1.
+function getWeekOfMonth(weekStartStr) {
+  const mon = new Date(weekStartStr + 'T12:00:00');
+  const firstOfMonth = new Date(mon.getFullYear(), mon.getMonth(), 1);
+  const dow = firstOfMonth.getDay(); // 0=Sun,1=Mon...
+  const firstMonday = new Date(firstOfMonth);
+  firstMonday.setDate(firstOfMonth.getDate() + (dow === 0 ? -6 : 1 - dow));
+  const diff = Math.round((mon - firstMonday) / (7 * 24 * 60 * 60 * 1000));
+  return (diff % 4) + 1; // 1–4, wraps at 4
+}
+
+function taskMatchesFrequencyAS(task, weekStartStr) {
+  const freq = task.frequency || 'every';
+  if (freq === 'every') return true;
+  const w = getWeekOfMonth(weekStartStr);
+  if (freq === 'first') return w === 1;
+  if (freq === 'last') {
+    // Last week = week where next Monday is in a different month
+    const mon  = new Date(weekStartStr + 'T12:00:00');
+    const next = new Date(mon); next.setDate(mon.getDate() + 7);
+    return next.getMonth() !== mon.getMonth();
+  }
+  if (freq === 'odd')  return w === 1 || w === 3;
+  if (freq === 'even') return w === 2 || w === 4;
+  return true;
+}
+
 function getTodayTasks(ss, today, settings) {
   // Determine today's day name for scheduled tasks
   // Use the passed-in today date, not new Date(), so historical reports work correctly
@@ -807,28 +847,43 @@ function getTodayTasks(ss, today, settings) {
   const d = new Date(today + 'T12:00:00');
   const todayName = dayNames[d.getDay()];
 
-  const scheduledTasks = (settings.tasks || []).filter(t => t.enabled && t.day === todayName);
-  if (!scheduledTasks.length) return [];
-
-  // Get week start (Monday) for the given date
+  // Get week start (Monday) for the given date — needed for frequency check
   const monOffset = (d.getDay() + 6) % 7;
   const mon = new Date(d); mon.setDate(d.getDate() - monOffset);
   const weekStart = getDateStr(mon);
 
+  // Filter by day AND frequency — matches the behaviour of getAllTasksForWeek() in the PWA
+  const scheduledTasks = (settings.tasks || []).filter(t =>
+    t.enabled &&
+    t.day === todayName &&
+    taskMatchesFrequencyAS(t, weekStart)
+  );
+  if (!scheduledTasks.length) return [];
+
   // Pull task completion records
+  // Last row for a given taskId+week wins (sheet is append-only, latest = bottom).
+  // Action 'untick' means the user deliberately un-ticked — treat as not done.
   const sheet = ss.getSheetByName('Task Completions');
   const completions = {};
   if (sheet && sheet.getLastRow() >= 2) {
-    const data    = sheet.getDataRange().getValues();
-    const headers = data[0].map(h => String(h).trim());
-    const tidCol  = headers.indexOf('Task ID');
-    const wkCol   = headers.indexOf('Week Start');
-    const byCol   = headers.indexOf('Completed By');
+    const data      = sheet.getDataRange().getValues();
+    const headers   = data[0].map(h => String(h).trim());
+    const tidCol    = headers.indexOf('Task ID');
+    const wkCol     = headers.indexOf('Week Start');
+    const byCol     = headers.indexOf('Completed By');
+    const actionCol = headers.indexOf('Action');   // col H — may be -1 on old sheets
     for (let i = 1; i < data.length; i++) {
       const taskId = String(data[i][tidCol] || '');
       let   wk     = data[i][wkCol];
       if (wk instanceof Date) wk = getDateStr(wk);
-      if (String(wk) === weekStart && taskId) {
+      if (String(wk) !== weekStart || !taskId) continue;
+
+      const action = actionCol >= 0 ? String(data[i][actionCol] || 'done').trim() : 'done';
+      if (action === 'untick') {
+        // Explicit untick — remove any earlier completion for this task
+        delete completions[taskId];
+      } else {
+        // 'done' (or blank/legacy row) — record as completed; last row wins
         completions[taskId] = String(data[i][byCol] || '');
       }
     }
