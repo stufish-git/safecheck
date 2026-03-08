@@ -95,7 +95,7 @@ async function syncRecordToSheets(record) {
     });
     setSyncStatus('connected','Connected');
     markSynced(record.id);
-    setTimeout(()=>pullAllRecords(true), 2000);
+    schedulePull();
   } catch(err) {
     console.error('Push failed:', err);
     setSyncStatus('error','Sync failed');
@@ -549,6 +549,15 @@ async function forceSyncNow() {
 
 let pullTimer = null;
 let settingsPollTimer = null;
+
+// Debounced post-push pull — prevents N overlapping forced pulls when a batch
+// of records is sent (e.g. equipment with 8 items). Any rapid-fire calls within
+// the 2s window collapse into a single pull fired after the last push settles.
+let _scheduledPull = null;
+function schedulePull() {
+  if (_scheduledPull) clearTimeout(_scheduledPull);
+  _scheduledPull = setTimeout(() => { _scheduledPull = null; pullAllRecords(true); }, 2000);
+}
 
 function startAutoPoll() {
   if (pullTimer) clearInterval(pullTimer);

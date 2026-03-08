@@ -950,7 +950,7 @@ function submitPinChange() {
 function showReassignDeviceModal() {
   showPinModal(()=>{
     saveDevice(null); state.device=null;
-    showDeviceSetup(()=>{ applyDeviceIdentity(); rebuildAllChecklists(); rebuildSignedByDropdowns(); rebuildTempLocationDropdown(); rebuildProbeProductDropdown(); showTab('dashboard'); updateDashboard(); });
+    showDeviceSetup(()=>{ applyDeviceIdentity(); rebuildAllChecklists(); rebuildSignedByDropdowns(); rebuildTempLocationDropdown(); rebuildProbeProductDropdown(); rebuildSupplierDropdown(); showTab('dashboard'); updateDashboard(); });
   });
 }
 
