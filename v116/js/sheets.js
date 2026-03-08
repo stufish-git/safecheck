@@ -307,11 +307,15 @@ function parseSheetRow(row, type) {
 
     // Fallback for task_completion (no Fields JSON column — use named columns)
     if (type === 'task_completion') {
+      const taskDoneBy = row['Completed By'] || '';
+      // Infer action: if Action column exists use it; otherwise infer from Completed By
+      // (empty Completed By = untick — handles sheets created before Action column existed)
+      const taskAction = row['Action'] || (taskDoneBy === '' ? 'untick' : 'done');
       fields = {
-        task_id:      row['Task ID']      || '',
-        task_week:    row['Week Start']   || '',
-        task_done_by: row['Completed By'] || '',
-        task_action:  row['Action']       || 'done',
+        task_id:      row['Task ID']   || '',
+        task_week:    row['Week Start'] || '',
+        task_done_by: taskDoneBy,
+        task_action:  taskAction,
       };
     }
 

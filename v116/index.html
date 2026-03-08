@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="theme-color" content="#0d1117"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="SafeChecks"/>
+  <meta name="description" content="Restaurant food safety compliance — Kitchen, FOH, Management"/>
+  <title>SafeChecks</title>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icons/icon-192.png"/>
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png"/>
+  <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand">
+        <span class="brand-icon">✓</span>
+        <span class="brand-name">SafeChecks</span>
+      </div>
+      <div class="header-right">
+        <div id="sync-status" class="sync-status">
+          <span class="sync-dot"></span>
+          <span class="sync-label">Not connected</span>
+        </div>
+        <button id="btn-connect"    class="btn-connect"    onclick="connectGoogleSheets()">Connect Sheets</button>
+        <button id="btn-disconnect" class="btn-disconnect hidden" onclick="disconnectSheets()">Disconnect</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- NAV -->
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="dashboard" onclick="showTab('dashboard')"><span class="tab-icon">⌂</span><span class="tab-label">Dashboard</span></button>
+    <button class="tab-btn" data-tab="opening"          onclick="showTab('opening')">  <span class="tab-icon">☀</span><span class="tab-label">Opening</span></button>
+    <button class="tab-btn" data-tab="equipment"        onclick="showTab('equipment')"><span class="tab-icon">🌡</span><span class="tab-label">Equipment</span></button>
+    <button class="tab-btn" data-tab="goods-in"         onclick="showTab('goods-in')"><span class="tab-icon">📦</span><span class="tab-label">Goods In</span></button>
+    <button class="tab-btn" data-tab="probe"            onclick="showTab('probe')">    <span class="tab-icon">🍖</span><span class="tab-label">Probe</span></button>
+    <button class="tab-btn" data-tab="closing"          onclick="showTab('closing')">  <span class="tab-icon">☽</span><span class="tab-label">Closing</span></button>
+    <button class="tab-btn" data-tab="weekly"           onclick="showTab('weekly')">   <span class="tab-icon">▦</span><span class="tab-label">Weekly</span></button>
+    <button class="tab-btn" data-tab="history"          onclick="showTab('history')">  <span class="tab-icon">◷</span><span class="tab-label">History</span></button>
+    <button class="tab-btn" data-tab="tasks"            onclick="showTab('tasks')">    <span class="tab-icon">☑</span><span class="tab-label">Tasks</span></button>
+    <button class="tab-btn" data-tab="reports"          onclick="showTab('reports')">   <span class="tab-icon">📊</span><span class="tab-label">Reports</span></button>
+    <button class="tab-btn" data-tab="settings"         onclick="showSettingsTab()">   <span class="tab-icon">⚙</span><span class="tab-label">Settings</span></button>
+  </nav>
+
+  <main class="app-main">
+
+    <!-- ═══════════════════════════════ DASHBOARD ═══ -->
+    <section id="tab-dashboard" class="tab-section active">
+      <div class="section-header">
+        <h1 class="section-title">Today's Overview</h1>
+        <p class="section-date" id="today-date"></p>
+        <p class="section-date" id="dash-last-refresh" style="font-size:11px;opacity:0.5;margin-top:2px"></p>
+      </div>
+      <div id="dash-alerts" class="dash-alerts"></div>
+      <div id="dashboard-grid"></div>
+    </section>
+
+    <!-- ═══════════════════════════════ OPENING ═════ -->
+    <section id="tab-opening" class="tab-section">
+      <div class="section-header">
+        <h1 class="section-title">Opening Checks</h1>
+        <p class="section-subtitle">Complete before service begins</p>
+      </div>
+      <form id="form-opening" class="checklist-form" onsubmit="return false">
+        <!-- dept selector — shown for management only -->
+        <div id="opening-dept-selector" class="dept-selector-bar" style="display:none">
+          <span class="dept-bar-label">Submitting for:</span>
+          <button class="dept-bar-btn active" data-dept="kitchen" onclick="setFormDept('opening','kitchen')">🍳 Kitchen</button>
+          <button class="dept-bar-btn" data-dept="foh" onclick="setFormDept('opening','foh')">🍽 FOH</button>
+        </div>
+        <div class="signed-by-group signed-by-top">
+          <label class="notes-label">Signed off by</label>
+          <select class="select-field signed-by-select" data-key="open_signed_by">
+            <option value="">Select staff member...</option>
+          </select>
+        </div>
+        <div id="opening-progress" class="draft-progress" style="display:none"></div>
+        <div id="opening-banner" class="checklist-banner" style="display:none"></div>
+        <!-- check groups injected by rebuildChecklist() -->
+        <div class="notes-group">
+          <label class="notes-label">Notes / Issues</label>
+          <textarea class="notes-field" data-key="open_notes" placeholder="Any issues or comments..."></textarea>
+        </div>
+        <div class="form-actions">
+          <button class="btn-submit" onclick="submitChecklist('opening')">
+            <span>Finalise &amp; Submit</span><span class="btn-icon">→</span>
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ═══════════════════════════ EQUIPMENT TEMPS ═ -->
+    <section id="tab-equipment" class="tab-section">
+      <div class="section-header">
+        <h1 class="section-title">Equipment Checks</h1>
+        <p class="section-subtitle">Log temperatures for all equipment at once</p>
+        <div id="equip-day-status" class="probe-day-status" style="margin-top:8px"></div>
+      </div>
+      <!-- dept selector — shown for management only, hidden via applyDeviceIdentity -->
+      <div id="equip-dept-selector" class="dept-selector-bar" style="display:none">
+        <span class="dept-bar-label">Viewing:</span>
+        <button class="dept-bar-btn active" data-dept="kitchen" onclick="setFormDept('equipment','kitchen')">🍳 Kitchen</button>
+        <button class="dept-bar-btn" data-dept="foh" onclick="setFormDept('equipment','foh')">🍽 FOH</button>
+      </div>
+
+      <div class="temp-targets" style="margin:0 0 16px">
+        <span class="target-chip">🧊 Fridge ≤5°C</span>
+        <span class="target-chip">❄ Freezer ≤-18°C</span>
+        <span class="target-chip">♨ Hot Hold ≥63°C</span>
+        <span class="target-chip">🔥 Cooked ≥75°C</span>
+      </div>
+
+      <!-- Staff + probe fields -->
+      <div class="equip-header-fields">
+        <div class="field-group">
+          <label>Logged by</label>
+          <select class="select-field" id="equip-staff">
+            <option value="">Select staff member...</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label>Probe / method used</label>
+          <!-- EQUIPMENT TAB ONLY: Built-in Gauge + Infrared Gun
+               DO NOT copy options from the Food Probe tab (id=probe-instrument).
+               These two dropdowns are intentionally different. -->
+          <select class="select-field" id="equip-probe">
+            <option value="Built-in Gauge" selected>Built-in Gauge</option>
+            <option value="Infrared Gun">Infrared Gun</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Equipment rows — built by buildEquipmentCheckUI() -->
+      <div id="equip-check-list"></div>
+
+      <!-- Today's log -->
+      <div class="temp-log-display" style="margin-top:24px">
+        <h3 class="group-title">Today's Equipment Readings</h3>
+        <div class="temp-log-list" id="equip-log-list"></div>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════ GOODS IN ═════ -->
+    <section id="tab-goods-in" class="tab-section">
+      <div class="section-header">
+        <h1 class="section-title">Goods In</h1>
+        <p class="section-subtitle">Log deliveries and record temperatures</p>
+      </div>
+
+      <div class="gi-view-toggle">
+        <button class="gi-vt-btn active" id="gi-vt-new" onclick="showGoodsInView('new')">+ New Delivery</button>
+        <button class="gi-vt-btn" id="gi-vt-log" onclick="showGoodsInView('log')">Today's Log <span id="gi-log-count" class="gi-count-badge"></span></button>
+      </div>
+
+      <!-- New delivery form -->
+      <div id="gi-view-new">
+
+        <div class="check-group" style="margin-bottom:12px">
+          <h3 class="group-title">Supplier</h3>
+          <div style="padding:12px 16px">
+            <select class="select-field" id="gi-supplier">
+              <option value="">Select supplier...</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="check-group" style="margin-bottom:12px">
+          <h3 class="group-title">Delivery Type</h3>
+          <div class="gi-type-toggle">
+            <button class="gi-type-btn gi-fresh-sel" id="gi-btn-fresh" onclick="setGIType('fresh')">
+              <span class="gi-type-icon">&#x1F33F;</span>Fresh / Chilled
+            </button>
+            <button class="gi-type-btn" id="gi-btn-frozen" onclick="setGIType('frozen')">
+              <span class="gi-type-icon">&#x2744;&#xFE0F;</span>Frozen
+            </button>
+          </div>
+        </div>
+
+        <div class="check-group" style="margin-bottom:12px">
+          <h3 class="group-title">Delivery Temperature</h3>
+          <div class="gi-temp-row">
+            <button class="equip-stepper" type="button" onclick="stepGITemp(-1)">&#8722;</button>
+            <input type="number" step="0.1" class="equip-temp-input gi-temp-input" id="gi-temp" placeholder="&#176;C"
+              oninput="updateGITempHint(this.value)"/>
+            <button class="equip-stepper" type="button" onclick="stepGITemp(+1)">+</button>
+            <div class="gi-temp-hint" id="gi-temp-hint">&#8212;</div>
+          </div>
+        </div>
+
+        <div class="check-group" style="margin-bottom:12px">
+          <h3 class="group-title">Checks</h3>
+          <div style="padding:12px 16px">
+            <label class="gi-checkbox-row" onclick="toggleGIExpiry(this)">
+              <div class="gi-checkbox" id="gi-expiry-box"></div>
+              <div>
+                <div style="font-size:14px;font-weight:600">Expiry dates checked</div>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:2px">All items within date on arrival</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="check-group" style="margin-bottom:12px">
+          <h3 class="group-title">Outcome</h3>
+          <div class="gi-outcome-btns">
+            <button class="gi-outcome-btn gi-accept-sel" id="gi-btn-accept" onclick="setGIOutcome('accepted')">&#10003; Accepted</button>
+            <button class="gi-outcome-btn" id="gi-btn-reject" onclick="setGIOutcome('rejected')">&#10007; Rejected</button>
+          </div>
+        </div>
+
+        <div class="check-group" style="margin-bottom:12px">
+          <h3 class="group-title">Notes <span style="font-weight:400;color:var(--text-muted)">(optional)</span></h3>
+          <div style="padding:12px 16px">
+            <textarea class="select-field" id="gi-notes" style="height:auto;min-height:52px;resize:vertical" rows="2"
+              placeholder="e.g. 2 boxes rejected — use-by date tomorrow..."></textarea>
+          </div>
+        </div>
+
+        <div class="check-group" style="margin-bottom:12px">
+          <div style="padding:12px 16px;display:flex;align-items:center;gap:12px">
+            <label style="font-size:13px;color:var(--text-muted);flex-shrink:0">Signed by</label>
+            <select class="select-field" id="gi-signed-by" style="flex:1">
+              <option value="">Select staff...</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="padding:0 0 16px">
+          <button class="btn-submit" onclick="submitGoodsIn()">
+            <span>Submit Delivery Record</span><span class="btn-icon">&#8594;</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Today's log -->
+      <div id="gi-view-log" style="display:none">
+        <div id="gi-log-list"></div>
+      </div>
+
+    </section>
+
+    <!-- ═══════════════════════════════ FOOD PROBE ════ -->
+    <section id="tab-probe" class="tab-section">
+      <div class="section-header">
+        <h1 class="section-title">Food Probe Checks</h1>
+        <p class="section-subtitle">Core temperature of cooked food · ≥75°C to pass · min. 1 per day</p>
+        <div id="food-probe-day-status" class="probe-day-status" style="margin-top:8px"></div>
+      </div>
+
+      <div class="temp-entry-form">
+        <div class="signed-by-group signed-by-top">
+          <label class="notes-label">Logged by</label>
+          <select class="select-field" id="probe-staff">
+            <option value="">Select staff member...</option>
+          </select>
+        </div>
+        <div class="temp-entry-grid">
+          <div class="field-group" style="grid-column:span 2">
+            <label>Product / Dish</label>
+            <select class="select-field" id="probe-product">
+              <option value="">Select product / dish...</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label>Core Temperature °C</label>
+            <input type="number" class="text-field" id="probe-temp"
+              placeholder="e.g. 78" step="0.1" min="0" max="150"/>
+          </div>
+          <div class="field-group">
+            <label>Probe Used</label>
+            <!-- FOOD PROBE TAB ONLY: Digital Probe 1, Digital Probe 2, Infrared Gun
+                 DO NOT copy options from the Equipment tab (id=equip-probe).
+                 These two dropdowns are intentionally different. -->
+            <select class="select-field" id="probe-instrument">
+              <option value="Digital Probe 1" selected>Digital Probe 1</option>
+              <option value="Digital Probe 2">Digital Probe 2</option>
+              <option value="Infrared Gun">Infrared Gun</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-group" style="margin-bottom:14px" id="probe-action-group">
+          <label>Corrective Action (if below 75°C)</label>
+          <input type="text" class="text-field" id="probe-action"
+            placeholder="e.g. Returned to oven, cooked further 5 mins..."/>
+        </div>
+        <div class="probe-cooling-wrap">
+          <div class="probe-cooling-header">
+            <span class="probe-cooling-icon">❄️</span>
+            <label class="probe-cooling-label">Cooling time</label>
+            <span class="probe-cooling-optional">optional</span>
+          </div>
+          <select class="select-field" id="probe-cooling-time">
+            <option value="">— Served immediately</option>
+            <option value="30 mins">30 mins</option>
+            <option value="1 hr">1 hr</option>
+            <option value="1 hr 30">1 hr 30</option>
+            <option value="2 hrs">2 hrs</option>
+            <option value="2 hrs 30">2 hrs 30</option>
+            <option value="3 hrs">3 hrs</option>
+            <option value="3 hrs 30">3 hrs 30</option>
+            <option value="4 hrs">4 hrs</option>
+          </select>
+        </div>
+        <button class="btn-submit" onclick="logFoodProbe()">
+          <span>Log Food Probe Check</span><span class="btn-icon">+</span>
+        </button>
+      </div>
+
+      <div class="temp-log-display" style="margin-top:24px">
+        <h3 class="group-title">Today's Food Probe Readings</h3>
+        <div class="temp-log-list" id="food-probe-log-list">
+          <p class="empty-state">No food probe checks logged today yet.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════ CLEANING ════ -->
+    <section id="tab-cleaning" class="tab-section">
+      <div class="section-header">
+        <h1 class="section-title">Cleaning Schedule</h1>
+        <p class="section-subtitle">Your department's cleaning checklist</p>
+      </div>
+      <form id="form-cleaning" class="checklist-form" onsubmit="return false">
+        <!-- dept selector — shown for management only -->
+        <div id="cleaning-dept-selector" class="dept-selector-bar" style="display:none">
+          <span class="dept-bar-label">Submitting for:</span>
+          <button class="dept-bar-btn active" data-dept="kitchen" onclick="setFormDept('cleaning','kitchen')">🍳 Kitchen</button>
+          <button class="dept-bar-btn" data-dept="foh" onclick="setFormDept('cleaning','foh')">🍽 FOH</button>
+        </div>
+        <div class="signed-by-group signed-by-top">
+          <label class="notes-label">Signed off by</label>
+          <select class="select-field signed-by-select" data-key="clean_signed_by">
+            <option value="">Select staff member...</option>
+          </select>
+        </div>
+        <div id="cleaning-progress" class="draft-progress" style="display:none"></div>
+        <div id="cleaning-banner" class="checklist-banner" style="display:none"></div>
+        <!-- check groups injected by rebuildChecklist() -->
+        <div class="notes-group">
+          <label class="notes-label">Notes / Issues</label>
+          <textarea class="notes-field" data-key="clean_notes" placeholder="Any issues or comments..."></textarea>
+        </div>
+        <div class="form-actions">
+          <button class="btn-submit" onclick="submitChecklist('cleaning')">
+            <span>Finalise &amp; Submit</span><span class="btn-icon">→</span>
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ═══════════════════════════════ CLOSING ═════ -->
+    <section id="tab-closing" class="tab-section">
+      <div class="section-header">
+        <h1 class="section-title">Closing Checks</h1>
+        <p class="section-subtitle">Complete before locking up</p>
+      </div>
+      <form id="form-closing" class="checklist-form" onsubmit="return false">
+        <!-- dept selector — shown for management only -->
+        <div id="closing-dept-selector" class="dept-selector-bar" style="display:none">
+          <span class="dept-bar-label">Submitting for:</span>
+          <button class="dept-bar-btn active" data-dept="kitchen" onclick="setFormDept('closing','kitchen')">🍳 Kitchen</button>
+          <button class="dept-bar-btn" data-dept="foh" onclick="setFormDept('closing','foh')">🍽 FOH</button>
+        </div>
+        <div class="signed-by-group signed-by-top">
+          <label class="notes-label">Signed off by</label>
+          <select class="select-field signed-by-select" data-key="close_signed_by">
+            <option value="">Select staff member...</option>
+          </select>
+        </div>
+        <div id="closing-progress" class="draft-progress" style="display:none"></div>
+        <div id="closing-banner" class="checklist-banner" style="display:none"></div>
+        <!-- check groups injected by rebuildChecklist() -->
+        <!-- Undone weekly tasks — visible to management on Sat/Sun -->
+        <div id="undone-tasks-section" style="display:none"></div>
+        <div class="notes-group">
+          <label class="notes-label">Notes / Issues</label>
+          <textarea class="notes-field" data-key="close_notes" placeholder="Any issues or comments..."></textarea>
+        </div>
+        <div class="form-actions">
+          <button class="btn-submit" onclick="submitChecklist('closing')">
+            <span>Finalise &amp; Submit</span><span class="btn-icon">→</span>
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ═══════════════════════════════ WEEKLY ══════ -->
+    <section id="tab-weekly" class="tab-section">
+      <div class="section-header">
+        <h1 class="section-title">Weekly Review</h1>
+        <p class="section-subtitle">Manager compliance summary</p>
+      </div>
+      <div class="week-selector-bar">
+        <label class="week-selector-label">Completing review for:</label>
+        <select class="week-selector-select" id="weekly-week-select" onchange="onWeekSelectChange()">
+          <option value="">Loading weeks...</option>
+        </select>
+      </div>
+      <form id="form-weekly" class="checklist-form" onsubmit="return false">
+        <!-- check groups injected by rebuildChecklist() -->
+        <div class="notes-group">
+          <label class="notes-label">Issues This Week</label>
+          <textarea class="notes-field" data-key="weekly_issues" placeholder="Any issues, incidents or actions required..."></textarea>
+        </div>
+        <div class="notes-group">
+          <label class="notes-label">Actions for Next Week</label>
+          <textarea class="notes-field" data-key="weekly_actions" placeholder="Follow-up actions, maintenance, training..."></textarea>
+        </div>
+        <div class="rating-group">
+          <label class="notes-label">Overall Compliance This Week</label>
+          <div class="rating-buttons">
+            <button type="button" class="rating-btn" onclick="setRating('Excellent',this)">Excellent</button>
+            <button type="button" class="rating-btn" onclick="setRating('Good',this)">Good</button>
+            <button type="button" class="rating-btn" onclick="setRating('Satisfactory',this)">Satisfactory</button>
+            <button type="button" class="rating-btn" onclick="setRating('Needs Improvement',this)">Needs Improvement</button>
+          </div>
+        </div>
+        <div class="signed-by-group">
+          <label class="notes-label">Manager Sign-Off</label>
+          <select class="select-field signed-by-select" data-key="weekly_signed_by">
+            <option value="">Select staff member...</option>
+          </select>
+        </div>
+        <div class="form-actions">
+          <button class="btn-submit" onclick="submitChecklist('weekly')">
+            <span>Submit Weekly Review</span><span class="btn-icon">→</span>
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ═══════════════════════════════ TASKS ══════ -->
+    <section id="tab-tasks" class="tab-section">
+      <div class="section-header">
+        <h1 class="section-title">Weekly Tasks</h1>
+        <p class="section-subtitle" id="tasks-week-label"></p>
+      </div>
+      <div class="tasks-legend">
+        <span class="legend-item"><span class="legend-dot done"></span>Done</span>
+        <span class="legend-item"><span class="legend-dot overdue"></span>Overdue</span>
+        <span class="legend-item"><span class="legend-dot pending"></span>Pending</span>
+      </div>
+      <div id="tasks-week-view"></div>
+    </section>
+
+    <!-- ═══════════════════════════════ HISTORY ═════ -->
+    <section id="tab-history" class="tab-section">
+      <div class="section-header">
+        <h1 class="section-title">History</h1>
+        <p class="section-subtitle">Your department's compliance records</p>
+      </div>
+      <div class="history-quick-dates">
+        <button class="quick-date-btn" onclick="setHistoryQuickDate('today')">Today</button>
+        <button class="quick-date-btn" onclick="setHistoryQuickDate('yesterday')">Yesterday</button>
+        <button class="quick-date-btn" onclick="setHistoryQuickDate('week')">This Week</button>
+      </div>
+      <div class="history-filters">
+        <select class="select-field" id="history-type">
+          <option value="all">All Check Types</option>
+          <option value="opening">Opening Checks</option>
+          <option value="temperature">Equipment Temperatures</option>
+          <option value="food_probe">Food Probe Checks</option>
+          <option value="cleaning">Cleaning Schedule</option>
+          <option value="closing">Closing Checks</option>
+          <option value="weekly">Weekly Review</option>
+          <option value="task_completion">Tasks</option>
+        </select>
+        <input type="date" class="text-field" id="history-date-from"/>
+        <input type="date" class="text-field" id="history-date-to"/>
+        <button class="btn-filter" onclick="loadHistory()">Filter</button>
+      </div>
+      <div class="history-actions">
+        <button class="btn-export" onclick="exportToCSV()">⬇ Export CSV</button>
+        <button class="btn-export btn-export-sheets" onclick="openSheetsUrl()">↗ View in Sheets</button>
+      </div>
+      <div id="history-list" class="history-list"></div>
+    </section>
+
+    <!-- ═══════════════════════════════ REPORTS ════ -->
+    <section id="tab-reports" class="tab-section">
+      <div class="section-header">
+        <h1 class="section-title">Reports</h1>
+        <p class="section-subtitle">Daily &amp; weekly compliance reports</p>
+      </div>
+
+      <!-- Mode switcher -->
+      <div class="report-mode-bar">
+        <button id="report-mode-daily" class="report-mode-btn active" onclick="switchReportMode('daily')">Daily Report</button>
+        <button id="report-mode-weekly" class="report-mode-btn" onclick="switchReportMode('weekly')">Weekly Report</button>
+        <button id="report-refresh-btn" class="report-print-btn" onclick="refreshReport()">↻ Refresh</button>
+        <button class="report-print-btn" onclick="printReport()">🖨 Print</button>
+        <button class="report-print-btn report-email-btn" onclick="openEmailModal()">✉ Email</button>
+      </div>
+
+      <!-- Email modal -->
+      <div id="email-report-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center">
+        <div style="background:var(--bg-card);border:1px solid var(--border-light);border-radius:12px;padding:24px;width:90%;max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.6)">
+          <p style="margin:0 0 4px;font-weight:700;font-size:15px;color:var(--text)">Email Report</p>
+          <p id="email-modal-subtitle" style="margin:0 0 16px;font-size:12px;color:var(--text-muted)"></p>
+          <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:6px">Recipients (comma-separated)</label>
+          <textarea id="email-modal-recipients" class="text-field" rows="3" style="width:100%;box-sizing:border-box;font-size:13px;resize:vertical;background:var(--bg-input);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px"></textarea>
+          <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
+            <button class="btn-cancel" onclick="closeEmailModal()">Cancel</button>
+            <button class="btn-submit" id="email-modal-send-btn" onclick="sendReportEmail()" style="min-width:80px">Send</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Daily controls -->
+      <div id="report-daily-controls" class="report-controls" style="display:flex">
+        <label class="report-control-label">Date</label>
+        <input type="date" id="report-daily-date" class="text-field report-date-input" onchange="renderReport()"/>
+      </div>
+
+      <!-- Weekly controls -->
+      <div id="report-weekly-controls" class="report-controls" style="display:none">
+        <label class="report-control-label">Week</label>
+        <select id="report-week-select" class="select-field report-week-select" onchange="renderReport()"></select>
+      </div>
+
+      <!-- Report output -->
+      <div id="report-output" class="report-output"></div>
+    </section>
+
+    <!-- ═══════════════════════════════ SETTINGS ════ -->
+    <section id="tab-settings" class="tab-section">
+      <div class="section-header">
+        <h1 class="section-title">Settings</h1>
+        <p class="section-subtitle">Restaurant, departments, staff & checklists</p>
+      </div>
+
+      <div class="settings-tabs">
+        <button class="settings-tab-btn active" data-settings-tab="restaurant" onclick="showSettingsSection('restaurant')">Restaurant</button>
+        <button class="settings-tab-btn" data-settings-tab="staff"      onclick="showSettingsSection('staff')">Staff</button>
+        <button class="settings-tab-btn" data-settings-tab="equipment"  onclick="showSettingsSection('equipment')">Equipment</button>
+        <button class="settings-tab-btn" data-settings-tab="probes"     onclick="showSettingsSection('probes')">Probe Products</button>
+        <button class="settings-tab-btn" data-settings-tab="suppliers"  onclick="showSettingsSection('suppliers')">Suppliers</button>
+        <button class="settings-tab-btn" data-settings-tab="checks"     onclick="showSettingsSection('checks')">Checklists</button>
+        <button class="settings-tab-btn" data-settings-tab="tasks-cfg"  onclick="showSettingsSection('tasks-cfg')">Tasks</button>
+        <button class="settings-tab-btn" data-settings-tab="security"   onclick="showSettingsSection('security')">Security</button>
+        <button class="settings-tab-btn" data-settings-tab="trading"   onclick="showSettingsSection('trading')">Trading Days</button>
+        <button class="settings-tab-btn" data-settings-tab="email"     onclick="showSettingsSection('email')">Email Reports</button>
+      </div>
+
+      <!-- RESTAURANT -->
+      <div id="settings-panel-restaurant" class="settings-panel active">
+        <div class="check-group">
+          <h3 class="group-title">Restaurant Information</h3>
+          <div style="padding:16px 20px;display:flex;flex-direction:column;gap:14px">
+            <div class="field-group">
+              <label class="fl">Restaurant Name</label>
+              <input type="text" id="set-restaurant-name" class="text-field" placeholder="My Restaurant"/>
+            </div>
+          </div>
+        </div>
+        <div class="check-group" style="margin-top:14px">
+          <h3 class="group-title">🍳 Kitchen Hours</h3>
+          <div style="padding:14px 20px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="field-group"><label class="fl">Opens</label><input type="time" id="set-kitchen-open" class="text-field"/></div>
+            <div class="field-group"><label class="fl">Closes</label><input type="time" id="set-kitchen-close" class="text-field"/></div>
+          </div>
+        </div>
+        <div class="check-group" style="margin-top:14px">
+          <h3 class="group-title">🍽 Front of House Hours</h3>
+          <div style="padding:14px 20px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="field-group"><label class="fl">Opens</label><input type="time" id="set-foh-open" class="text-field"/></div>
+            <div class="field-group"><label class="fl">Closes</label><input type="time" id="set-foh-close" class="text-field"/></div>
+          </div>
+        </div>
+        <div class="check-group" style="margin-top:14px">
+          <h3 class="group-title">Display Theme</h3>
+          <div class="theme-toggle-row">
+            <div>
+              <div class="theme-toggle-label">Interface colour</div>
+              <div class="theme-toggle-sub">Per device — not synced</div>
+            </div>
+            <div class="theme-switcher">
+              <button class="theme-btn" data-theme="dark"  onclick="setTheme('dark')">🌙 Dark</button>
+              <button class="theme-btn" data-theme="light" onclick="setTheme('light')">☀ Light</button>
+            </div>
+          </div>
+        </div>
+        <div class="form-actions" style="margin-top:16px">
+          <button class="btn-submit" onclick="saveRestaurantInfo()"><span>Save</span><span class="btn-icon">→</span></button>
+        </div>
+      </div>
+
+      <!-- STAFF -->
+      <div id="settings-panel-staff" class="settings-panel">
+        <div class="check-group" style="margin-bottom:16px">
+          <h3 class="group-title">Add New Staff Member</h3>
+          <div style="padding:14px 20px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div class="field-group">
+                <label class="fl">Name</label>
+                <input type="text" id="new-staff-name" class="text-field" placeholder="e.g. Jane Smith"/>
+              </div>
+              <div class="field-group">
+                <label class="fl">Department</label>
+                <select id="new-staff-dept" class="select-field">
+                  <option value="kitchen">🍳 Kitchen</option>
+                  <option value="foh">🍽 Front of House</option>
+                  <option value="mgmt">👔 Management</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-group">
+              <label class="fl">Role</label>
+              <select id="new-staff-role" class="select-field">
+                <option value="Manager">Manager</option>
+                <option value="Head Chef">Head Chef</option>
+                <option value="Chef">Chef</option>
+                <option value="Sous Chef">Sous Chef</option>
+                <option value="Kitchen Porter">Kitchen Porter</option>
+                <option value="FOH Supervisor">FOH Supervisor</option>
+                <option value="Front of House">Front of House</option>
+                <option value="Bar">Bar</option>
+                <option value="Supervisor">Supervisor</option>
+              </select>
+            </div>
+            <button class="btn-submit" style="padding:12px" onclick="addStaff()"><span>Add Staff Member</span><span class="btn-icon">+</span></button>
+          </div>
+        </div>
+        <div class="check-group">
+          <h3 class="group-title">Staff by Department</h3>
+          <div id="staff-list"></div>
+        </div>
+      </div>
+
+      <!-- EQUIPMENT -->
+      <div id="settings-panel-equipment" class="settings-panel">
+        <div class="check-group" style="margin-bottom:16px">
+          <h3 class="group-title">Add Equipment / Location</h3>
+          <div style="padding:14px 20px;display:flex;flex-direction:column;gap:10px">
+            <div class="field-group">
+              <label class="fl">Name</label>
+              <input type="text" id="new-equip-name" class="text-field" placeholder="e.g. Prep Fridge 3"/>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div class="field-group">
+                <label class="fl">Type</label>
+                <select id="new-equip-type" class="select-field">
+                  <option value="fridge">🧊 Fridge (1–5°C)</option>
+                  <option value="freezer">❄ Freezer (-18°C)</option>
+                  <option value="oven">🔥 Oven / Cooking (75°C+)</option>
+                  <option value="hothold">♨ Hot Hold (63°C+)</option>
+                  <option value="other">⊕ Other</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label class="fl">Department</label>
+                <select id="new-equip-dept" class="select-field">
+                  <option value="kitchen">🍳 Kitchen</option>
+                  <option value="foh">🍽 Front of House</option>
+                  <option value="shared">📦 Shared</option>
+                </select>
+              </div>
+            </div>
+            <button class="btn-submit" style="padding:12px" onclick="addEquipment()"><span>Add Equipment</span><span class="btn-icon">+</span></button>
+          </div>
+        </div>
+        <div class="check-group">
+          <h3 class="group-title">Equipment by Department</h3>
+          <div id="equipment-list"></div>
+        </div>
+      </div>
+
+      <!-- PROBE PRODUCTS -->
+      <div id="settings-panel-probes" class="settings-panel">
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
+          🍖 Kitchen only — staff select from this list when logging food probe checks. Keeps records consistent.
+        </p>
+        <div class="check-group" style="margin-bottom:16px">
+          <h3 class="group-title">Add Product / Dish</h3>
+          <div style="padding:14px 20px;display:flex;gap:10px">
+            <input type="text" id="new-probe-product" class="text-field"
+              placeholder="e.g. Chicken thigh, Pork belly..." style="flex:1"/>
+            <button class="btn-filter" onclick="addProbeProduct()">+ Add</button>
+          </div>
+        </div>
+        <div class="check-group">
+          <h3 class="group-title">Products List</h3>
+          <div id="probe-product-list"></div>
+        </div>
+      </div>
+
+      <!-- SUPPLIERS -->
+      <div id="settings-panel-suppliers" class="settings-panel">
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
+          📦 Suppliers listed here appear in the Goods In delivery dropdown. Keeps records consistent.
+        </p>
+        <div class="check-group" style="margin-bottom:16px">
+          <h3 class="group-title">Add Supplier</h3>
+          <div style="padding:14px 20px;display:flex;gap:10px">
+            <input type="text" id="new-supplier" class="text-field"
+              placeholder="e.g. Fresh Direct Ltd…" style="flex:1"/>
+            <button class="btn-filter" onclick="addSupplier()">+ Add</button>
+          </div>
+        </div>
+        <div class="check-group">
+          <h3 class="group-title">Supplier List</h3>
+          <div id="supplier-list"></div>
+        </div>
+      </div>
+
+      <!-- CHECKLISTS -->
+      <div id="settings-panel-checks" class="settings-panel">
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
+          Toggle checks on/off, reorder or add custom checks. Shared checks appear in every department's list.
+        </p>
+
+        <!-- SHARED -->
+        <div class="check-group" style="margin-bottom:14px">
+          <h3 class="group-title">🔗 Shared — Opening (all departments)</h3>
+          <div id="checklist-editor-shared-opening"></div>
+          <div style="padding:10px 20px;display:flex;gap:8px;border-top:1px solid var(--border)">
+            <input type="text" id="new-check-shared-opening" class="text-field" placeholder="Add shared opening check..." style="flex:1"/>
+            <button class="btn-filter" onclick="addCustomCheck('sharedChecks','opening','new-check-shared-opening')">+ Add</button>
+          </div>
+        </div>
+        <div class="check-group" style="margin-bottom:20px">
+          <h3 class="group-title">🔗 Shared — Closing (all departments)</h3>
+          <div id="checklist-editor-shared-closing"></div>
+          <div style="padding:10px 20px;display:flex;gap:8px;border-top:1px solid var(--border)">
+            <input type="text" id="new-check-shared-closing" class="text-field" placeholder="Add shared closing check..." style="flex:1"/>
+            <button class="btn-filter" onclick="addCustomCheck('sharedChecks','closing','new-check-shared-closing')">+ Add</button>
+          </div>
+        </div>
+
+        <!-- KITCHEN -->
+        <div class="dept-checks-header" style="color:var(--opening)">🍳 Kitchen Checks</div>
+        <div class="check-group" style="margin-bottom:10px">
+          <h3 class="group-title">Opening</h3>
+          <div id="checklist-editor-kitchen-opening"></div>
+          <div style="padding:10px 20px;display:flex;gap:8px;border-top:1px solid var(--border)">
+            <input type="text" id="new-check-kitchen-opening" class="text-field" placeholder="Add custom check..." style="flex:1"/>
+            <button class="btn-filter" onclick="addCustomCheck('checks.kitchen','opening','new-check-kitchen-opening')">+ Add</button>
+          </div>
+        </div>
+        <div class="check-group" style="margin-bottom:10px">
+          <h3 class="group-title">Cleaning</h3>
+          <div id="checklist-editor-kitchen-cleaning"></div>
+          <div style="padding:10px 20px;display:flex;gap:8px;border-top:1px solid var(--border)">
+            <input type="text" id="new-check-kitchen-cleaning" class="text-field" placeholder="Add custom check..." style="flex:1"/>
+            <button class="btn-filter" onclick="addCustomCheck('checks.kitchen','cleaning','new-check-kitchen-cleaning')">+ Add</button>
+          </div>
+        </div>
+        <div class="check-group" style="margin-bottom:20px">
+          <h3 class="group-title">Closing</h3>
+          <div id="checklist-editor-kitchen-closing"></div>
+          <div style="padding:10px 20px;display:flex;gap:8px;border-top:1px solid var(--border)">
+            <input type="text" id="new-check-kitchen-closing" class="text-field" placeholder="Add custom check..." style="flex:1"/>
+            <button class="btn-filter" onclick="addCustomCheck('checks.kitchen','closing','new-check-kitchen-closing')">+ Add</button>
+          </div>
+        </div>
+
+        <!-- FOH -->
+        <div class="dept-checks-header" style="color:var(--temp)">🍽 Front of House Checks</div>
+        <div class="check-group" style="margin-bottom:10px">
+          <h3 class="group-title">Opening</h3>
+          <div id="checklist-editor-foh-opening"></div>
+          <div style="padding:10px 20px;display:flex;gap:8px;border-top:1px solid var(--border)">
+            <input type="text" id="new-check-foh-opening" class="text-field" placeholder="Add custom check..." style="flex:1"/>
+            <button class="btn-filter" onclick="addCustomCheck('checks.foh','opening','new-check-foh-opening')">+ Add</button>
+          </div>
+        </div>
+        <div class="check-group" style="margin-bottom:10px">
+          <h3 class="group-title">Cleaning</h3>
+          <div id="checklist-editor-foh-cleaning"></div>
+          <div style="padding:10px 20px;display:flex;gap:8px;border-top:1px solid var(--border)">
+            <input type="text" id="new-check-foh-cleaning" class="text-field" placeholder="Add custom check..." style="flex:1"/>
+            <button class="btn-filter" onclick="addCustomCheck('checks.foh','cleaning','new-check-foh-cleaning')">+ Add</button>
+          </div>
+        </div>
+        <div class="check-group" style="margin-bottom:20px">
+          <h3 class="group-title">Closing</h3>
+          <div id="checklist-editor-foh-closing"></div>
+          <div style="padding:10px 20px;display:flex;gap:8px;border-top:1px solid var(--border)">
+            <input type="text" id="new-check-foh-closing" class="text-field" placeholder="Add custom check..." style="flex:1"/>
+            <button class="btn-filter" onclick="addCustomCheck('checks.foh','closing','new-check-foh-closing')">+ Add</button>
+          </div>
+        </div>
+
+        <!-- MANAGEMENT -->
+        <div class="dept-checks-header" style="color:var(--success)">👔 Management Checks</div>
+        <div class="check-group" style="margin-bottom:14px">
+          <h3 class="group-title">Weekly Review</h3>
+          <div id="checklist-editor-mgmt-weekly"></div>
+          <div style="padding:10px 20px;display:flex;gap:8px;border-top:1px solid var(--border)">
+            <input type="text" id="new-check-mgmt-weekly" class="text-field" placeholder="Add custom weekly check..." style="flex:1"/>
+            <button class="btn-filter" onclick="addCustomCheck('checks.mgmt','weekly','new-check-mgmt-weekly')">+ Add</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TASKS CONFIG -->
+      <div id="settings-panel-tasks-cfg" class="settings-panel">
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.5">
+          Recurring tasks appear on their assigned day according to their frequency. Staff can also add one-off tasks from the Tasks tab.
+        </p>
+        <div class="check-group" style="margin-bottom:16px">
+          <h3 class="group-title">Add Recurring Task</h3>
+          <div style="padding:14px 20px;display:flex;flex-direction:column;gap:10px">
+            <div class="field-group">
+              <label class="fl">Task Description</label>
+              <input type="text" id="new-task-label" class="text-field" placeholder="e.g. Deep clean walk-in fridge"/>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div class="field-group">
+                <label class="fl">Day</label>
+                <select id="new-task-day" class="select-field">
+                  <option value="monday">Monday</option>
+                  <option value="tuesday">Tuesday</option>
+                  <option value="wednesday">Wednesday</option>
+                  <option value="thursday">Thursday</option>
+                  <option value="friday">Friday</option>
+                  <option value="saturday">Saturday</option>
+                  <option value="sunday">Sunday</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label class="fl">Department</label>
+                <select id="new-task-dept" class="select-field">
+                  <option value="kitchen">🍳 Kitchen</option>
+                  <option value="foh">🍽 Front of House</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-group">
+              <label class="fl">Frequency</label>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <label style="display:flex;align-items:center;gap:8px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:9px 12px;cursor:pointer">
+                  <input type="radio" name="new-task-freq" value="every" checked style="accent-color:var(--success)"/>
+                  <span style="font-size:13px;color:var(--text)">Every week</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:9px 12px;cursor:pointer">
+                  <input type="radio" name="new-task-freq" value="first" style="accent-color:var(--success)"/>
+                  <span style="font-size:13px;color:var(--text)">First week of month</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:9px 12px;cursor:pointer">
+                  <input type="radio" name="new-task-freq" value="last" style="accent-color:var(--success)"/>
+                  <span style="font-size:13px;color:var(--text)">Last week of month</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:9px 12px;cursor:pointer">
+                  <input type="radio" name="new-task-freq" value="odd" style="accent-color:var(--success)"/>
+                  <span style="font-size:13px;color:var(--text)">Fortnightly — weeks 1 &amp; 3</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;background:var(--bg-input);border:1px solid var(--border);border-radius:6px;padding:9px 12px;cursor:pointer">
+                  <input type="radio" name="new-task-freq" value="even" style="accent-color:var(--success)"/>
+                  <span style="font-size:13px;color:var(--text)">Fortnightly — weeks 2 &amp; 4</span>
+                </label>
+              </div>
+            </div>
+            <button class="btn-submit" style="padding:12px" onclick="addRecurringTask()">
+              <span>Add Recurring Task</span><span class="btn-icon">+</span>
+            </button>
+          </div>
+        </div>
+        <div class="check-group">
+          <h3 class="group-title">Recurring Tasks by Department</h3>
+          <div id="task-editor-list"></div>
+        </div>
+      </div>
+
+      <!-- SECURITY -->
+      <div id="settings-panel-security" class="settings-panel">
+        <div class="check-group" style="margin-bottom:16px">
+          <h3 class="group-title">App Version</h3>
+          <div style="padding:14px 20px;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span style="font-size:13px;color:var(--text-muted)">Running version</span>
+              <span id="settings-version-display" style="font-family:var(--mono);font-size:13px;color:var(--success);font-weight:700"></span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span style="font-size:13px;color:var(--text-muted)">Last synced</span>
+              <span id="settings-last-sync" style="font-family:var(--mono);font-size:13px;color:var(--text-muted)">—</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span style="font-size:13px;color:var(--text-muted)">Records in local cache</span>
+              <span id="settings-record-count" style="font-family:var(--mono);font-size:13px;color:var(--text-muted)">—</span>
+            </div>
+            <button class="btn-submit" style="margin-top:4px" onclick="forceSyncNow()">
+              <span>Force Sync Now</span><span class="btn-icon">↻</span>
+            </button>
+          </div>
+        </div>
+        <div class="check-group">
+          <h3 class="group-title">This Device</h3>
+          <div style="padding:16px 20px">
+            <div id="device-identity-display" style="font-size:14px;color:var(--text-muted);margin-bottom:16px;line-height:1.7"></div>
+            <button class="btn-submit" onclick="showReassignDeviceModal()"><span>Reassign This Device</span><span class="btn-icon">↺</span></button>
+          </div>
+        </div>
+        <div class="check-group" style="margin-top:14px">
+          <h3 class="group-title">Manager PIN</h3>
+          <div style="padding:16px 20px">
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6">
+              Default PIN is <strong style="color:var(--text);font-family:var(--mono)">1234</strong> — change it before going live.
+            </p>
+            <button class="btn-submit" onclick="showChangePinModal()"><span>Change PIN</span><span class="btn-icon">🔒</span></button>
+          </div>
+        </div>
+        <div class="check-group" style="margin-top:14px">
+          <h3 class="group-title">Google Sheets</h3>
+          <div style="padding:14px 20px">
+            <button class="btn-submit" onclick="connectGoogleSheets()"><span>Configure Sheets Connection</span><span class="btn-icon">↗</span></button>
+          </div>
+        </div>
+        <div class="check-group reset-today-card" style="margin-top:14px">
+          <h3 class="group-title" style="color:var(--danger)">Reset Today's Data</h3>
+          <div style="padding:16px 20px">
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6">
+              Clears selected submissions from today on this device only. Use this to correct wrong submissions — data already in Google Sheets is not affected.
+            </p>
+            <button class="btn-danger" onclick="showResetTodayModal()"><span>Reset Today's Data</span><span class="btn-icon">↺</span></button>
+          </div>
+        </div>
+      </div>
+
+
+
+      <!-- ── Trading Days settings panel ── -->
+      <div id="settings-panel-trading" class="settings-panel">
+
+        <div class="check-group">
+          <h3 class="group-title">Site Status</h3>
+          <div style="padding:16px 20px">
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6">
+              Toggle the master switch off when closing for a period — holidays, refurbishment, etc.
+              The dashboard will grey out, no alerts will fire, and the nightly email will not flag missing checks.
+              Toggle back on when reopening.
+            </p>
+            <label class="check-item" style="display:flex;align-items:center;gap:12px;cursor:pointer">
+              <input type="checkbox" id="trading-master-toggle" checked onchange="saveTradingMaster()" style="width:20px;height:20px"/>
+              <div>
+                <div style="font-size:14px;font-weight:600;color:var(--text)">Open for trading</div>
+                <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Turn off when closed for a period</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="check-group" style="margin-top:14px">
+          <h3 class="group-title">Regular Closed Days</h3>
+          <div style="padding:16px 20px">
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6">
+              Untick days each department is regularly closed. Closed days will be greyed out on the dashboard and weekly report.
+            </p>
+            <div class="trading-dept-row">
+              <div class="trading-dept-label">🍳 Kitchen</div>
+              <div class="trading-day-toggles"><label class="trading-day-toggle"><input type="checkbox" id="trading-kitchen-mon" checked onchange="saveTradingDay('kitchen','mon')"><span>Mon</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-kitchen-tue" checked onchange="saveTradingDay('kitchen','tue')"><span>Tue</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-kitchen-wed" checked onchange="saveTradingDay('kitchen','wed')"><span>Wed</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-kitchen-thu" checked onchange="saveTradingDay('kitchen','thu')"><span>Thu</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-kitchen-fri" checked onchange="saveTradingDay('kitchen','fri')"><span>Fri</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-kitchen-sat" checked onchange="saveTradingDay('kitchen','sat')"><span>Sat</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-kitchen-sun" checked onchange="saveTradingDay('kitchen','sun')"><span>Sun</span></label></div>
+            </div>
+            <div style="height:12px"></div>
+            <div class="trading-dept-row">
+              <div class="trading-dept-label">🍽 Front of House</div>
+              <div class="trading-day-toggles"><label class="trading-day-toggle"><input type="checkbox" id="trading-foh-mon" checked onchange="saveTradingDay('foh','mon')"><span>Mon</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-foh-tue" checked onchange="saveTradingDay('foh','tue')"><span>Tue</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-foh-wed" checked onchange="saveTradingDay('foh','wed')"><span>Wed</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-foh-thu" checked onchange="saveTradingDay('foh','thu')"><span>Thu</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-foh-fri" checked onchange="saveTradingDay('foh','fri')"><span>Fri</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-foh-sat" checked onchange="saveTradingDay('foh','sat')"><span>Sat</span></label><label class="trading-day-toggle"><input type="checkbox" id="trading-foh-sun" checked onchange="saveTradingDay('foh','sun')"><span>Sun</span></label></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <!-- ── Email Reports settings panel ── -->
+      <div id="settings-panel-email" class="settings-panel">
+
+        <div class="check-group">
+          <h3 class="group-title">Daily Email Summary</h3>
+          <div style="padding:16px 20px">
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6">
+              Sends an HTML summary of each day's food safety records at 23:59 every night.
+              The trigger must be installed once from Google Apps Script after deploying.
+            </p>
+            <label class="check-item" style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:16px">
+              <input type="checkbox" id="set-email-enabled" onchange="saveEmailSettings()"/>
+              <span style="font-size:14px;color:var(--text)">Enable daily email reports</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="check-group" style="margin-top:14px">
+          <h3 class="group-title">Recipients</h3>
+          <div style="padding:16px 20px">
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px;line-height:1.6">
+              Add one email address per line. All addresses will receive the nightly summary.
+            </p>
+            <div id="email-recipient-list" style="margin-bottom:12px"></div>
+            <div style="display:flex;gap:8px">
+              <input type="email" id="new-email-recipient" class="text-field" placeholder="name@example.com" style="flex:1"
+                onkeydown="if(event.key==='Enter')addEmailRecipient()"/>
+              <button class="btn-filter" onclick="addEmailRecipient()">+ Add</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="check-group" style="margin-top:14px">
+          <h3 class="group-title">Apps Script Setup</h3>
+          <div style="padding:16px 20px">
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:8px;line-height:1.6">
+              After updating <code style="font-family:var(--mono);background:var(--bg-input);padding:1px 5px;border-radius:3px">google-apps-script.js</code>,
+              open Apps Script and run <code style="font-family:var(--mono);background:var(--bg-input);padding:1px 5px;border-radius:3px">installDailyEmailTrigger()</code>
+              once to schedule the 23:59 trigger. Run
+              <code style="font-family:var(--mono);background:var(--bg-input);padding:1px 5px;border-radius:3px">removeDailyEmailTrigger()</code> to stop it.
+            </p>
+            <p style="font-size:12px;color:var(--text-dim);font-family:var(--mono);line-height:1.6">
+              The trigger runs as you (the Apps Script owner), so emails will arrive from your Google account's Gmail address.
+            </p>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- TOAST -->
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- CONNECT MODAL -->
+  <div id="setup-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeModal()">
+    <div class="modal-box">
+      <h2 class="modal-title">Connect Google Sheets</h2>
+      <p class="modal-desc">Paste your Google Apps Script Web App URL to enable two-way sync across all devices.</p>
+      <div class="setup-steps">
+        <div class="setup-step"><div class="step-num">1</div><div><strong>Create a Google Sheet</strong><p>Open Google Sheets and create a new spreadsheet</p></div></div>
+        <div class="setup-step"><div class="step-num">2</div><div><strong>Open Apps Script</strong><p>Extensions → Apps Script, paste the code from google-apps-script.js</p></div></div>
+        <div class="setup-step"><div class="step-num">3</div><div><strong>Run setupSheets()</strong><p>Run once to create all tabs and headers</p></div></div>
+        <div class="setup-step"><div class="step-num">4</div><div><strong>Deploy as Web App</strong><p>Deploy → New deployment → Web App → Anyone can access</p></div></div>
+      </div>
+      <div class="modal-field">
+        <label>Apps Script Web App URL</label>
+        <input type="url" id="sheets-url-input" class="text-field" placeholder="https://script.google.com/macros/s/..."/>
+      </div>
+      <div class="modal-field">
+        <label>Spreadsheet URL (for View in Sheets button)</label>
+        <input type="url" id="sheets-view-url-input" class="text-field" placeholder="https://docs.google.com/spreadsheets/d/..."/>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+        <button class="btn-submit" onclick="saveSheetConnection()"><span>Connect</span><span class="btn-icon">→</span></button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/settings.js"></script>
+  <script src="js/sheets.js"></script>
+  <script src="js/history.js"></script>
+  <script src="js/tasks.js"></script>
+  <script src="js/reports.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>

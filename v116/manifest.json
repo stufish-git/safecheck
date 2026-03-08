@@ -1,0 +1,55 @@
+{
+  "name": "SafeChecks — Food Safety",
+  "short_name": "SafeChecks",
+  "description": "Restaurant food safety compliance — Kitchen, FOH, Management",
+  "start_url": "/safecheck/",
+  "scope": "/safecheck/",
+  "display": "standalone",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["food", "productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Opening Checks",
+      "url": "/safecheck/#opening",
+      "description": "Start today's opening checks"
+    },
+    {
+      "name": "Log Temperature",
+      "url": "/safecheck/#temperature",
+      "description": "Log a temperature reading"
+    },
+    {
+      "name": "Closing Checks",
+      "url": "/safecheck/#closing",
+      "description": "Start tonight's closing checks"
+    }
+  ]
+}
