@@ -2107,6 +2107,63 @@ body.theme-light .week-selector-select { background: #fff; border-color: #d0d6e0
 .gi-log-footer { font-size: 11px; color: var(--text-dim); font-family: var(--mono); margin-top: 6px; border-top: 1px solid var(--border); padding-top: 6px; }
 
 /* Reports — Goods In */
+/* ── Compliance cards ──────────────────────────────── */
+.compliance-wrap { padding: 0 20px 20px; display: flex; flex-direction: column; gap: 14px; }
+
+.dept-compliance-card { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+
+.dept-compliance-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; background: var(--bg-input); border-bottom: 1px solid var(--border);
+}
+.dept-compliance-name { font-size: 14px; font-weight: 700; }
+.dept-overall-score   { display: flex; align-items: center; gap: 10px; }
+.dept-overall-pct     { font-size: 20px; font-weight: 700; font-family: var(--mono); min-width: 48px; text-align: right; }
+.dept-overall-bar-wrap{ width: 80px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.dept-overall-bar     { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+
+.compliance-rows { display: flex; flex-direction: column; }
+.compliance-row  {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 16px; border-bottom: 1px solid var(--border);
+}
+.compliance-row:last-child { border-bottom: none; }
+.compliance-row-icon   { font-size: 15px; flex-shrink: 0; width: 20px; text-align: center; }
+.compliance-row-label  { font-size: 13px; color: var(--text); }
+.compliance-row-detail { font-size: 11px; color: var(--text-muted); font-family: var(--mono); margin-top: 2px; }
+.compliance-row-right  { display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: auto; }
+.compliance-fraction   { font-size: 11px; font-family: var(--mono); color: var(--text-muted); white-space: nowrap; }
+.compliance-pct        { font-size: 13px; font-weight: 700; font-family: var(--mono); width: 40px; text-align: right; }
+.compliance-bar-wrap   { width: 56px; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.compliance-bar        { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+
+.c-green { color: var(--success); }
+.c-amber { color: var(--warning); }
+.c-red   { color: var(--danger);  }
+.bg-green { background: var(--success); }
+.bg-amber { background: var(--warning); }
+.bg-red   { background: var(--danger);  }
+
+.compliance-progress-note {
+  margin: 0 20px 12px;
+  padding: 8px 12px;
+  background: rgba(59,130,246,0.08);
+  border: 1px solid rgba(59,130,246,0.2);
+  border-radius: 6px;
+  font-size: 11px; font-family: var(--mono); color: #60a5fa;
+}
+
+@media print {
+  .dept-compliance-card { break-inside: avoid; }
+  .compliance-progress-note { display: none; }
+  .bg-green { background: #d4f0dc !important; }
+  .bg-amber { background: #fef3c7 !important; }
+  .bg-red   { background: #fee2e2 !important; }
+  .c-green  { color: #166534 !important; }
+  .c-amber  { color: #92400e !important; }
+  .c-red    { color: #991b1b !important; }
+}
+
 .gi-report-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
 .gi-chip { font-size: 11px; font-family: var(--mono); font-weight: 600; padding: 3px 10px; border-radius: 20px; }
 .gi-chip-count { background: rgba(74,85,104,0.2);   color: var(--text-muted); }

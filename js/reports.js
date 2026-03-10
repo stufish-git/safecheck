@@ -382,8 +382,8 @@ function renderWeeklyReport() {
   const allDepts = ['kitchen', 'foh'];
   const gridRows = buildWeeklyGrid(weekDates, dayLabels, shortDates, allDepts);
 
-  // ── Week stats ────────────────────────────────────
-  const statsHTML = buildWeekStats(weekDates);
+  // ── Compliance ────────────────────────────────────────
+  const complianceHTML = buildWeeklyCompliance(weekDates, weekStart);
 
   // ── Weekly management review ──────────────────────
   const weeklyRec = state.records.find(r =>
@@ -418,8 +418,8 @@ function renderWeeklyReport() {
         </table>
       </div>
 
-      <div class="report-section-title">Week Summary</div>
-      ${statsHTML}
+      <div class="report-section-title">Compliance</div>
+      ${complianceHTML}
 
       <div class="report-section-title">Weekly Management Review</div>
       ${weeklyReviewHTML}
@@ -609,68 +609,146 @@ function gridCell(rec, date, dept) {
   return `<td class="wg-cell ${cls}" title="${passed}/${total} checks passed">${icon}</td>`;
 }
 
-// ── Week stats ─────────────────────────────────────────
-function buildWeekStats(weekDates) {
-  const allDepts = ['kitchen', 'foh'];
-  const statsRows = [];
+// ── Weekly compliance ──────────────────────────────────
+function buildWeeklyCompliance(weekDates, weekStart) {
+  const today        = todayStr();
+  const DAYS_OF_WEEK = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
 
-  allDepts.forEach(dept => {
-    const deptInfo = DEPARTMENTS[dept];
-    let totalChecks = 0, passedChecks = 0, tempChecks = 0, tempFails = 0;
+  // Dates within this week that have already happened (including today)
+  const elapsedDates = weekDates.filter(d => d <= today);
 
-    weekDates.forEach(date => {
-      ['opening','closing'].forEach(type => {
-        const rec = state.records.find(r => r.date === date && r.type === type && r.dept === dept);
-        if (rec) {
-          Object.entries(rec.fields || {}).forEach(([, v]) => {
-            if (v === 'Yes' || v === 'No') { totalChecks++; if (v === 'Yes') passedChecks++; }
-          });
-        }
-      });
+  const isCurrentWeek = weekDates.includes(today);
 
-      state.records.filter(r => r.date === date && r.type === 'temperature' && r.dept === dept).forEach(r => {
-        tempChecks++;
-        if (r.fields?.temp_status === 'FAIL') tempFails++;
-      });
-    });
+  function pctColor(pct) {
+    return pct >= 90 ? 'var(--success)' : pct >= 70 ? 'var(--warning)' : 'var(--danger)';
+  }
+  function pctCls(pct) { return pct >= 90 ? 'c-green' : pct >= 70 ? 'c-amber' : 'c-red'; }
+  function bgCls(pct)  { return pct >= 90 ? 'bg-green' : pct >= 70 ? 'bg-amber' : 'bg-red'; }
+  function rowIcon(pct){ return pct === 100 ? '✅' : pct >= 70 ? '⚠️' : '❌'; }
 
-    const pct = totalChecks > 0 ? Math.round((passedChecks / totalChecks) * 100) : null;
-    const pctColor = pct === null ? 'var(--text-dim)' : pct >= 90 ? 'var(--success)' : pct >= 70 ? 'var(--warning)' : 'var(--danger)';
+  function compRow(label, detail, actual, expected) {
+    if (expected === 0) {
+      return `<div class="compliance-row">
+        <div class="compliance-row-icon" style="opacity:0.4">📋</div>
+        <div style="flex:1">
+          <div class="compliance-row-label" style="color:var(--text-muted)">${label}</div>
+          <div class="compliance-row-detail">${detail}</div>
+        </div>
+        <div class="compliance-row-right"><div class="compliance-pct" style="color:var(--text-dim)">N/A</div></div>
+      </div>`;
+    }
+    const pct = Math.round((actual / expected) * 100);
+    return `<div class="compliance-row">
+      <div class="compliance-row-icon">${rowIcon(pct)}</div>
+      <div style="flex:1">
+        <div class="compliance-row-label">${label}</div>
+        <div class="compliance-row-detail">${detail}</div>
+      </div>
+      <div class="compliance-row-right">
+        <div class="compliance-fraction">${actual} / ${expected}</div>
+        <div class="compliance-bar-wrap">
+          <div class="compliance-bar ${bgCls(pct)}" style="width:${pct}%"></div>
+        </div>
+        <div class="compliance-pct ${pctCls(pct)}">${pct}%</div>
+      </div>
+    </div>`;
+  }
 
-    statsRows.push(`
-      <tr>
-        <td><span style="color:${deptInfo.color}">${deptInfo.icon} ${deptInfo.label}</span></td>
-        <td style="color:${pctColor};font-weight:600">${pct !== null ? pct + '%' : '—'}</td>
-        <td>${pct !== null ? `${passedChecks}/${totalChecks}` : '—'}</td>
-        <td>${tempChecks > 0 ? tempChecks : '—'}</td>
-        <td>${tempFails > 0 ? `<span style="color:var(--danger)">${tempFails} breach${tempFails !== 1 ? 'es' : ''}</span>` : tempChecks > 0 ? '<span style="color:var(--success)">None</span>' : '—'}</td>
-      </tr>`);
-  });
+  function buildDeptCard(dept) {
+    const deptInfo    = DEPARTMENTS[dept];
+    const tradingDates = elapsedDates.filter(d => isTrading(dept, d));
+    const tradingCount = tradingDates.length;
 
-  // Kitchen probes
-  let probeTotal = 0, probeFails = 0;
-  weekDates.forEach(date => {
-    state.records.filter(r => r.date === date && r.type === 'food_probe').forEach(r => {
-      probeTotal++;
-      if (r.fields?.probe_status === 'FAIL') probeFails++;
-    });
-  });
-  statsRows.push(`
-    <tr>
-      <td><span style="color:#f59e0b">🍳 Kitchen</span> <span style="color:var(--text-muted);font-size:11px">Probes</span></td>
-      <td>—</td>
-      <td>${probeTotal > 0 ? probeTotal : '—'}</td>
-      <td>—</td>
-      <td>${probeFails > 0 ? `<span style="color:var(--danger)">${probeFails} fail${probeFails !== 1 ? 's' : ''}</span>` : probeTotal > 0 ? '<span style="color:var(--success)">All pass</span>' : '—'}</td>
-    </tr>`);
+    // 1. Checks: opening + closing per trading day
+    const checksExp = tradingCount * 2;
+    const checksAct = tradingDates.reduce((sum, date) => {
+      let n = 0;
+      if (state.records.find(r => r.date === date && r.type === 'opening' && r.dept === dept)) n++;
+      if (state.records.find(r => r.date === date && r.type === 'closing' && r.dept === dept)) n++;
+      return sum + n;
+    }, 0);
+    const checksMissed = checksExp - checksAct;
+    const checksDetail = tradingCount === 0
+      ? 'No trading days elapsed'
+      : `${checksExp} expected (2 × ${tradingCount} day${tradingCount !== 1 ? 's' : ''})${checksMissed > 0 ? ` · ${checksMissed} missed` : ''}`;
 
-  return `
-    <table class="report-table">
-      <thead><tr>
-        <th>Department</th><th>Compliance</th><th>Checks Passed</th><th>Temp Readings</th><th>Temp Breaches</th>
-      </tr></thead>
-      <tbody>${statsRows.join('')}</tbody>
-    </table>`;
+    // 2. Equipment: 2 batch submissions per trading day
+    //    batch_id groups a full submission; fall back to individual record id for legacy data
+    const equipExp = tradingCount * 2;
+    const equipAct = tradingDates.reduce((sum, date) => {
+      const recs = state.records.filter(r =>
+        r.date === date && r.type === 'temperature' && r.dept === dept
+      );
+      const batches = new Set(recs.map(r => r.fields?.batch_id || r.id));
+      return sum + Math.min(batches.size, 2); // cap at 2 — extra submissions don't inflate score
+    }, 0);
+    const equipMissed = equipExp - equipAct;
+    const equipDetail = tradingCount === 0
+      ? 'No trading days elapsed'
+      : `${equipExp} expected (2 × ${tradingCount} day${tradingCount !== 1 ? 's' : ''})${equipMissed > 0 ? ` · ${equipMissed} missed` : ''}`;
+
+    // 3. Tasks: scheduled tasks for elapsed days only
+    const elapsedDayNames = elapsedDates.map(d => DAYS_OF_WEEK[weekDates.indexOf(d)]);
+    const scheduledTasks  = getAllTasksForWeek(dept, weekStart)
+      .filter(t => elapsedDayNames.includes(t.day));
+    const tasksExp = scheduledTasks.length;
+    const tasksAct = scheduledTasks.filter(t => isTaskDone(weekStart, t.id)).length;
+    const tasksDetail = tasksExp === 0
+      ? 'No tasks scheduled so far this week'
+      : `${tasksExp} scheduled so far · ${tasksAct} completed`;
+
+    // 4. Food probes: kitchen only, 1 per kitchen trading day
+    let probeExp = 0, probeAct = 0, probeDetail = '';
+    if (dept === 'kitchen') {
+      probeExp    = tradingCount;
+      probeAct    = tradingDates.filter(date =>
+        state.records.some(r => r.date === date && r.type === 'food_probe')
+      ).length;
+      const probeMissed = probeExp - probeAct;
+      probeDetail = tradingCount === 0
+        ? 'No trading days elapsed'
+        : `${probeExp} expected (1 per day)${probeMissed > 0 ? ` · ${probeMissed} missed` : ''}`;
+    }
+
+    // Overall dept score — average across all categories with data
+    const cats = [
+      { exp: checksExp, act: checksAct },
+      { exp: equipExp,  act: equipAct  },
+      ...(tasksExp  > 0  ? [{ exp: tasksExp,  act: tasksAct  }] : []),
+      ...(dept === 'kitchen' && probeExp > 0 ? [{ exp: probeExp, act: probeAct }] : []),
+    ];
+    const totalExp = cats.reduce((s, c) => s + c.exp, 0);
+    const totalAct = cats.reduce((s, c) => s + c.act, 0);
+    const overall  = totalExp > 0 ? Math.round((totalAct / totalExp) * 100) : 100;
+
+    return `
+      <div class="dept-compliance-card">
+        <div class="dept-compliance-header">
+          <div class="dept-compliance-name" style="color:${deptInfo.color}">${deptInfo.icon} ${deptInfo.label}</div>
+          <div class="dept-overall-score">
+            <div class="dept-overall-bar-wrap">
+              <div class="dept-overall-bar" style="width:${overall}%;background:${pctColor(overall)}"></div>
+            </div>
+            <div class="dept-overall-pct" style="color:${pctColor(overall)}">${overall}%</div>
+          </div>
+        </div>
+        <div class="compliance-rows">
+          ${compRow('Opening & Closing Checks', checksDetail, checksAct, checksExp)}
+          ${compRow('Equipment Checks',         equipDetail,  equipAct,  equipExp)}
+          ${compRow('Tasks',                    tasksDetail,  tasksAct,  tasksExp)}
+          ${dept === 'kitchen' ? compRow('Food Probes', probeDetail, probeAct, probeExp) : ''}
+        </div>
+      </div>`;
+  }
+
+  // Progress note — only shown for the current week
+  const kitchenElapsed = elapsedDates.filter(d => isTrading('kitchen', d)).length;
+  const kitchenTotal   = weekDates.filter(d => isTrading('kitchen', d)).length;
+  const progressNote   = isCurrentWeek
+    ? `<div class="compliance-progress-note">📅 ${kitchenElapsed} of ${kitchenTotal} trading day${kitchenTotal !== 1 ? 's' : ''} elapsed · compliance reflects the week so far</div>`
+    : '';
+
+  return progressNote + `<div class="compliance-wrap">${buildDeptCard('kitchen')}${buildDeptCard('foh')}</div>`;
 }
 
 // ── Label lookup — finds human label for a check id from settings ────

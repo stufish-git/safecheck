@@ -3,7 +3,7 @@
 //  Caches all app assets for full offline support
 // ═══════════════════════════════════════════════════════
 
-const CACHE_NAME = 'safechecks-v121';
+const CACHE_NAME = 'safechecks-v122';
 const ASSETS = [
   './',
   './index.html',

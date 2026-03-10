@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.21.0';
+const APP_VERSION = '5.22.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -696,6 +696,8 @@ function submitAllEquipment() {
   if (missingAction) { showToast('Enter corrective actions for all failed items', 'error'); return; }
 
   // Build all records first, save locally, then send sequentially
+  // All records in this submission share a batch_id — used for compliance counting
+  const batchId    = crypto.randomUUID ? crypto.randomUUID() : `batch_${Date.now()}`;
   const tempRecords = [];
   let submitted = 0;
   rows.forEach(row => {
@@ -717,6 +719,7 @@ function submitAllEquipment() {
       timestamp: nowTimestamp(),
       iso:       nowISO(),
       fields: {
+        batch_id:               batchId,
         temp_location:          equip.name,
         temp_value:             tempVal,
         temp_status:            status,
