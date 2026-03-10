@@ -351,6 +351,206 @@ function buildDailyTaskGrid(dateStr) {
 }
 
 // ─────────────────────────────────────────────────────
+//  WEEKLY REPORT — detail section builders
+// ─────────────────────────────────────────────────────
+
+// ── Failed checklist items for the week ──────────────
+function buildWeeklyFailedChecks(weekDates) {
+  const rows = [];
+  const DAY_ABBR = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  weekDates.forEach(date => {
+    const dayAbbr = DAY_ABBR[new Date(date + 'T12:00:00').getDay()];
+    const shortDate = new Date(date + 'T12:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+
+    ['opening','closing'].forEach(type => {
+      ['kitchen','foh'].forEach(dept => {
+        const rec = state.records.find(r => r.date === date && r.type === type && r.dept === dept);
+        if (!rec) return;
+        const deptInfo = DEPARTMENTS[dept];
+        const label    = type === 'opening' ? 'Opening' : 'Closing';
+        const signed   = rec.fields?.open_signed_by || rec.fields?.close_signed_by || '—';
+        const notes    = rec.fields?.open_notes     || rec.fields?.close_notes     || '';
+
+        Object.entries(rec.fields || {}).forEach(([key, val]) => {
+          if (val !== 'No') return;
+          const checkLabel = getCheckLabel(key);
+          rows.push(`
+            <div class="failed-check-row">
+              <div class="failed-check-icon">✗</div>
+              <div>
+                <div class="failed-check-label">${checkLabel}</div>
+                <div class="failed-check-meta">${deptInfo.icon} ${deptInfo.label} ${label} · ${dayAbbr} ${shortDate} · Signed: ${signed}</div>
+                ${notes ? `<div class="failed-check-note">↳ ${notes}</div>` : ''}
+              </div>
+            </div>`);
+        });
+      });
+    });
+  });
+
+  if (!rows.length) return '';
+  return `
+    <div class="report-section-title">Failed Checks</div>
+    <div class="failed-checks-list">${rows.join('')}</div>`;
+}
+
+// ── Temperature breaches for the week ────────────────
+function buildWeeklyTempBreaches(weekDates) {
+  const DAY_ABBR = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const breaches = [];
+
+  weekDates.forEach(date => {
+    const dayAbbr   = DAY_ABBR[new Date(date + 'T12:00:00').getDay()];
+    const shortDate = new Date(date + 'T12:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+    state.records
+      .filter(r => r.date === date && r.type === 'temperature' && r.fields?.temp_status === 'FAIL')
+      .sort((a, b) => new Date(a.iso) - new Date(b.iso))
+      .forEach(r => {
+        const f       = r.fields || {};
+        const deptInfo = DEPARTMENTS[r.dept] || DEPARTMENTS.kitchen;
+        const time    = r.timestamp?.split(' ')[1] || '';
+        breaches.push(`
+          <div class="breach-row">
+            <div class="breach-left">
+              <div class="breach-location">${f.temp_location || '—'}</div>
+              <div class="breach-meta">${dayAbbr} ${shortDate}${time ? ' · ' + time : ''} · ${deptInfo.icon} ${deptInfo.label}${f.temp_probe ? ' · ' + f.temp_probe : ''}</div>
+              ${f.temp_corrective_action && f.temp_corrective_action !== 'See notes'
+                ? `<div class="breach-action">↳ ${f.temp_corrective_action}</div>` : ''}
+            </div>
+            <div class="breach-right">
+              <div class="breach-temp">${f.temp_value ? f.temp_value + '°C' : '—'}</div>
+              <div><span class="report-status-badge status-fail">FAIL</span></div>
+            </div>
+          </div>`);
+      });
+  });
+
+  if (!breaches.length) return '';
+  return `
+    <div class="report-section-title">Temperature Breaches</div>
+    <div class="breach-list">${breaches.join('')}</div>`;
+}
+
+// ── Full equipment check log for the week ────────────
+function buildWeeklyEquipmentLog(weekDates) {
+  const DAY_ABBR = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const allRecs  = [];
+
+  weekDates.forEach(date => {
+    state.records
+      .filter(r => r.date === date && r.type === 'temperature')
+      .sort((a, b) => new Date(a.iso) - new Date(b.iso))
+      .forEach(r => allRecs.push(r));
+  });
+
+  if (!allRecs.length) {
+    return `
+      <div class="report-section-title">Equipment Checks</div>
+      <div class="report-empty-row">— No equipment checks recorded this week</div>`;
+  }
+
+  const totalFails = allRecs.filter(r => r.fields?.temp_status === 'FAIL').length;
+  const chips = `
+    <div class="probe-summary-chips" style="padding:0 20px 10px">
+      <span class="probe-chip probe-chip-count">${allRecs.length} reading${allRecs.length !== 1 ? 's' : ''}</span>
+      ${totalFails > 0
+        ? `<span class="probe-chip probe-chip-fail">${totalFails} fail${totalFails !== 1 ? 's' : ''}</span>`
+        : `<span class="probe-chip probe-chip-pass">All pass</span>`}
+    </div>`;
+
+  const rows = allRecs.map(r => {
+    const f        = r.fields || {};
+    const status   = f.temp_status || 'OK';
+    const cls      = status === 'FAIL' ? 'status-fail' : status === 'WARNING' ? 'status-warn' : 'status-ok';
+    const deptInfo = DEPARTMENTS[r.dept] || DEPARTMENTS.kitchen;
+    const dayAbbr  = DAY_ABBR[new Date(r.date + 'T12:00:00').getDay()];
+    const shortDate = new Date(r.date + 'T12:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+    const time     = r.timestamp?.split(' ')[1] || '';
+    const action   = f.temp_corrective_action && f.temp_corrective_action !== 'None required' && f.temp_corrective_action !== 'See notes'
+      ? f.temp_corrective_action : '';
+    const isFail   = status === 'FAIL';
+
+    return `<tr${isFail ? ' style="background:rgba(239,68,68,0.04)"' : ''}>
+      <td style="font-weight:600;font-size:12px">${f.temp_location || '—'}</td>
+      <td class="report-meta">${deptInfo.icon} ${deptInfo.label}</td>
+      <td class="report-meta">${dayAbbr} ${shortDate}${time ? '<br><span style="font-size:10px;opacity:0.7">' + time + '</span>' : ''}</td>
+      <td class="report-temp-val ${cls}">${f.temp_value ? f.temp_value + '°C' : '—'}</td>
+      <td><span class="report-status-badge ${cls}">${status}</span></td>
+      <td class="report-meta">${action ? `<span class="report-action-text">↳ ${action}</span>` : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="report-section-title">Equipment Checks</div>
+    ${chips}
+    <div class="report-table-wrap">
+      <table class="report-table">
+        <thead><tr>
+          <th>Equipment</th><th>Dept</th><th>Day / Time</th><th>Reading</th><th>Status</th><th>Action</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+// ── Full food probe log for the week ─────────────────
+function buildWeeklyProbeLog(weekDates) {
+  const DAY_ABBR = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const allRecs  = [];
+
+  weekDates.forEach(date => {
+    state.records
+      .filter(r => r.date === date && r.type === 'food_probe')
+      .sort((a, b) => new Date(a.iso) - new Date(b.iso))
+      .forEach(r => allRecs.push(r));
+  });
+
+  if (!allRecs.length) {
+    return `
+      <div class="report-section-title">Food Probe Results</div>
+      <div class="report-empty-row">— No food probes recorded this week</div>`;
+  }
+
+  const totalFails = allRecs.filter(r => r.fields?.probe_status === 'FAIL').length;
+  const chips = `
+    <div class="probe-summary-chips" style="padding:0 20px 10px">
+      <span class="probe-chip probe-chip-count">${allRecs.length} probe${allRecs.length !== 1 ? 's' : ''}</span>
+      ${allRecs.length - totalFails > 0 ? `<span class="probe-chip probe-chip-pass">${allRecs.length - totalFails} passed</span>` : ''}
+      ${totalFails > 0 ? `<span class="probe-chip probe-chip-fail">${totalFails} failed</span>` : ''}
+    </div>`;
+
+  const rows = allRecs.map(r => {
+    const f       = r.fields || {};
+    const status  = f.probe_status || 'PASS';
+    const cls     = status === 'FAIL' ? 'status-fail' : 'status-ok';
+    const dayAbbr = DAY_ABBR[new Date(r.date + 'T12:00:00').getDay()];
+    const shortDate = new Date(r.date + 'T12:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+    const isFail  = status === 'FAIL';
+
+    return `<tr${isFail ? ' style="background:rgba(239,68,68,0.04)"' : ''}>
+      <td style="font-weight:600;font-size:12px">${f.probe_product || '—'}</td>
+      <td class="report-meta">${dayAbbr} ${shortDate}</td>
+      <td class="report-temp-val ${cls}">${f.probe_temp ? f.probe_temp + '°C' : '—'}</td>
+      <td><span class="report-status-badge ${cls}">${status}</span></td>
+      <td class="report-meta">${isFail && f.probe_action ? `<span class="report-action-text">↳ ${f.probe_action}</span>` : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="report-section-title">Food Probe Results</div>
+    ${chips}
+    <div class="report-table-wrap">
+      <table class="report-table">
+        <thead><tr>
+          <th>Product</th><th>Day</th><th>Core Temp</th><th>Status</th><th>Corrective Action</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+// ─────────────────────────────────────────────────────
 //  WEEKLY REPORT
 // ─────────────────────────────────────────────────────
 function renderWeeklyReport() {
@@ -391,6 +591,12 @@ function renderWeeklyReport() {
     (r.fields?.week_start === weekStart || r.date === weekStart));
   const weeklyReviewHTML = buildWeeklyReviewSection(weeklyRec);
 
+  // ── Detail sections ───────────────────────────────────
+  const failedChecksHTML  = buildWeeklyFailedChecks(weekDates);
+  const tempBreachesHTML  = buildWeeklyTempBreaches(weekDates);
+  const equipLogHTML      = buildWeeklyEquipmentLog(weekDates);
+  const probeLogHTML      = buildWeeklyProbeLog(weekDates);
+
   container.innerHTML = `
     <div class="report-doc" id="report-printable">
       <div class="report-doc-header">
@@ -420,6 +626,11 @@ function renderWeeklyReport() {
 
       <div class="report-section-title">Compliance</div>
       ${complianceHTML}
+
+      ${failedChecksHTML}
+      ${tempBreachesHTML}
+      ${equipLogHTML}
+      ${probeLogHTML}
 
       <div class="report-section-title">Weekly Management Review</div>
       ${weeklyReviewHTML}
