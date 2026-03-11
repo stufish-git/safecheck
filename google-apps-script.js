@@ -735,6 +735,10 @@ function getTodayRecords(ss, tabName, today) {
     if (String(date) !== today) continue;
 
     if (tabName === 'Temperature Log') {
+      let batchId = '';
+      if (fieldsCol >= 0) {
+        try { batchId = (JSON.parse(String(row[fieldsCol] || '{}')) || {}).batch_id || ''; } catch(e) {}
+      }
       results.push({
         dept:     String(row[deptCol] || '').toLowerCase(),
         location: String(row[locCol]  || ''),
@@ -742,6 +746,7 @@ function getTodayRecords(ss, tabName, today) {
         status:   String(row[statusCol] || ''),
         action:   String(row[actionCol] || ''),
         time:     String(row[timeCol]   || ''),
+        batch_id: batchId,
       });
     } else if (tabName === 'Food Probe Log') {
       const coolingCol = headers.indexOf('Cooling Time');
@@ -1016,169 +1021,149 @@ function handleSendWeeklyEmail(data) {
 function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temps, probes, goodsIn, tasks, weeklyRec, settings) {
   const DAY_ABBR = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
-  // ── Overall compliance across the week ──────────────
-  var totalChecks = 0, passedChecks = 0;
-  [...opening, ...closing].forEach(function(r) {
-    Object.entries(r.fields || {}).forEach(function(e) {
-      if (e[1] === 'Yes' || e[1] === 'No') { totalChecks++; if (e[1] === 'Yes') passedChecks++; }
-    });
-  });
-  const pct        = totalChecks > 0 ? Math.round(passedChecks / totalChecks * 100) : null;
-  const pctColor   = pct === null ? '#4a5568' : pct >= 90 ? '#22c55e' : pct >= 70 ? '#f59e0b' : '#ef4444';
-  const headerBg   = pct === null ? '#1a2332' : pct >= 90 ? '#0d3320' : pct >= 70 ? '#2d1c07' : '#2d0a0a';
-  const barWidth   = pct !== null ? pct : 0;
-
-  const badgeHtml = pct !== null
-    ? '<div style="display:inline-block;background:' + headerBg + ';border:2px solid ' + pctColor + ';border-radius:8px;padding:8px 16px;text-align:center"><p style="margin:0;font-size:22px;font-weight:700;color:' + pctColor + ';font-family:Arial,sans-serif;line-height:1">' + pct + '%</p><p style="margin:2px 0 0;font-size:10px;color:' + pctColor + ';font-family:Arial,sans-serif;letter-spacing:.05em;text-transform:uppercase;opacity:.8">Weekly Compliance</p></div>'
-    : '<div style="display:inline-block;background:#1a2332;border:2px solid #4a5568;border-radius:8px;padding:8px 16px;text-align:center"><p style="margin:0;font-size:11px;color:#7d8da8;font-family:Arial,sans-serif">No checks<br>recorded</p></div>';
-
-  // ── Day-by-day overview table ─────────────────────
-  const dayHeaders = weekDates.map(function(date) {
+  function dayStr(date) {
     const d = new Date(date + 'T12:00:00');
-    return DAY_ABBR[d.getDay()] + '<br><span style="font-size:10px;font-weight:400;color:#7d8da8">' + d.getDate() + '/' + (d.getMonth()+1) + '</span>';
-  }).join('');
+    return DAY_ABBR[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth()+1);
+  }
+  function pctColor(p) { return p >= 90 ? '#22c55e' : p >= 70 ? '#f59e0b' : '#ef4444'; }
+  function pctBg(p)    { return p >= 90 ? '#0d3320' : p >= 70 ? '#2d1c07' : '#2d0a0a'; }
 
-  function dayCell(date, type, dept) {
+  // ── Daily overview grid ──────────────────────────
+  function equipCell(date) {
+    var recs = temps.filter(function(r) { return r.date === date; });
+    if (!recs.length) return '<td style="text-align:center;padding:5px 4px;font-size:12px;color:#4a6080">—</td>';
+    var fails  = recs.filter(function(r) { return r.status==='FAIL'||r.status==='WARNING'; }).length;
+    var passes = recs.length - fails;
+    var hasFail = fails > 0;
+    var icon = hasFail ? '⚠' : '✓';
+    var iconColor = hasFail ? '#f59e0b' : '#22c55e';
+    var countHtml = hasFail
+      ? '<span style="font-size:9px;display:block"><span style="color:#22c55e">' + passes + '✓</span> <span style="color:#ef4444">' + fails + '✗</span></span>'
+      : '<span style="font-size:9px;display:block;color:#7d8da8">' + recs.length + '</span>';
+    return '<td style="text-align:center;padding:5px 4px;font-size:13px;color:' + iconColor + '">' + icon + countHtml + '</td>';
+  }
+
+  function simpleCell(date, type, dept) {
     var recs = [];
-    if (type === 'opening') recs = opening.filter(function(r) { return r.date === date && r.dept === dept; });
-    else if (type === 'closing') recs = closing.filter(function(r) { return r.date === date && r.dept === dept; });
-    else if (type === 'temperature') recs = temps.filter(function(r) { return r.date === date; });
-    else if (type === 'probe')   recs = probes.filter(function(r) { return r.date === date; });
-    else if (type === 'goodsin') recs = goodsIn.filter(function(r) { return r.date === date; });
-
+    if (type === 'opening') recs = opening.filter(function(r) { return r.date===date && r.dept===dept; });
+    else if (type === 'closing') recs = closing.filter(function(r) { return r.date===date && r.dept===dept; });
+    else if (type === 'probe')   recs = probes.filter(function(r) { return r.date===date; });
+    else if (type === 'goodsin') recs = goodsIn.filter(function(r) { return r.date===date; });
     if (!recs.length) return '<td style="text-align:center;padding:5px 4px;font-size:13px;color:#4a6080">—</td>';
-
     var hasFail = false;
-    if (type === 'opening' || type === 'closing') {
+    if (type==='opening'||type==='closing') {
       recs.forEach(function(r) { Object.entries(r.fields||{}).forEach(function(e) { if (e[1]==='No') hasFail=true; }); });
-    } else if (type === 'temperature') {
-      hasFail = recs.some(function(r) { return r.status==='FAIL'||r.status==='WARNING'; });
-    } else if (type === 'probe') {
+    } else if (type==='probe') {
       hasFail = recs.some(function(r) { return r.status==='FAIL'; });
-    } else if (type === 'goodsin') {
-      hasFail = recs.some(function(r) { return r.outcome==='rejected'||r.temp_status==='FAIL'; });
+    } else if (type==='goodsin') {
+      hasFail = recs.some(function(r) { return (r.fields||{}).gi_outcome==='rejected'||(r.fields||{}).gi_temp_status==='FAIL'; });
     }
-
-    const icon = hasFail ? '⚠' : '✓';
-    const color = hasFail ? '#f59e0b' : '#22c55e';
-    const count = (type === 'temperature' || type === 'probe' || type === 'goodsin') ? '<span style="font-size:9px;display:block;color:#7d8da8">' + recs.length + '</span>' : '';
+    var icon = hasFail ? '⚠' : '✓';
+    var color = hasFail ? '#f59e0b' : '#22c55e';
+    var count = (type==='probe'||type==='goodsin') ? '<span style="font-size:9px;display:block;color:#7d8da8">' + recs.length + '</span>' : '';
     return '<td style="text-align:center;padding:5px 4px;font-size:13px;color:' + color + '">' + icon + count + '</td>';
   }
 
-  const DEPT_LABELS = { kitchen: '&#x1F373; Kitchen', foh: '&#x1F37D; FOH' };
-  const gridRows = [
+  const gridColHeaders = weekDates.map(function(date) {
+    const d = new Date(date + 'T12:00:00');
+    return '<th style="text-align:center;padding:5px 4px;font-size:11px;color:#4a6080;min-width:36px">' + DAY_ABBR[d.getDay()] + '<br><span style="font-weight:400;font-size:9px">' + d.getDate() + '/' + (d.getMonth()+1) + '</span></th>';
+  }).join('');
+
+  const gridDefs = [
     ['opening',     'kitchen', '&#x1F373; Opening'],
     ['opening',     'foh',     '&#x1F37D; Opening'],
     ['closing',     'kitchen', '&#x1F373; Closing'],
     ['closing',     'foh',     '&#x1F37D; Closing'],
-    ['temperature', null,      '&#x1F321; Temps'],
+    ['equipment',   null,      '&#x1F321; Equipment'],
     ['probe',       null,      '&#x1F356; Probes'],
     ['goodsin',     null,      '&#x1F4E6; Goods In'],
-  ].map(function(row) {
-    const cells = weekDates.map(function(date) { return dayCell(date, row[0], row[1]); }).join('');
+  ];
+  const gridRows = gridDefs.map(function(row) {
+    const cells = weekDates.map(function(date) {
+      return row[0] === 'equipment' ? equipCell(date) : simpleCell(date, row[0], row[1]);
+    }).join('');
     return '<tr><td style="padding:5px 8px;font-size:12px;color:#7d8da8;font-family:Arial,sans-serif;white-space:nowrap">' + row[2] + '</td>' + cells + '</tr>';
   }).join('');
 
   const gridHtml = '<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-family:Arial,sans-serif">' +
     '<tr><th style="text-align:left;padding:5px 8px;font-size:10px;color:#4a6080;text-transform:uppercase;letter-spacing:.05em">Check</th>' +
-    weekDates.map(function(date) {
-      const d = new Date(date + 'T12:00:00');
-      return '<th style="text-align:center;padding:5px 4px;font-size:11px;color:#4a6080;min-width:36px">' + DAY_ABBR[d.getDay()] + '<br><span style="font-weight:400;font-size:9px">' + d.getDate() + '/' + (d.getMonth()+1) + '</span></th>';
-    }).join('') + '</tr>' + gridRows + '</table>';
+    gridColHeaders + '</tr>' + gridRows + '</table>';
 
-  // ── Temperature summary ────────────────────────────
-  var tempRows = '';
-  if (!temps.length) {
-    tempRows = '<tr><td colspan="5" style="padding:10px 8px;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No temperature readings this week</td></tr>';
-  } else {
-    temps.forEach(function(r) {
-      const d = new Date(r.date + 'T12:00:00');
-      const dayStr = DAY_ABBR[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth()+1);
-      const bg = r.status==='OK' ? '#dcfce7' : r.status==='WARNING' ? '#fef3c7' : '#fee2e2';
-      const fg = r.status==='OK' ? '#166534' : r.status==='WARNING' ? '#92400e' : '#991b1b';
-      const rowBg = r.status==='FAIL' ? 'background:#fef2f2' : r.status==='WARNING' ? 'background:#fffbeb' : '';
-      tempRows += '<tr style="border-bottom:1px solid #f1f5f9;' + rowBg + '">' +
-        '<td style="padding:6px 8px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + dayStr + '</td>' +
-        '<td style="padding:6px 8px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + r.location + '</td>' +
-        '<td style="padding:6px 8px;font-size:13px;font-weight:600;color:#334155;font-family:Arial,sans-serif">' + r.temp + '°C</td>' +
-        '<td style="padding:6px 8px"><span style="background:' + bg + ';color:' + fg + ';padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + r.status + '</span></td>' +
-        '<td style="padding:6px 8px;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">' + fmtTime(r.time) + '</td></tr>';
+  // ── Compliance — dept cards ───────────────────────
+  var kitchenChecks = 0, kitchenPassed = 0, fohChecks = 0, fohPassed = 0;
+  opening.concat(closing).forEach(function(r) {
+    Object.entries(r.fields||{}).forEach(function(e) {
+      if (e[1]==='Yes'||e[1]==='No') {
+        if (r.dept==='kitchen') { kitchenChecks++; if (e[1]==='Yes') kitchenPassed++; }
+        else if (r.dept==='foh') { fohChecks++; if (e[1]==='Yes') fohPassed++; }
+      }
     });
-  }
-  const tempSection = sectionHeader('&#x1F321; Equipment Temperatures · ' + temps.length + ' reading' + (temps.length!==1?'s':'')) +
-    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
-    '<tr style="background:#f8fafc"><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Day</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Location</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Temp</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Status</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Time</td></tr>' +
-    tempRows + '</table></td></tr>';
+  });
 
-  // ── Food probe summary ─────────────────────────────
-  var probeRows = '';
-  if (!probes.length) {
-    probeRows = '<td colspan="2" style="padding:10px 0"><span style="font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No food probes this week</span></td>';
-  } else {
-    probeRows = probes.map(function(r) {
-      const d = new Date(r.date + 'T12:00:00');
-      const dayStr = DAY_ABBR[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth()+1);
-      const pass = r.status === 'PASS';
-      const bg = pass ? '#dcfce7' : '#fee2e2';
-      const fg = pass ? '#166534' : '#991b1b';
-      const coolingHtml = r.cooling ? '<p style="margin:3px 0 0;font-size:11px;color:#60a5fa;font-family:Arial,sans-serif">&#x2744; Cooled for ' + r.cooling + '</p>' : '';
-      return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:6px 0">' +
-        '<p style="margin:0;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + dayStr + '</p>' +
-        '<p style="margin:2px 0 0;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + r.product + '</p>' +
-        coolingHtml + '</td>' +
-        '<td style="text-align:right;vertical-align:top;padding:6px 0;font-size:12px;font-family:Arial,sans-serif">' +
-        '<strong style="color:#334155">' + r.temp + '°C</strong> ' +
-        '<span style="background:' + bg + ';color:' + fg + ';padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;margin-left:6px">' + r.status + '</span> ' +
-        '<span style="color:#94a3b8;margin-left:6px">' + r.staff + '</span></td></tr>';
-    }).join('');
+  // Equipment: batch_id groups; 2 expected per trading day
+  function equipBatches(dept, date) {
+    var recs = temps.filter(function(r) { return r.date===date && (!dept || r.dept===dept); });
+    var batches = {};
+    recs.forEach(function(r) { var k = r.batch_id || r.location + r.time; batches[k] = true; });
+    return Math.min(Object.keys(batches).length, 2);
   }
-  const probeSection = sectionHeader('&#x1F356; Food Probes · ' + (probes.length || 'none') ) +
-    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0">' + probeRows + '</table></td></tr>';
 
-  // ── Goods In summary ──────────────────────────────
-  var giRows = '';
-  if (!goodsIn.length) {
-    giRows = '<tr><td colspan="5" style="padding:10px 8px;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No deliveries this week</td></tr>';
-  } else {
-    goodsIn.forEach(function(r) {
-      const d = new Date(r.date + 'T12:00:00');
-      const dayStr = DAY_ABBR[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth()+1);
-      const f = r.fields || {};
-      const isAcc = f.gi_outcome === 'accepted';
-      const typeIcon = f.gi_type === 'frozen' ? '&#x2744;' : '&#x1F33F;';
-      giRows += '<tr style="border-bottom:1px solid #f1f5f9">' +
-        '<td style="padding:6px 8px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + dayStr + '</td>' +
-        '<td style="padding:6px 8px;font-size:13px;font-weight:600;font-family:Arial,sans-serif">' + (f.gi_supplier||'—') + '</td>' +
-        '<td style="padding:6px 8px;font-size:12px;font-family:Arial,sans-serif;color:#94a3b8">' + typeIcon + ' ' + (f.gi_type||'') + '</td>' +
-        '<td style="padding:6px 8px;font-size:13px;font-family:monospace;font-weight:600">' + (f.gi_temp ? f.gi_temp+'°C' : '—') + '</td>' +
-        '<td style="padding:6px 8px"><span style="background:' + (isAcc?'#dcfce7':'#fee2e2') + ';color:' + (isAcc?'#166534':'#991b1b') + ';padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + (isAcc?'Accepted':'Rejected') + '</span></td></tr>';
-      if (f.gi_notes) giRows += '<tr><td colspan="5" style="padding:0 8px 6px;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">↳ ' + f.gi_notes + '</td></tr>';
-    });
+  // Probe count for a date (kitchen only)
+  function probeOnDate(date) {
+    return probes.some(function(r) { return r.date===date; }) ? 1 : 0;
   }
-  const giSection = sectionHeader('&#x1F4E6; Goods In · ' + (goodsIn.length || 'none')) +
-    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
-    '<tr style="background:#f8fafc"><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Day</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Supplier</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Type</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Temp</td><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Outcome</td></tr>' +
-    giRows + '</table></td></tr>';
 
-  // ── Tasks summary ─────────────────────────────────
-  const doneCount  = tasks.filter(function(t) { return t.done; }).length;
-  var taskRows = '';
-  if (!tasks.length) {
-    taskRows = '<tr><td colspan="3" style="padding:10px 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No tasks scheduled this week</td></tr>';
-  } else {
-    taskRows = tasks.map(function(t) {
-      const d = new Date((t.date||'') + 'T12:00:00');
-      const dayStr = t.date ? DAY_ABBR[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth()+1) : '';
-      return '<tr style="border-bottom:1px solid #f1f5f9">' +
-        '<td style="padding:5px 0;font-size:12px;color:#64748b;font-family:Arial,sans-serif;width:60px">' + dayStr + '</td>' +
-        '<td style="padding:5px 8px;font-size:13px;color:' + (t.done?'#334155':'#94a3b8') + ';font-family:Arial,sans-serif;font-style:' + (t.done?'normal':'italic') + '">' + (t.done?'✓ ':'') + t.label + '</td>' +
-        '<td style="text-align:right"><span style="font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">' + (t.done ? (t.doneBy||'') : '<span style="background:#f1f5f9;color:#94a3b8;padding:2px 8px;border-radius:4px;font-size:11px">Not done</span>') + '</span></td></tr>';
-    }).join('');
+  function complianceRow(label, actual, expected) {
+    if (expected === 0) {
+      return '<tr><td style="padding:5px 16px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + label + '</td>' +
+             '<td style="padding:5px 16px;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif;text-align:right">N/A</td></tr>';
+    }
+    var p = Math.round(actual/expected*100);
+    var c = pctColor(p);
+    var barFill = '<div style="display:inline-block;width:' + Math.round(p*60/100) + 'px;height:5px;background:' + c + ';border-radius:3px;vertical-align:middle"></div>';
+    var barBg   = '<div style="display:inline-block;width:60px;height:5px;background:#e2e8f0;border-radius:3px;vertical-align:middle;position:relative">' + barFill + '</div>';
+    return '<tr><td style="padding:5px 16px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + label + '</td>' +
+           '<td style="padding:5px 16px;text-align:right;white-space:nowrap">' + barBg +
+           '&nbsp;<span style="font-size:12px;font-weight:700;color:' + c + ';font-family:Arial,sans-serif">' + p + '%</span>' +
+           '&nbsp;<span style="font-size:11px;color:#94a3b8;font-family:Arial,sans-serif">' + actual + '/' + expected + '</span></td></tr>';
   }
-  const taskSection = sectionHeader('&#x2705; Tasks · ' + doneCount + ' / ' + tasks.length + ' complete') +
-    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0">' + taskRows + '</table></td></tr>';
 
-  // ── Weekly management review ───────────────────────
+  function deptCard(label, icon, color, checksAct, checksExp, equipAct, equipExp, probeAct, probeExp) {
+    var cats = [{a:checksAct,e:checksExp},{a:equipAct,e:equipExp}];
+    if (probeExp > 0) cats.push({a:probeAct,e:probeExp});
+    var totalA = 0, totalE = 0;
+    cats.forEach(function(c) { if (c.e > 0) { totalA += c.a; totalE += c.e; } });
+    var overall = totalE > 0 ? Math.round(totalA/totalE*100) : 100;
+    var oc = pctColor(overall);
+    var barW = Math.round(overall * 120 / 100);
+    return '<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:8px;border-collapse:collapse;margin-bottom:8px">' +
+      '<tr style="background:#f8fafc"><td style="padding:10px 16px"><span style="font-size:14px;font-weight:700;color:' + color + ';font-family:Arial,sans-serif">' + icon + ' ' + label + '</span></td>' +
+      '<td style="padding:10px 16px;text-align:right">' +
+      '<div style="display:inline-block;width:120px;height:6px;background:#e2e8f0;border-radius:3px;vertical-align:middle">' +
+      '<div style="width:' + barW + 'px;height:6px;background:' + oc + ';border-radius:3px"></div></div>' +
+      '&nbsp;<span style="font-size:18px;font-weight:700;color:' + oc + ';font-family:Arial,sans-serif;vertical-align:middle">' + overall + '%</span></td></tr>' +
+      complianceRow('Opening &amp; Closing Checks', checksAct, checksExp) +
+      complianceRow('Equipment Checks', equipAct, equipExp) +
+      (probeExp > 0 ? complianceRow('Food Probes', probeAct, probeExp) : '') +
+      '</table>';
+  }
+
+  // Count trading dates (simple: non-zero check/equip activity proxy — use all weekDates for expected)
+  // We don't have isTrading() in Apps Script so use weekDates.length as expected days
+  var kEquipAct = 0, kEquipExp = weekDates.length * 2;
+  var fEquipAct = 0, fEquipExp = weekDates.length * 2;
+  var kProbeAct = 0, kProbeExp = weekDates.length;
+  weekDates.forEach(function(date) {
+    kEquipAct += equipBatches('kitchen', date);
+    fEquipAct += equipBatches('foh', date);
+    kProbeAct += probeOnDate(date);
+  });
+
+  const complianceHtml =
+    deptCard('Kitchen', '🍳', '#f59e0b', kitchenPassed, kitchenChecks, kEquipAct, kEquipExp, kProbeAct, kProbeExp) +
+    deptCard('Front of House', '🍽', '#3b82f6', fohPassed, fohChecks, fEquipAct, fEquipExp, 0, 0);
+
+  // ── Weekly management review ──────────────────────
   var reviewHtml = '';
   if (!weeklyRec) {
     reviewHtml = '<tr><td style="padding:10px 24px;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No weekly review submitted</td></tr>';
@@ -1188,10 +1173,9 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
     const issues  = f.weekly_issues  || '';
     const actions = f.weekly_actions || '';
     const signed  = f.weekly_signed_by || '';
-    const ratingColor = rating === 'Good' ? '#22c55e' : rating === 'Satisfactory' ? '#f59e0b' : rating === 'Needs Improvement' ? '#ef4444' : '#94a3b8';
-    reviewHtml =
-      '<tr><td style="padding:8px 24px 14px">' +
-      (rating ? '<div style="display:inline-block;border:2px solid ' + ratingColor + ';color:' + ratingColor + ';border-radius:8px;padding:6px 14px;font-size:13px;font-weight:700;font-family:Arial,sans-serif;margin-bottom:8px">' + rating + '</div><br>' : '') +
+    const rc = rating==='Good' ? '#22c55e' : rating==='Satisfactory' ? '#f59e0b' : rating==='Needs Improvement' ? '#ef4444' : '#94a3b8';
+    reviewHtml = '<tr><td style="padding:8px 24px 14px">' +
+      (rating  ? '<div style="display:inline-block;border:2px solid ' + rc + ';color:' + rc + ';border-radius:8px;padding:6px 14px;font-size:13px;font-weight:700;font-family:Arial,sans-serif;margin-bottom:8px">' + rating + '</div><br>' : '') +
       (issues  ? '<p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#94a3b8;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:.05em">Issues</p><p style="margin:0 0 10px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + issues + '</p>' : '') +
       (actions ? '<p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#94a3b8;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:.05em">Actions</p><p style="margin:0 0 10px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + actions + '</p>' : '') +
       (signed  ? '<p style="margin:0;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">Signed by: ' + signed + ' · ' + (weeklyRec.time||'') + '</p>' : '') +
@@ -1199,36 +1183,197 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
   }
   const reviewSection = sectionHeader('&#x1F4CB; Weekly Management Review') + reviewHtml;
 
+  // ── Failed checks ─────────────────────────────────
+  var failedRows = '';
+  opening.concat(closing).forEach(function(r) {
+    var type = opening.indexOf(r) >= 0 ? 'Opening' : 'Closing';
+    var dept = r.dept === 'kitchen' ? '🍳 Kitchen' : '🍽 FOH';
+    var signed = r.signedBy || '—';
+    Object.entries(r.fields||{}).forEach(function(e) {
+      if (e[1] !== 'No') return;
+      var label = e[0].replace(/_/g,' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+      failedRows += '<tr style="border-bottom:1px solid #fee2e2">' +
+        '<td style="padding:6px 8px;font-size:12px;color:#991b1b;font-weight:600;font-family:Arial,sans-serif">✗ ' + label + '</td>' +
+        '<td style="padding:6px 8px;font-size:11px;color:#64748b;font-family:Arial,sans-serif">' + dept + ' ' + type + '</td>' +
+        '<td style="padding:6px 8px;font-size:11px;color:#64748b;font-family:Arial,sans-serif">' + dayStr(r.date) + '</td>' +
+        '<td style="padding:6px 8px;font-size:11px;color:#64748b;font-family:Arial,sans-serif">' + signed + '</td></tr>';
+    });
+  });
+  const failedSection = failedRows
+    ? sectionHeader('&#x26A0; Failed Checks') +
+      '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#fef2f2;border-radius:6px">' +
+      '<tr style="background:#fee2e2"><td style="font-size:10px;color:#991b1b;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Check</td>' +
+      '<td style="font-size:10px;color:#991b1b;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Dept</td>' +
+      '<td style="font-size:10px;color:#991b1b;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Day</td>' +
+      '<td style="font-size:10px;color:#991b1b;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Signed</td></tr>' +
+      failedRows + '</table></td></tr>'
+    : '';
+
+  // ── Temperature breaches ──────────────────────────
+  var breachRows = '';
+  temps.filter(function(r) { return r.status==='FAIL'; }).forEach(function(r) {
+    breachRows += '<tr style="border-bottom:1px solid #fee2e2">' +
+      '<td style="padding:6px 8px;font-size:13px;font-weight:600;color:#334155;font-family:Arial,sans-serif">' + r.location + '</td>' +
+      '<td style="padding:6px 8px;font-size:13px;font-weight:700;color:#ef4444;font-family:monospace">' + (r.temp ? r.temp+'°C' : '—') + '</td>' +
+      '<td style="padding:6px 8px"><span style="background:#fee2e2;color:#991b1b;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">FAIL</span></td>' +
+      '<td style="padding:6px 8px;font-size:11px;color:#64748b;font-family:Arial,sans-serif">' + dayStr(r.date) + (r.time ? ' · ' + fmtTime(r.time) : '') + '</td>' +
+      '<td style="padding:6px 8px;font-size:11px;color:#f59e0b;font-family:Arial,sans-serif;font-style:italic">' + (r.action && r.action!=='See notes' ? '↳ ' + r.action : '') + '</td></tr>';
+  });
+  const breachSection = breachRows
+    ? sectionHeader('&#x1F6A8; Temperature Breaches') +
+      '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#fef2f2;border-radius:6px">' +
+      '<tr style="background:#fee2e2"><td style="font-size:10px;color:#991b1b;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Equipment</td>' +
+      '<td style="font-size:10px;color:#991b1b;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Reading</td>' +
+      '<td style="font-size:10px;color:#991b1b;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Status</td>' +
+      '<td style="font-size:10px;color:#991b1b;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">When</td>' +
+      '<td style="font-size:10px;color:#991b1b;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Action</td></tr>' +
+      breachRows + '</table></td></tr>'
+    : '';
+
+  // ── Full equipment log ─────────────────────────────
+  var tempRows = '';
+  if (!temps.length) {
+    tempRows = '<tr><td colspan="5" style="padding:10px 8px;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No equipment checks this week</td></tr>';
+  } else {
+    temps.forEach(function(r) {
+      const bg = r.status==='OK' ? '#dcfce7' : r.status==='WARNING' ? '#fef3c7' : '#fee2e2';
+      const fg = r.status==='OK' ? '#166534' : r.status==='WARNING' ? '#92400e' : '#991b1b';
+      const rowBg = r.status==='FAIL' ? 'background:#fef2f2' : r.status==='WARNING' ? 'background:#fffbeb' : '';
+      const action = r.action && r.action!=='None required' && r.action!=='See notes' ? r.action : '';
+      tempRows += '<tr style="border-bottom:1px solid #f1f5f9;' + rowBg + '">' +
+        '<td style="padding:6px 8px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + dayStr(r.date) + '</td>' +
+        '<td style="padding:6px 8px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + r.location + '</td>' +
+        '<td style="padding:6px 8px;font-size:13px;font-weight:600;color:#334155;font-family:monospace">' + (r.temp ? r.temp+'°C' : '—') + '</td>' +
+        '<td style="padding:6px 8px"><span style="background:' + bg + ';color:' + fg + ';padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + r.status + '</span></td>' +
+        '<td style="padding:6px 8px;font-size:11px;color:#f59e0b;font-family:Arial,sans-serif;font-style:italic">' + (action ? '↳ ' + action : '—') + '</td></tr>';
+    });
+  }
+  const tempSection = sectionHeader('&#x1F321; Equipment Checks · ' + temps.length + ' reading' + (temps.length!==1?'s':'')) +
+    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
+    '<tr style="background:#f8fafc">' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Day</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Equipment</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Reading</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Status</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Action</td></tr>' +
+    tempRows + '</table></td></tr>';
+
+  // ── Food probe log ────────────────────────────────
+  var probeRows = '';
+  if (!probes.length) {
+    probeRows = '<tr><td colspan="4" style="padding:10px 8px;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No food probes this week</td></tr>';
+  } else {
+    probes.forEach(function(r) {
+      const pass = r.status === 'PASS';
+      const bg = pass ? '#dcfce7' : '#fee2e2';
+      const fg = pass ? '#166534' : '#991b1b';
+      const rowBg = pass ? '' : 'background:#fef2f2';
+      const coolingHtml = r.cooling ? '<p style="margin:3px 0 0;font-size:11px;color:#60a5fa;font-family:Arial,sans-serif">&#x2744; Cooled for ' + r.cooling + '</p>' : '';
+      probeRows += '<tr style="border-bottom:1px solid #f1f5f9;' + rowBg + '">' +
+        '<td style="padding:6px 8px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + dayStr(r.date) + '</td>' +
+        '<td style="padding:6px 8px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + r.product + coolingHtml + '</td>' +
+        '<td style="padding:6px 8px;font-size:13px;font-weight:600;font-family:monospace;color:#334155">' + (r.temp ? r.temp+'°C' : '—') + '</td>' +
+        '<td style="padding:6px 8px"><span style="background:' + bg + ';color:' + fg + ';padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + r.status + '</span>' +
+        (!pass && r.action ? '<p style="margin:3px 0 0;font-size:11px;color:#f59e0b;font-family:Arial,sans-serif;font-style:italic">↳ ' + r.action + '</p>' : '') + '</td></tr>';
+    });
+  }
+  const probeSection = sectionHeader('&#x1F356; Food Probes · ' + (probes.length || 'none')) +
+    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
+    '<tr style="background:#f8fafc">' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Day</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Product</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Core Temp</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Result</td></tr>' +
+    probeRows + '</table></td></tr>';
+
+  // ── Goods In ──────────────────────────────────────
+  var giRows = '';
+  if (!goodsIn.length) {
+    giRows = '<tr><td colspan="5" style="padding:10px 8px;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No deliveries this week</td></tr>';
+  } else {
+    goodsIn.forEach(function(r) {
+      const f = r.fields || {};
+      const isAcc = f.gi_outcome === 'accepted';
+      const typeIcon = f.gi_type === 'frozen' ? '&#x2744;' : '&#x1F33F;';
+      giRows += '<tr style="border-bottom:1px solid #f1f5f9">' +
+        '<td style="padding:6px 8px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + dayStr(r.date) + '</td>' +
+        '<td style="padding:6px 8px;font-size:13px;font-weight:600;font-family:Arial,sans-serif">' + (f.gi_supplier||'—') + '</td>' +
+        '<td style="padding:6px 8px;font-size:12px;font-family:Arial,sans-serif;color:#94a3b8">' + typeIcon + ' ' + (f.gi_type||'') + '</td>' +
+        '<td style="padding:6px 8px;font-size:13px;font-family:monospace;font-weight:600">' + (f.gi_temp ? f.gi_temp+'°C' : '—') + '</td>' +
+        '<td style="padding:6px 8px"><span style="background:' + (isAcc?'#dcfce7':'#fee2e2') + ';color:' + (isAcc?'#166534':'#991b1b') + ';padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + (isAcc?'Accepted':'Rejected') + '</span></td></tr>';
+      if (f.gi_notes) giRows += '<tr><td colspan="5" style="padding:0 8px 6px;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">↳ ' + f.gi_notes + '</td></tr>';
+    });
+  }
+  const giSection = sectionHeader('&#x1F4E6; Goods In · ' + (goodsIn.length || 'none')) +
+    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
+    '<tr style="background:#f8fafc">' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Day</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Supplier</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Type</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Temp</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Outcome</td></tr>' +
+    giRows + '</table></td></tr>';
+
+  // ── Tasks ─────────────────────────────────────────
+  const doneCount = tasks.filter(function(t) { return t.done; }).length;
+  var taskRows = '';
+  if (!tasks.length) {
+    taskRows = '<tr><td colspan="3" style="padding:10px 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No tasks scheduled this week</td></tr>';
+  } else {
+    taskRows = tasks.map(function(t) {
+      const d = new Date((t.date||'') + 'T12:00:00');
+      const ds = t.date ? DAY_ABBR[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth()+1) : '';
+      return '<tr style="border-bottom:1px solid #f1f5f9">' +
+        '<td style="padding:5px 0;font-size:12px;color:#64748b;font-family:Arial,sans-serif;width:60px">' + ds + '</td>' +
+        '<td style="padding:5px 8px;font-size:13px;color:' + (t.done?'#334155':'#94a3b8') + ';font-family:Arial,sans-serif;font-style:' + (t.done?'normal':'italic') + '">' + (t.done?'✓ ':'') + t.label + '</td>' +
+        '<td style="text-align:right"><span style="font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">' + (t.done ? (t.doneBy||'') : '<span style="background:#f1f5f9;color:#94a3b8;padding:2px 8px;border-radius:4px;font-size:11px">Not done</span>') + '</span></td></tr>';
+    }).join('');
+  }
+  const taskSection = sectionHeader('&#x2705; Tasks · ' + doneCount + ' / ' + tasks.length + ' complete') +
+    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0">' + taskRows + '</table></td></tr>';
+
   // ── Assemble ──────────────────────────────────────
   const sheetsUrl = getSheetsUrl();
 
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif">' +
   '<div style="background:#f1f5f9;padding:24px 16px">' +
-  '<table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto"><tr><td>' +
+  '<table width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;margin:0 auto"><tr><td>' +
 
   // Header
   '<table width="100%" cellpadding="0" cellspacing="0" style="background:#1a2332;border-radius:8px 8px 0 0">' +
   '<tr><td style="padding:20px 24px"><p style="margin:0;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#4a6080;font-family:Arial,sans-serif">Weekly Food Safety Report</p>' +
   '<p style="margin:4px 0 0;font-size:20px;font-weight:700;color:#e6edf3;font-family:Arial,sans-serif">' + name + '</p>' +
-  '<p style="margin:4px 0 0;font-size:13px;color:#7d8da8;font-family:Arial,sans-serif">Week: ' + weekLabel + '</p></td>' +
-  '<td style="padding:20px 24px;text-align:right;vertical-align:middle">' + badgeHtml + '</td></tr>' +
-  (pct !== null ? '<tr><td colspan="2" style="padding:0 24px 16px"><table width="100%" cellpadding="0" cellspacing="0"><tr>' +
-  '<td style="background:' + headerBg + ';border-radius:3px;height:6px"><div style="width:' + barWidth + '%;height:6px;background:' + pctColor + ';border-radius:3px"></div></td>' +
-  '<td style="width:130px;padding-left:12px;font-size:11px;color:' + pctColor + ';font-family:Arial,sans-serif;white-space:nowrap">' + passedChecks + '/' + totalChecks + ' checks</td>' +
-  '</tr></table></td></tr>' : '') +
-  '</table>' +
+  '<p style="margin:4px 0 0;font-size:13px;color:#7d8da8;font-family:Arial,sans-serif">Week: ' + weekLabel + '</p>' +
+  '</td></tr></table>' +
 
-  // Day grid
+  // Daily overview
   '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' +
   sectionHeader('Daily Overview') +
   '<tr><td style="padding:4px 24px 14px">' + gridHtml + '</td></tr></table>' +
 
-  // Sections
+  // Compliance
+  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' +
+  sectionHeader('Compliance') +
+  '<tr><td style="padding:8px 24px 14px">' + complianceHtml + '</td></tr></table>' +
+
+  // Weekly review (directly after compliance)
+  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' + reviewSection + '</table>' +
+
+  // Failed checks (only if any)
+  (failedRows ? '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' + failedSection + '</table>' : '') +
+
+  // Temperature breaches (only if any)
+  (breachRows ? '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' + breachSection + '</table>' : '') +
+
+  // Full equipment log
   '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' + tempSection + '</table>' +
+
+  // Food probes
   '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' + probeSection + '</table>' +
+
+  // Goods In + Tasks
   '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' + giSection + '</table>' +
   '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' + taskSection + '</table>' +
-  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' + reviewSection + '</table>' +
 
   // Footer
   '<table width="100%" cellpadding="0" cellspacing="0" style="background:#1a2332;border-radius:0 0 8px 8px;margin-top:2px">' +
