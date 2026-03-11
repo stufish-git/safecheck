@@ -1918,7 +1918,31 @@ body.theme-light .week-selector-select { background: #fff; border-color: #d0d6e0
   .report-check-fail { color: #b45309 !important; }
   .report-compliance-badge { border-width: 2px !important; }
   .report-weekly-grid-wrap { overflow: visible !important; }
-  @page { margin: 1.5cm; }
+
+  /* ── Page geometry ──────────────────────────────── */
+  @page { margin: 1.2cm 1.4cm; }
+
+  /* ── Header: tighten on print ───────────────────── */
+  .report-doc { border: none !important; border-radius: 0 !important; }
+  .report-doc-header { padding: 8px 20px 10px !important; }
+  .report-restaurant-name { font-size: 15px !important; }
+  .report-doc-date { font-size: 11px !important; }
+
+  /* ── Page breaks ─────────────────────────────────── */
+  .report-section-title.print-break-before {
+    break-before: page;
+    padding-top: 6px !important;
+    border-top: none !important;
+  }
+
+  /* Keep items together within sections */
+  .dept-compliance-card  { break-inside: avoid; }
+  .failed-check-row      { break-inside: avoid; }
+  .breach-row            { break-inside: avoid; }
+  .report-check-panel    { break-inside: avoid; }
+  .report-table tr       { break-inside: avoid; }
+  .gi-report-row         { break-inside: avoid; }
+  .report-weekly-review  { break-inside: avoid; }
 }
 .report-rating-mismatch {
   background: rgba(239,68,68,0.08);

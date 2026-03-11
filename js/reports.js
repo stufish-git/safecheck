@@ -391,7 +391,7 @@ function buildWeeklyFailedChecks(weekDates) {
 
   if (!rows.length) return '';
   return `
-    <div class="report-section-title">Failed Checks</div>
+    <div class="report-section-title print-break-before">Failed Checks</div>
     <div class="failed-checks-list">${rows.join('')}</div>`;
 }
 
@@ -428,7 +428,7 @@ function buildWeeklyTempBreaches(weekDates) {
 
   if (!breaches.length) return '';
   return `
-    <div class="report-section-title">Temperature Breaches</div>
+    <div class="report-section-title print-break-before">Temperature Breaches</div>
     <div class="breach-list">${breaches.join('')}</div>`;
 }
 
@@ -446,7 +446,7 @@ function buildWeeklyEquipmentLog(weekDates) {
 
   if (!allRecs.length) {
     return `
-      <div class="report-section-title">Equipment Checks</div>
+      <div class="report-section-title print-break-before">Equipment Checks</div>
       <div class="report-empty-row">— No equipment checks recorded this week</div>`;
   }
 
@@ -482,7 +482,7 @@ function buildWeeklyEquipmentLog(weekDates) {
   }).join('');
 
   return `
-    <div class="report-section-title">Equipment Checks</div>
+    <div class="report-section-title print-break-before">Equipment Checks</div>
     ${chips}
     <div class="report-table-wrap">
       <table class="report-table">
@@ -508,7 +508,7 @@ function buildWeeklyProbeLog(weekDates) {
 
   if (!allRecs.length) {
     return `
-      <div class="report-section-title">Food Probe Results</div>
+      <div class="report-section-title print-break-before">Food Probe Results</div>
       <div class="report-empty-row">— No food probes recorded this week</div>`;
   }
 
@@ -538,7 +538,7 @@ function buildWeeklyProbeLog(weekDates) {
   }).join('');
 
   return `
-    <div class="report-section-title">Food Probe Results</div>
+    <div class="report-section-title print-break-before">Food Probe Results</div>
     ${chips}
     <div class="report-table-wrap">
       <table class="report-table">
@@ -624,10 +624,10 @@ function renderWeeklyReport() {
         </table>
       </div>
 
-      <div class="report-section-title">Compliance</div>
+      <div class="report-section-title print-break-before">Compliance</div>
       ${complianceHTML}
 
-      <div class="report-section-title">Weekly Management Review</div>
+      <div class="report-section-title print-break-before">Weekly Management Review</div>
       ${weeklyReviewHTML}
 
       ${failedChecksHTML}
