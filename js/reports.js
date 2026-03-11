@@ -627,13 +627,13 @@ function renderWeeklyReport() {
       <div class="report-section-title">Compliance</div>
       ${complianceHTML}
 
+      <div class="report-section-title">Weekly Management Review</div>
+      ${weeklyReviewHTML}
+
       ${failedChecksHTML}
       ${tempBreachesHTML}
       ${equipLogHTML}
       ${probeLogHTML}
-
-      <div class="report-section-title">Weekly Management Review</div>
-      ${weeklyReviewHTML}
 
       <div class="report-section-title">Goods In — Week Summary</div>
       ${buildWeeklyGoodsInTable(weekDates)}
@@ -723,13 +723,20 @@ function buildWeeklyGrid(weekDates, dayLabels, shortDates, allDepts) {
   const equipCells = weekDates.map(date => {
     const recs = state.records.filter(r => r.date === date && r.type === 'temperature');
     if (!recs.length) return `<td class="wg-cell wg-notrecorded">—</td>`;
-    const hasFail = recs.some(r => r.fields?.temp_status === 'FAIL');
-    const hasWarn = recs.some(r => r.fields?.temp_status === 'WARNING');
+    const fails  = recs.filter(r => r.fields?.temp_status === 'FAIL').length;
+    const warns  = recs.filter(r => r.fields?.temp_status === 'WARNING').length;
+    const passes = recs.length - fails - warns;
+    const hasFail = fails > 0;
+    const hasWarn = warns > 0;
     const icon = hasFail ? '⚠' : hasWarn ? '⚠' : '✓';
-    const cls = hasFail ? 'wg-issues' : hasWarn ? 'wg-warn' : 'wg-complete';
-    return `<td class="wg-cell ${cls}" title="${recs.length} check${recs.length !== 1 ? 's' : ''}">${icon}<span class="wg-count">${recs.length}</span></td>`;
+    const cls  = hasFail ? 'wg-issues' : hasWarn ? 'wg-warn' : 'wg-complete';
+    // If all pass: show single green count. If mixed: show pass✓ and fail✗ separately.
+    const countHTML = (hasFail || hasWarn)
+      ? `<span class="wg-count"><span style="color:var(--success)">${passes}✓</span> <span style="color:var(--danger)">${fails + warns}✗</span></span>`
+      : `<span class="wg-count">${recs.length}</span>`;
+    return `<td class="wg-cell ${cls}" title="${passes} pass, ${fails + warns} fail">${icon}${countHTML}</td>`;
   }).join('');
-  rows.push(`<tr><td class="wg-label-col">🌡 Temps</td>${equipCells}</tr>`);
+  rows.push(`<tr><td class="wg-label-col">🌡 Equipment</td>${equipCells}</tr>`);
 
   // Food probes (kitchen)
   const probeCells = weekDates.map(date => {
