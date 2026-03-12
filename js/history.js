@@ -1,7 +1,22 @@
 // ═══════════════════════════════════════════════════════
-//  SAFECHECKS — History v5
+//  SAFECHECKS — History v5.1
 //  Department-filtered: staff see their dept, mgmt sees all
+//  C2 banner: prompts user to load older records from Sheets
+//  when date range extends beyond the local retention window
 // ═══════════════════════════════════════════════════════
+
+// Holds records fetched on-demand from Sheets for dates outside the
+// local retention window. Cleared whenever the date filters change.
+// Never saved back to localStorage — display only.
+let extendedRecords = null;
+
+// Called by date filter inputs and the Filter button.
+// Clears any previously loaded extended records so the banner reappears
+// if the new date range also extends beyond the local window.
+function onHistoryFilterChange() {
+  extendedRecords = null;
+  loadHistory();
+}
 
 function loadHistory() {
   const type    = document.getElementById('history-type')?.value || 'all';
@@ -9,7 +24,16 @@ function loadHistory() {
   const toVal   = document.getElementById('history-date-to')?.value;
   const dept    = currentDept();
 
-  let records = [...state.records];
+  // Merge local records with any on-demand extended records
+  let records = [...state.records, ...(extendedRecords || [])];
+
+  // De-duplicate by ID — extended records may overlap with local
+  const seen = new Set();
+  records = records.filter(r => {
+    if (seen.has(r.id)) return false;
+    seen.add(r.id);
+    return true;
+  });
 
   // Department filter: staff only see their dept
   if (!isManagement()) {
@@ -23,6 +47,43 @@ function loadHistory() {
 
   const list = document.getElementById('history-list'); if (!list) return;
 
+  // ── C2 banner ────────────────────────────────────────
+  // Show when: Sheets connected + from date is outside local window + not yet loaded
+  const cutoff     = getLocalCutoffDate();
+  const needsBanner = state.config.sheetsUrl &&
+                      fromVal && fromVal < cutoff &&
+                      extendedRecords === null;
+
+  let bannerHtml = '';
+  if (needsBanner) {
+    bannerHtml = `
+      <div class="history-older-banner" id="history-older-banner">
+        <span class="history-older-icon">⚠</span>
+        <div class="history-older-body">
+          <div class="history-older-title">Some records in this range are stored in Sheets only</div>
+          <div class="history-older-sub">Local records cover the last ${LOCAL_RETENTION_DAYS} days. Older records are in Google Sheets.</div>
+        </div>
+        <button class="history-older-btn" onclick="loadOlderFromSheets()">Load from Sheets →</button>
+      </div>`;
+  } else if (extendedRecords !== null && extendedRecords.length > 0) {
+    // Already loaded — show a quiet confirmation
+    bannerHtml = `
+      <div class="history-older-banner history-older-loaded" id="history-older-banner">
+        <span class="history-older-icon">✓</span>
+        <div class="history-older-body">
+          <div class="history-older-title">Loaded ${extendedRecords.length} older record${extendedRecords.length !== 1 ? 's' : ''} from Sheets</div>
+        </div>
+      </div>`;
+  } else if (extendedRecords !== null && extendedRecords.length === 0) {
+    bannerHtml = `
+      <div class="history-older-banner history-older-loaded" id="history-older-banner">
+        <span class="history-older-icon">—</span>
+        <div class="history-older-body">
+          <div class="history-older-title">No older records found in Sheets for this range</div>
+        </div>
+      </div>`;
+  }
+
   const total       = records.length;
   const remoteCount = records.filter(r => r.source === 'remote').length;
   const sourceNote  = state.config.sheetsUrl
@@ -30,11 +91,11 @@ function loadHistory() {
     : `<div class="history-source-note offline-note">⚠ Not connected to Sheets — showing local records only</div>`;
 
   if (!records.length) {
-    list.innerHTML = sourceNote + '<p class="empty-state">No records found for the selected filters.</p>';
+    list.innerHTML = bannerHtml + sourceNote + '<p class="empty-state">No records found for the selected filters.</p>';
     return;
   }
 
-  list.innerHTML = sourceNote + records.map(r => {
+  list.innerHTML = bannerHtml + sourceNote + records.map(r => {
     const deptInfo = DEPARTMENTS[r.dept];
     const deptBadge = isManagement() && deptInfo
       ? `<span class="dept-badge" style="color:${deptInfo.color}">${deptInfo.icon} ${deptInfo.label}</span>`
@@ -51,6 +112,53 @@ function loadHistory() {
         <div class="history-summary">${r.summary || buildSummary(r)}</div>
       </div>`;
   }).join('');
+}
+
+// ── Load older records from Sheets on demand ──────────
+// Fetches the full date range currently in the pickers from Sheets,
+// stores the result in extendedRecords (display only — not saved to localStorage),
+// then re-renders History with the combined dataset.
+async function loadOlderFromSheets() {
+  const fromVal = document.getElementById('history-date-from')?.value;
+  const toVal   = document.getElementById('history-date-to')?.value || todayStr();
+
+  // Update banner to show loading state
+  const banner = document.getElementById('history-older-banner');
+  if (banner) {
+    banner.innerHTML = `
+      <span class="history-older-icon">…</span>
+      <div class="history-older-body">
+        <div class="history-older-title">Loading from Sheets…</div>
+      </div>`;
+  }
+
+  try {
+    const fetched = [];
+    for (const [type, tabName] of Object.entries(SHEET_TABS)) {
+      try {
+        let url = `${state.config.sheetsUrl}?action=read&tab=${encodeURIComponent(tabName)}`;
+        if (fromVal) url += `&from=${fromVal}`;
+        url += `&to=${toVal}`;
+
+        const resp = await fetch(url, { method: 'GET', mode: 'cors' });
+        if (!resp.ok) continue;
+        const data = await resp.json();
+        if (data.status === 'ok' && Array.isArray(data.rows)) {
+          data.rows
+            .map(row => parseSheetRow(row, type))
+            .filter(Boolean)
+            .forEach(r => fetched.push(r));
+        }
+      } catch(e) { console.warn(`loadOlderFromSheets: failed for ${tabName}:`, e); }
+    }
+    extendedRecords = fetched;
+  } catch(e) {
+    console.error('loadOlderFromSheets error:', e);
+    extendedRecords = [];
+    showToast('Could not load from Sheets — check connection', 'error');
+  }
+
+  loadHistory();
 }
 
 function buildSummary(r) {
@@ -153,5 +261,5 @@ function setHistoryQuickDate(range) {
     btn.classList.toggle('active', btn.getAttribute('onclick').includes(`'${range}'`));
   });
 
-  loadHistory();
+  onHistoryFilterChange();
 }

@@ -189,9 +189,10 @@ async function pullAllRecords(force=false) {
   setSyncStatus('syncing','Refreshing…');
   try {
     const remoteRecords = [];
+    const fromDate = getLocalCutoffDate();   // only pull within the local retention window
     for (const [type, tabName] of Object.entries(SHEET_TABS)) {
       try {
-        const url  = `${state.config.sheetsUrl}?action=read&tab=${encodeURIComponent(tabName)}`;
+        const url  = `${state.config.sheetsUrl}?action=read&tab=${encodeURIComponent(tabName)}&from=${fromDate}`;
         const resp = await fetch(url, { method:'GET', mode:'cors' });
         if (!resp.ok) continue;
         const data = await resp.json();

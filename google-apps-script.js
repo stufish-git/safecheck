@@ -98,25 +98,56 @@ function doGet(e) {
         return jsonResponse({ status: 'ok', tab: tabName, rows: [] });
       }
 
+      // Optional date range filter — from/to are YYYY-MM-DD strings.
+      // Applied to the Date column (column index 1 in all tabs).
+      // Used by the PWA to implement the local retention window:
+      //   - Normal pulls pass ?from=CUTOFF to stay within the 60-day window
+      //   - History "Load older" requests pass an explicit from+to range
+      const filterFrom = e.parameter.from || null;   // YYYY-MM-DD or null
+      const filterTo   = e.parameter.to   || null;   // YYYY-MM-DD or null
+
       const data    = sheet.getDataRange().getValues();
       const headers = data[0].map(h => String(h).trim());
-      const rows    = data.slice(1)
+      const dateIdx = headers.indexOf('Date');       // column index for date filtering
+
+      const rows = data.slice(1)
         .filter(row => row.some(cell => cell !== ''))
+        .filter(row => {
+          // If no date filter requested, return all rows
+          if (!filterFrom && !filterTo) return true;
+          if (dateIdx < 0) return true;   // no Date column found — include row
+
+          // Normalise the cell value to YYYY-MM-DD for comparison
+          let val = row[dateIdx];
+          let dateStr;
+          if (val instanceof Date) {
+            const y = val.getFullYear();
+            const m = String(val.getMonth() + 1).padStart(2, '0');
+            const d = String(val.getDate()).padStart(2, '0');
+            dateStr = `${y}-${m}-${d}`;
+          } else {
+            dateStr = String(val ?? '').trim();
+            // Handle DD/MM/YYYY
+            const gbMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+            if (gbMatch) {
+              dateStr = `${gbMatch[3]}-${gbMatch[2].padStart(2,'0')}-${gbMatch[1].padStart(2,'0')}`;
+            }
+          }
+          if (!dateStr) return true;    // unparseable — include to avoid silent data loss
+          if (filterFrom && dateStr < filterFrom) return false;
+          if (filterTo   && dateStr > filterTo)   return false;
+          return true;
+        })
         .map(row => {
           const obj = {};
           headers.forEach((h, i) => {
             let val = row[i];
-
-            // KEY FIX: Sheets stores dates as Date objects.
-            // Convert them back to YYYY-MM-DD strings so the PWA
-            // can parse them reliably regardless of locale.
             if (val instanceof Date) {
               const y  = val.getFullYear();
               const m  = String(val.getMonth() + 1).padStart(2, '0');
               const d  = String(val.getDate()).padStart(2, '0');
               val = `${y}-${m}-${d}`;
             }
-
             obj[h] = String(val ?? '');
           });
           return obj;

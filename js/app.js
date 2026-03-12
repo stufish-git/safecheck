@@ -3,9 +3,37 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.37.0';
+const APP_VERSION = '5.38.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
+
+// ── Local retention window ────────────────────────────
+// Records older than this are purged from localStorage on startup.
+// Weekly review records are exempt — there are few of them and they
+// are referenced by the dashboard history panel (8 weeks = 56 days).
+// Sheets remains the permanent record for everything.
+const LOCAL_RETENTION_DAYS = 60;
+
+function getLocalCutoffDate(days) {
+  const d = new Date();
+  d.setDate(d.getDate() - (days || LOCAL_RETENTION_DAYS));
+  return d.toISOString().split('T')[0];
+}
+
+function purgeOldRecords() {
+  const cutoff       = getLocalCutoffDate();     // 60 days — all record types
+  const weeklyCutoff = getLocalCutoffDate(90);   // 90 days — covers 8-week dashboard panel with buffer
+  const before = state.records.length;
+  state.records = state.records.filter(r => {
+    if (r.type === 'weekly') return r.date >= weeklyCutoff;
+    return r.date >= cutoff;
+  });
+  const purged = before - state.records.length;
+  if (purged > 0) {
+    saveState();
+    console.log(`SafeChecks: purged ${purged} record${purged !== 1 ? 's' : ''} older than ${LOCAL_RETENTION_DAYS} days`);
+  }
+}
 
 const state = {
   records:      [],
@@ -82,6 +110,7 @@ function loadState() {
     const cfg = localStorage.getItem(CONFIG_KEY);
     state.config = cfg ? JSON.parse(cfg) : {};
   } catch(e) { state.records = []; state.config = {}; }
+  purgeOldRecords();   // trim localStorage to LOCAL_RETENTION_DAYS on every startup
   renderEquipmentLog();
 }
 function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.records)); }

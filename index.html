@@ -480,9 +480,9 @@
           <option value="weekly">Weekly Review</option>
           <option value="task_completion">Tasks</option>
         </select>
-        <input type="date" class="text-field" id="history-date-from"/>
-        <input type="date" class="text-field" id="history-date-to"/>
-        <button class="btn-filter" onclick="loadHistory()">Filter</button>
+        <input type="date" class="text-field" id="history-date-from" onchange="onHistoryFilterChange()"/>
+        <input type="date" class="text-field" id="history-date-to" onchange="onHistoryFilterChange()"/>
+        <button class="btn-filter" onclick="onHistoryFilterChange()">Filter</button>
       </div>
       <div class="history-actions">
         <button class="btn-export" onclick="exportToCSV()">⬇ Export CSV</button>
