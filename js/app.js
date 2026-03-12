@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.30.0';
+const APP_VERSION = '5.31.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -956,10 +956,86 @@ function setRating(value, btn) {
 
 // ── Dashboard ─────────────────────────────────────────
 function updateDashboard() {
-  if (isManagement()) renderManagerDashboard();
-  else                renderStaffDashboard();
+  if (isManagement()) {
+    renderManagerDashboard();
+    renderWeeklyReviewHistory();
+  } else {
+    renderStaffDashboard();
+  }
   renderDashAlerts();
   updateLastRefreshed();
+}
+
+function renderWeeklyReviewHistory() {
+  const panel = document.getElementById('weekly-review-panel');
+  if (!panel) return;
+
+  // Build last 8 Monday week-starts from today backwards
+  const today    = new Date();
+  const weeks    = [];
+  for (let i = 0; i < 8; i++) {
+    const d   = new Date(today);
+    const dow = d.getDay();
+    const diff = (dow === 0 ? -6 : 1 - dow) - (i * 7);
+    d.setDate(today.getDate() + diff);
+    d.setHours(0, 0, 0, 0);
+    weeks.push(d.toISOString().split('T')[0]);
+  }
+
+  const rows = weeks.map(weekStart => {
+    const rec = state.records.find(r =>
+      r.type === 'weekly' &&
+      (r.fields?.week_start === weekStart || r.date === weekStart)
+    );
+
+    const weekFmt  = weekEndingStr(weekStart);
+    const isCurrentWeek = weekStart === weeks[0];
+
+    if (!rec) {
+      const label = isCurrentWeek ? 'Not yet submitted' : 'Not submitted';
+      return `
+        <div class="wrh-row wrh-missing">
+          <div class="wrh-week">w/e ${weekFmt}</div>
+          <div class="wrh-badge wrh-badge-missing">—</div>
+          <div class="wrh-detail" style="color:var(--text-dim)">${label}</div>
+          <div class="wrh-meta"></div>
+        </div>`;
+    }
+
+    const rating  = rec.fields?.weekly_rating || '';
+    const signed  = rec.fields?.weekly_signed_by || '';
+    const checks  = Object.values(rec.fields || {}).filter(v => v === 'Yes' || v === 'No');
+    const passed  = checks.filter(v => v === 'Yes').length;
+    const score   = checks.length > 0 ? `${passed}/${checks.length}` : '';
+
+    const ratingColor = rating === 'Good' ? 'var(--success)'
+                      : rating === 'Satisfactory' ? 'var(--warning)'
+                      : rating === 'Needs Improvement' ? 'var(--danger)'
+                      : 'var(--text-muted)';
+    const ratingBadge = rating
+      ? `<div class="wrh-badge" style="border-color:${ratingColor};color:${ratingColor}">${rating}</div>`
+      : `<div class="wrh-badge" style="border-color:var(--border);color:var(--text-muted)">No rating</div>`;
+
+    return `
+      <div class="wrh-row wrh-done">
+        <div class="wrh-week">w/e ${weekFmt}</div>
+        ${ratingBadge}
+        <div class="wrh-detail">
+          ${score ? `<span class="wrh-score">${score} checks</span>` : ''}
+          ${signed ? `<span class="wrh-signed">· ${signed}</span>` : ''}
+        </div>
+        <div class="wrh-meta">${rec.timestamp || ''}</div>
+      </div>`;
+  }).join('');
+
+  panel.innerHTML = `
+    <div class="wrh-panel">
+      <div class="wrh-panel-header">
+        <span class="wrh-panel-title">▦ Weekly Review History</span>
+        <button class="wrh-go-btn" onclick="showTab('weekly')">Submit this week →</button>
+      </div>
+      <div class="wrh-rows">${rows}</div>
+    </div>`;
 }
 
 // Manager: 3-column grid, one column per dept
@@ -968,19 +1044,20 @@ function renderManagerDashboard() {
   if (!grid) return;
   const today = todayStr();
 
-  grid.innerHTML = Object.entries(DEPARTMENTS).map(([deptId, deptInfo]) => {
+  // Kitchen and FOH only — weekly review moved to full-width panel below
+  const depts = Object.entries(DEPARTMENTS).filter(([id]) => id !== 'mgmt');
+
+  grid.innerHTML = depts.map(([deptId, deptInfo]) => {
     const deptRecords = state.records.filter(r => r.date===today && r.dept===deptId);
 
-    const sections = deptId === 'mgmt'
-      ? [{ type:'weekly', label:'Weekly Review', icon:'▦', total:20 }]
-      : [
-          { type:'opening',     label:'Opening',     icon:'☀', total: getActiveChecks(deptId,'opening').length  || 12 },
-          { type:'temperature', label:'Equipment',   icon:'🌡', total: null },
-          ...(deptId === 'kitchen' ? [{ type:'food_probe', label:'Food Probe', icon:'🍖', total: null }] : []),
-          ...(deptId === 'kitchen' ? [{ type:'goods_in',   label:'Goods In',   icon:'📦', total: null }] : []),
-          { type:'closing',     label:'Closing',     icon:'☽', total: getActiveChecks(deptId,'closing').length  || 10 },
-          { type:'tasks',       label:'Tasks',       icon:'☑', total: null },
-        ];
+    const sections = [
+      { type:'opening',     label:'Opening',     icon:'☀', total: getActiveChecks(deptId,'opening').length  || 12 },
+      { type:'temperature', label:'Equipment',   icon:'🌡', total: null },
+      ...(deptId === 'kitchen' ? [{ type:'food_probe', label:'Food Probe', icon:'🍖', total: null }] : []),
+      ...(deptId === 'kitchen' ? [{ type:'goods_in',   label:'Goods In',   icon:'📦', total: null }] : []),
+      { type:'closing',     label:'Closing',     icon:'☽', total: getActiveChecks(deptId,'closing').length  || 10 },
+      { type:'tasks',       label:'Tasks',       icon:'☑', total: null },
+    ];
 
     const cards = sections.map(sec => {
       if (sec.type === 'tasks') {
@@ -1041,26 +1118,8 @@ function renderManagerDashboard() {
           <div class="mgr-card-status ${status.cls}">${status.text}</div>
         </div>`;
       }
-      const tabTarget = sec.type === 'weekly' ? 'weekly' : sec.type;
+      const tabTarget = sec.type;
       const total = sec.total || 10;
-
-      // Weekly card — show last submitted week, not tick count
-      if (sec.type === 'weekly') {
-        const rec = state.records.filter(r => r.type === 'weekly').sort((a,b) => new Date(b.iso)-new Date(a.iso))[0];
-        if (!rec) return `<div class="mgr-card" onclick="showTab('weekly')">
-          <div class="mgr-card-header"><span class="mgr-card-icon">${sec.icon}</span><span class="mgr-card-label">${sec.label}</span></div>
-          <div class="pb"><div class="pf" style="width:0%"></div></div>
-          <div class="mgr-card-status">Not submitted yet</div>
-        </div>`;
-        const weekDate = rec.fields?.week_start || rec.date;
-        const weekFmt  = weekDate ? weekEndingStr(weekDate) : '';
-        const signed   = rec.fields?.weekly_signed_by || '';
-        return `<div class="mgr-card" onclick="showTab('weekly')">
-          <div class="mgr-card-header"><span class="mgr-card-icon">${sec.icon}</span><span class="mgr-card-label">${sec.label}</span></div>
-          <div class="pb"><div class="pf" style="width:100%;background:var(--success)"></div></div>
-          <div class="mgr-card-status complete">✓ w/e ${weekFmt}${signed ? ' · ' + signed : ''}</div>
-        </div>`;
-      }
 
       const rec = deptRecords.filter(r=>r.type===sec.type).sort((a,b)=>new Date(b.iso)-new Date(a.iso))[0];
 
