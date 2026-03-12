@@ -453,7 +453,7 @@ function sendDailySummary() {
 }
 
 // ── HTML builder ──────────────────────────────────────
-function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, goodsIn, tasks, depts, settings) {
+function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, goodsIn, cleaning, tasks, depts, settings) {
   const DEPT_LABELS = { kitchen: '&#x1F373; Kitchen', foh: '&#x1F37D; Front of House' };
 
   // Compliance score
@@ -498,6 +498,21 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
     return '<tr><td style="padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:13px;color:#1e293b;font-family:Arial,sans-serif"><strong>' + DEPT_LABELS[d] + '</strong></td>' +
       '<td style="text-align:right"><span style="background:' + bg + ';color:' + color + ';padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + pill + '</span></td></tr>';
   }).join('');
+
+  // Cleaning overview row (when enabled)
+  var cleaningOverviewRow = '';
+  if (settings.cleaningEnabled) {
+    var cleanCount = cleaning.length;
+    var cleanFail  = cleaning.some(function(r) {
+      return Object.entries(r.fields||{}).some(function(e) { return e[1] === 'No'; });
+    });
+    var cpill, cbg, ccolor;
+    if (!cleanCount)      { cpill = '— Not recorded'; cbg = '#f1f5f9'; ccolor = '#64748b'; }
+    else if (cleanFail)   { cpill = '⚠ Issues recorded'; cbg = '#fef3c7'; ccolor = '#92400e'; }
+    else                  { cpill = '✓ All clear'; cbg = '#dcfce7'; ccolor = '#166534'; }
+    cleaningOverviewRow = '<tr><td style="padding:6px 0;font-size:13px;color:#1e293b;font-family:Arial,sans-serif"><strong>&#x1F9F9; Cleaning Schedule</strong></td>' +
+      '<td style="text-align:right"><span style="background:' + cbg + ';color:' + ccolor + ';padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + cpill + '</span></td></tr>';
+  }
 
   // ── Opening/closing check sections ────────────────
   function buildCheckSection(title, records) {
@@ -648,11 +663,12 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
   // Overview
   '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' +
   sectionHeader('Overview') +
-  '<tr><td style="padding:8px 24px 16px"><table width="100%" cellpadding="0" cellspacing="0">' + overviewRows + '</table></td></tr></table>' +
+  '<tr><td style="padding:8px 24px 16px"><table width="100%" cellpadding="0" cellspacing="0">' + overviewRows + cleaningOverviewRow + '</table></td></tr></table>' +
 
   // Checks
   buildCheckSection('Opening Checks', opening) +
   buildCheckSection('Closing Checks', closing) +
+  (settings.cleaningEnabled && cleaning.length ? buildCheckSection('&#x1F9F9; Cleaning Schedule', cleaning) : '') +
 
   // Temps, Probes, Goods In, Tasks
   tempSection + probeSection + giSection + taskSection +
@@ -929,12 +945,13 @@ function handleSendDailyEmail(data) {
     const temps   = getTodayRecords(ss, 'Temperature Log', date);
     const probes  = getTodayRecords(ss, 'Food Probe Log',  date);
     const goodsIn = getTodayRecords(ss, 'Goods In Log',    date);
+    const cleaning = settings.cleaningEnabled ? getTodayRecords(ss, 'Cleaning Schedule', date) : [];
     const tasks   = getTodayTasks(ss, date, settings);
     const depts   = ['kitchen', 'foh'];
 
     const hasAnyFail = [...temps, ...probes].some(r => r.status === 'FAIL' || r.status === 'WARNING');
     const subject    = 'Daily Report — ' + name + ' — ' + Utilities.formatDate(dateObj, Session.getScriptTimeZone(), "EEE d MMM yyyy");
-    const html       = buildEmailHtml(name, dayLabel, date, opening, closing, temps, probes, goodsIn, tasks, depts, settings);
+    const html       = buildEmailHtml(name, dayLabel, date, opening, closing, temps, probes, goodsIn, cleaning, tasks, depts, settings);
 
     recipients.forEach(addr => {
       try { GmailApp.sendEmail(addr, subject, '', { htmlBody: html, name: name + ' · SafeChecks' }); }
@@ -974,7 +991,7 @@ function handleSendWeeklyEmail(data) {
                       Utilities.formatDate(sun, Session.getScriptTimeZone(), "d MMM yyyy");
 
     // Pull all records for the week
-    var allTemps  = [], allProbes = [], allGoodsIn = [], allOpening = [], allClosing = [], allTasks = [];
+    var allTemps  = [], allProbes = [], allGoodsIn = [], allOpening = [], allClosing = [], allTasks = [], allCleaning = [];
     weekDates.forEach(function(date) {
       getTodayRecords(ss, 'Temperature Log', date).forEach(function(r) { r.date = date; allTemps.push(r); });
       getTodayRecords(ss, 'Food Probe Log',  date).forEach(function(r) { r.date = date; allProbes.push(r); });
@@ -982,6 +999,9 @@ function handleSendWeeklyEmail(data) {
       getTodayRecords(ss, 'Opening Checks',  date).forEach(function(r) { r.date = date; allOpening.push(r); });
       getTodayRecords(ss, 'Closing Checks',  date).forEach(function(r) { r.date = date; allClosing.push(r); });
       getTodayTasks(ss, date, settings).forEach(function(t)  { t.date = date; allTasks.push(t); });
+      if (settings.cleaningEnabled) {
+        getTodayRecords(ss, 'Cleaning Schedule', date).forEach(function(r) { r.date = date; allCleaning.push(r); });
+      }
     });
 
     // Weekly review record
@@ -1005,7 +1025,7 @@ function handleSendWeeklyEmail(data) {
     }
 
     const subject = 'Weekly Report — ' + name + ' — w/c ' + weekLabel;
-    const html    = buildWeeklyEmailHtml(name, weekLabel, weekDates, allOpening, allClosing, allTemps, allProbes, allGoodsIn, allTasks, weeklyRec, settings);
+    const html    = buildWeeklyEmailHtml(name, weekLabel, weekDates, allOpening, allClosing, allTemps, allProbes, allGoodsIn, allCleaning, allTasks, weeklyRec, settings);
 
     recipients.forEach(function(addr) {
       try { GmailApp.sendEmail(addr, subject, '', { htmlBody: html, name: name + ' · SafeChecks' }); }
@@ -1019,7 +1039,7 @@ function handleSendWeeklyEmail(data) {
 }
 
 // ── Weekly email HTML builder ─────────────────────────
-function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temps, probes, goodsIn, tasks, weeklyRec, settings) {
+function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temps, probes, goodsIn, cleaning, tasks, weeklyRec, settings) {
   const DAY_ABBR = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
   function dayStr(date) {
@@ -1048,11 +1068,12 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
     var recs = [];
     if (type === 'opening') recs = opening.filter(function(r) { return r.date===date && r.dept===dept; });
     else if (type === 'closing') recs = closing.filter(function(r) { return r.date===date && r.dept===dept; });
+    else if (type === 'cleaning') recs = cleaning.filter(function(r) { return r.date===date && r.dept===dept; });
     else if (type === 'probe')   recs = probes.filter(function(r) { return r.date===date; });
     else if (type === 'goodsin') recs = goodsIn.filter(function(r) { return r.date===date; });
     if (!recs.length) return '<td style="text-align:center;padding:5px 4px;font-size:13px;color:#4a6080">—</td>';
     var hasFail = false;
-    if (type==='opening'||type==='closing') {
+    if (type==='opening'||type==='closing'||type==='cleaning') {
       recs.forEach(function(r) { Object.entries(r.fields||{}).forEach(function(e) { if (e[1]==='No') hasFail=true; }); });
     } else if (type==='probe') {
       hasFail = recs.some(function(r) { return r.status==='FAIL'; });
@@ -1078,7 +1099,10 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
     ['equipment',   null,      '&#x1F321; Equipment'],
     ['probe',       null,      '&#x1F356; Probes'],
     ['goodsin',     null,      '&#x1F4E6; Goods In'],
-  ];
+  ].concat(settings.cleaningEnabled ? [
+    ['cleaning',    'kitchen', '&#x1F9F9; Cleaning K'],
+    ['cleaning',    'foh',     '&#x1F9F9; Cleaning F'],
+  ] : []);
   const gridRows = gridDefs.map(function(row) {
     const cells = weekDates.map(function(date) {
       return row[0] === 'equipment' ? equipCell(date) : simpleCell(date, row[0], row[1]);
@@ -1129,9 +1153,10 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
            '&nbsp;<span style="font-size:11px;color:#94a3b8;font-family:Arial,sans-serif">' + actual + '/' + expected + '</span></td></tr>';
   }
 
-  function deptCard(label, icon, color, checksAct, checksExp, equipAct, equipExp, probeAct, probeExp) {
+  function deptCard(label, icon, color, checksAct, checksExp, equipAct, equipExp, probeAct, probeExp, cleanAct, cleanExp) {
     var cats = [{a:checksAct,e:checksExp},{a:equipAct,e:equipExp}];
     if (probeExp > 0) cats.push({a:probeAct,e:probeExp});
+    if (cleanExp > 0) cats.push({a:cleanAct,e:cleanExp});
     var totalA = 0, totalE = 0;
     cats.forEach(function(c) { if (c.e > 0) { totalA += c.a; totalE += c.e; } });
     var overall = totalE > 0 ? Math.round(totalA/totalE*100) : 100;
@@ -1146,6 +1171,7 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
       complianceRow('Opening &amp; Closing Checks', checksAct, checksExp) +
       complianceRow('Equipment Checks', equipAct, equipExp) +
       (probeExp > 0 ? complianceRow('Food Probes', probeAct, probeExp) : '') +
+      (cleanExp > 0 ? complianceRow('Cleaning Schedule', cleanAct, cleanExp) : '') +
       '</table>';
   }
 
@@ -1159,15 +1185,21 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
   var kEquipAct = 0, kEquipExp = kTradingDays * 2;
   var fEquipAct = 0, fEquipExp = fTradingDays * 2;
   var kProbeAct = 0, kProbeExp = kTradingDays;
+  var kCleanAct = 0, kCleanExp = settings.cleaningEnabled ? kTradingDays : 0;
+  var fCleanAct = 0, fCleanExp = settings.cleaningEnabled ? fTradingDays : 0;
   weekDates.forEach(function(date) {
     kEquipAct += equipBatches('kitchen', date);
     fEquipAct += equipBatches('foh', date);
     kProbeAct += probeOnDate(date);
+    if (settings.cleaningEnabled) {
+      if (cleaning.some(function(r) { return r.date===date && r.dept==='kitchen'; })) kCleanAct++;
+      if (cleaning.some(function(r) { return r.date===date && r.dept==='foh'; }))     fCleanAct++;
+    }
   });
 
   const complianceHtml =
-    deptCard('Kitchen', '🍳', '#f59e0b', kitchenPassed, kitchenChecks, kEquipAct, kEquipExp, kProbeAct, kProbeExp) +
-    deptCard('Front of House', '🍽', '#3b82f6', fohPassed, fohChecks, fEquipAct, fEquipExp, 0, 0);
+    deptCard('Kitchen', '🍳', '#f59e0b', kitchenPassed, kitchenChecks, kEquipAct, kEquipExp, kProbeAct, kProbeExp, kCleanAct, kCleanExp) +
+    deptCard('Front of House', '🍽', '#3b82f6', fohPassed, fohChecks, fEquipAct, fEquipExp, 0, 0, fCleanAct, fCleanExp);
 
   // ── Weekly management review ──────────────────────
   var reviewHtml = '';

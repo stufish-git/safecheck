@@ -99,7 +99,9 @@ function renderDailyReport() {
   const allDepts = ['kitchen', 'foh'];
 
   // ── Compliance score ──────────────────────────────
-  const checkRecords = dr.filter(r => ['opening','closing'].includes(r.type));
+  const cleaningEnabled = state.settings.cleaningEnabled;
+  const checkTypes = cleaningEnabled ? ['opening','closing','cleaning'] : ['opening','closing'];
+  const checkRecords = dr.filter(r => checkTypes.includes(r.type));
   let totalChecks = 0, passedChecks = 0;
   checkRecords.forEach(r => {
     Object.entries(r.fields || {}).forEach(([k, v]) => {
@@ -125,6 +127,13 @@ function renderDailyReport() {
     const deptInfo = DEPARTMENTS[dept];
     return buildChecklistSection(rec, deptInfo, 'Closing Checks', 'close_signed_by', 'close_notes');
   }).join('');
+
+  // ── Cleaning checks (per dept, when enabled) ──────
+  const cleaningHTML = cleaningEnabled ? allDepts.map(dept => {
+    const rec = dr.find(r => r.type === 'cleaning' && (r.dept === dept || (!r.dept && dept === 'kitchen')));
+    const deptInfo = DEPARTMENTS[dept];
+    return buildChecklistSection(rec, deptInfo, 'Cleaning Schedule', 'clean_signed_by', 'clean_notes');
+  }).join('') : '';
 
   // ── Equipment temperatures ────────────────────────
   const temps = dr.filter(r => r.type === 'temperature').sort((a, b) =>
@@ -174,6 +183,11 @@ function renderDailyReport() {
 
       <div class="report-section-title">Closing Checks</div>
       <div class="report-two-col">${closingHTML}</div>
+
+      ${cleaningEnabled ? `
+      <div class="report-section-title">Cleaning Schedule</div>
+      <div class="report-two-col">${cleaningHTML}</div>
+      ` : ''}
 
       <div class="report-section-title">Equipment Temperatures</div>
       ${tempHTML}
@@ -363,14 +377,19 @@ function buildWeeklyFailedChecks(weekDates) {
     const dayAbbr = DAY_ABBR[new Date(date + 'T12:00:00').getDay()];
     const shortDate = new Date(date + 'T12:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short' });
 
-    ['opening','closing'].forEach(type => {
+    const checkTypes = [
+      { type: 'opening', label: 'Opening' },
+      { type: 'closing', label: 'Closing' },
+      ...(state.settings.cleaningEnabled ? [{ type: 'cleaning', label: 'Cleaning' }] : []),
+    ];
+
+    checkTypes.forEach(({ type, label }) => {
       ['kitchen','foh'].forEach(dept => {
         const rec = state.records.find(r => r.date === date && r.type === type && r.dept === dept);
         if (!rec) return;
         const deptInfo = DEPARTMENTS[dept];
-        const label    = type === 'opening' ? 'Opening' : 'Closing';
-        const signed   = rec.fields?.open_signed_by || rec.fields?.close_signed_by || '—';
-        const notes    = rec.fields?.open_notes     || rec.fields?.close_notes     || '';
+        const signed   = rec.fields?.open_signed_by || rec.fields?.close_signed_by || rec.fields?.clean_signed_by || '—';
+        const notes    = rec.fields?.open_notes     || rec.fields?.close_notes     || rec.fields?.clean_notes     || '';
 
         Object.entries(rec.fields || {}).forEach(([key, val]) => {
           if (val !== 'No') return;
@@ -550,6 +569,73 @@ function buildWeeklyProbeLog(weekDates) {
     </div>`;
 }
 
+// ── Full cleaning log for the week ───────────────────
+function buildWeeklyCleaningLog(weekDates) {
+  if (!state.settings.cleaningEnabled) return '';
+
+  const DAY_ABBR = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const allRecs  = [];
+
+  weekDates.forEach(date => {
+    state.records
+      .filter(r => r.date === date && r.type === 'cleaning')
+      .sort((a, b) => new Date(a.iso) - new Date(b.iso))
+      .forEach(r => allRecs.push(r));
+  });
+
+  if (!allRecs.length) {
+    return `
+      <div class="report-section-title print-break-before">Cleaning Schedule</div>
+      <div class="report-empty-row">— No cleaning checks recorded this week</div>`;
+  }
+
+  const totalFails = allRecs.reduce((n, r) => {
+    const checks = Object.values(r.fields || {}).filter(v => v === 'Yes' || v === 'No');
+    return n + checks.filter(v => v === 'No').length;
+  }, 0);
+  const chips = `
+    <div class="probe-summary-chips" style="padding:0 20px 10px">
+      <span class="probe-chip probe-chip-count">${allRecs.length} submission${allRecs.length !== 1 ? 's' : ''}</span>
+      ${totalFails > 0
+        ? `<span class="probe-chip probe-chip-fail">${totalFails} item${totalFails !== 1 ? 's' : ''} failed</span>`
+        : `<span class="probe-chip probe-chip-pass">All items passed</span>`}
+    </div>`;
+
+  const rows = allRecs.map(r => {
+    const f         = r.fields || {};
+    const checks    = Object.entries(f).filter(([, v]) => v === 'Yes' || v === 'No');
+    const passed    = checks.filter(([, v]) => v === 'Yes').length;
+    const total     = checks.length;
+    const hasFail   = passed < total;
+    const deptInfo  = DEPARTMENTS[r.dept] || DEPARTMENTS.kitchen;
+    const dayAbbr   = DAY_ABBR[new Date(r.date + 'T12:00:00').getDay()];
+    const shortDate = new Date(r.date + 'T12:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+    const signed    = f.clean_signed_by || '—';
+    const notes     = f.clean_notes || '';
+
+    return `<tr${hasFail ? ' style="background:rgba(239,68,68,0.04)"' : ''}>
+      <td class="report-meta">${deptInfo.icon} ${deptInfo.label}</td>
+      <td class="report-meta">${dayAbbr} ${shortDate}</td>
+      <td><span class="report-check-score ${passed === total ? 'all-pass' : 'has-fail'}">${passed}/${total}</span></td>
+      <td><span class="report-status-badge ${hasFail ? 'status-fail' : 'status-ok'}">${hasFail ? '⚠ Issues' : '✓ Pass'}</span></td>
+      <td class="report-meta">${signed}</td>
+      <td class="report-meta">${notes ? `<span style="color:var(--text-muted);font-style:italic">${notes}</span>` : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="report-section-title print-break-before">Cleaning Schedule</div>
+    ${chips}
+    <div class="report-table-wrap">
+      <table class="report-table">
+        <thead><tr>
+          <th>Dept</th><th>Day</th><th>Score</th><th>Status</th><th>Signed By</th><th>Notes</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
 // ─────────────────────────────────────────────────────
 //  WEEKLY REPORT
 // ─────────────────────────────────────────────────────
@@ -596,6 +682,7 @@ function renderWeeklyReport() {
   const tempBreachesHTML  = buildWeeklyTempBreaches(weekDates);
   const equipLogHTML      = buildWeeklyEquipmentLog(weekDates);
   const probeLogHTML      = buildWeeklyProbeLog(weekDates);
+  const cleaningLogHTML   = buildWeeklyCleaningLog(weekDates);
 
   container.innerHTML = `
     <div class="report-doc" id="report-printable">
@@ -634,6 +721,7 @@ function renderWeeklyReport() {
       ${tempBreachesHTML}
       ${equipLogHTML}
       ${probeLogHTML}
+      ${cleaningLogHTML}
 
       <div class="report-section-title">Goods In — Week Summary</div>
       ${buildWeeklyGoodsInTable(weekDates)}
@@ -718,6 +806,18 @@ function buildWeeklyGrid(weekDates, dayLabels, shortDates, allDepts) {
     }).join('');
     rows.push(`<tr><td class="wg-label-col"><span style="color:${deptInfo.color}">${deptInfo.icon}</span> Closing</td>${cells}</tr>`);
   });
+
+  // Cleaning checks per dept (when enabled)
+  if (state.settings.cleaningEnabled) {
+    allDepts.forEach(dept => {
+      const deptInfo = DEPARTMENTS[dept];
+      const cells = weekDates.map(date => {
+        const rec = findRec(date, 'cleaning', dept);
+        return gridCell(rec, date, dept);
+      }).join('');
+      rows.push(`<tr><td class="wg-label-col"><span style="color:${deptInfo.color}">${deptInfo.icon}</span> Cleaning</td>${cells}</tr>`);
+    });
+  }
 
   // Equipment checks (count per day, any dept)
   const equipCells = weekDates.map(date => {
@@ -878,8 +978,7 @@ function buildWeeklyCompliance(weekDates, weekStart) {
     const tradingCount = tradingDates.length;
 
     // 1. Checks: opening + closing per trading day
-    const checksExp = tradingCount * 2;
-    const checksAct = tradingDates.reduce((sum, date) => {
+    const checksExp = tradingCount * 2;    const checksAct = tradingDates.reduce((sum, date) => {
       let n = 0;
       if (state.records.find(r => r.date === date && r.type === 'opening' && r.dept === dept)) n++;
       if (state.records.find(r => r.date === date && r.type === 'closing' && r.dept === dept)) n++;
@@ -928,12 +1027,26 @@ function buildWeeklyCompliance(weekDates, weekStart) {
         : `${probeExp} expected (1 per day)${probeMissed > 0 ? ` · ${probeMissed} missed` : ''}`;
     }
 
+    // 5. Cleaning: 1 per trading day per dept (when enabled)
+    let cleanExp = 0, cleanAct = 0, cleanDetail = '';
+    if (state.settings.cleaningEnabled) {
+      cleanExp = tradingCount;
+      cleanAct = tradingDates.filter(date =>
+        state.records.some(r => r.date === date && r.type === 'cleaning' && r.dept === dept)
+      ).length;
+      const cleanMissed = cleanExp - cleanAct;
+      cleanDetail = tradingCount === 0
+        ? 'No trading days elapsed'
+        : `${cleanExp} expected (1 per day)${cleanMissed > 0 ? ` · ${cleanMissed} missed` : ''}`;
+    }
+
     // Overall dept score — average across all categories with data
     const cats = [
       { exp: checksExp, act: checksAct },
       { exp: equipExp,  act: equipAct  },
       ...(tasksExp  > 0  ? [{ exp: tasksExp,  act: tasksAct  }] : []),
       ...(dept === 'kitchen' && probeExp > 0 ? [{ exp: probeExp, act: probeAct }] : []),
+      ...(cleanExp  > 0  ? [{ exp: cleanExp,  act: cleanAct  }] : []),
     ];
     const totalExp = cats.reduce((s, c) => s + c.exp, 0);
     const totalAct = cats.reduce((s, c) => s + c.act, 0);
@@ -955,6 +1068,7 @@ function buildWeeklyCompliance(weekDates, weekStart) {
           ${compRow('Equipment Checks',         equipDetail,  equipAct,  equipExp)}
           ${compRow('Tasks',                    tasksDetail,  tasksAct,  tasksExp)}
           ${dept === 'kitchen' ? compRow('Food Probes', probeDetail, probeAct, probeExp) : ''}
+          ${state.settings.cleaningEnabled ? compRow('Cleaning Schedule', cleanDetail, cleanAct, cleanExp) : ''}
         </div>
       </div>`;
   }
@@ -976,13 +1090,16 @@ function getCheckLabel(id) {
   const allSections = [
     ...(s.sharedChecks?.opening || []),
     ...(s.sharedChecks?.closing || []),
+    ...(s.sharedChecks?.cleaning || []),
     ...(s.checks?.mgmt?.weekly || []),
     ...(s.checks?.mgmt?.opening || []),
     ...(s.checks?.mgmt?.closing || []),
     ...(s.checks?.kitchen?.opening || []),
     ...(s.checks?.kitchen?.closing || []),
+    ...(s.checks?.kitchen?.cleaning || []),
     ...(s.checks?.foh?.opening || []),
     ...(s.checks?.foh?.closing || []),
+    ...(s.checks?.foh?.cleaning || []),
   ];
   const found = allSections.find(c => c.id === id);
   if (found) return found.label;
