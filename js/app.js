@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.35.0';
+const APP_VERSION = '5.36.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -364,7 +364,7 @@ function setFormDept(type, dept) {
   const selectorId = type === 'equipment' ? 'equip-dept-selector' : `${type}-dept-selector`;
   syncDeptBar(selectorId, dept);
   // Rebuild form content for new dept
-  if (['opening','closing'].includes(type)) {
+  if (['opening','closing','cleaning'].includes(type)) {
     rebuildChecklist(type, dept);
     updateChecklistProgress(type, dept);
     const staff = getDeptStaff(dept);
@@ -1057,6 +1057,7 @@ function renderManagerDashboard() {
       ...(deptId === 'kitchen' ? [{ type:'food_probe', label:'Food Probe', icon:'🍖', total: null }] : []),
       ...(deptId === 'kitchen' ? [{ type:'goods_in',   label:'Goods In',   icon:'📦', total: null }] : []),
       { type:'closing',     label:'Closing',     icon:'☽', total: getActiveChecks(deptId,'closing').length  || 10 },
+      ...(state.settings.cleaningEnabled ? [{ type:'cleaning', label:'Cleaning', icon:'◎', total: getActiveChecks(deptId,'cleaning').length || 10 }] : []),
       { type:'tasks',       label:'Tasks',       icon:'☑', total: null },
     ];
 
@@ -1198,6 +1199,14 @@ function renderStaffDashboard() {
   if (dept === 'kitchen') {
     cards.splice(2, 0, { id:'probe', label:'Food Probe', icon:'🍖', color:'var(--success)', total: null, tab:'probe', recType:'food_probe' });
     cards.splice(3, 0, { id:'goods_in', label:'Goods In', icon:'📦', color:'#f59e0b', total: null, tab:'goods-in', recType:'goods_in' });
+  }
+  if (state.settings.cleaningEnabled) {
+    // Insert cleaning after closing (which is index 2, or 4 for kitchen after probe+goods_in)
+    const closeIdx = cards.findIndex(c => c.id === 'closing');
+    cards.splice(closeIdx + 1, 0, {
+      id:'cleaning', label:'Cleaning', icon:'◎', color:'#06b6d4',
+      total: getActiveChecks(dept,'cleaning').length || 10
+    });
   }
 
   const grid = document.getElementById('dashboard-grid');
@@ -1370,6 +1379,8 @@ function renderDashAlerts() {
         alerts.push(`⚠ No food probe check logged today — at least 1 required`);
       if (hour >= closeHour && !dr.find(r=>r.type==='closing'))
         alerts.push(`⚠ Closing checks not yet completed`);
+      if (state.settings.cleaningEnabled && hour >= openHour + 3 && !dr.find(r=>r.type==='cleaning'))
+        alerts.push(`⚠ Cleaning schedule not yet completed`);
     }
   } else {
     ['kitchen','foh'].forEach(d => {
@@ -1382,6 +1393,8 @@ function renderDashAlerts() {
         alerts.push(`⚠ ${dInfo.icon} ${dInfo.label}: Opening checks not done`);
       if (hour>=ch && !ddr.find(r=>r.type==='closing'))
         alerts.push(`⚠ ${dInfo.icon} ${dInfo.label}: Closing checks not done`);
+      if (state.settings.cleaningEnabled && hour>=oh+3 && !ddr.find(r=>r.type==='cleaning'))
+        alerts.push(`⚠ ${dInfo.icon} ${dInfo.label}: Cleaning schedule not done`);
       const dTemps = ddr.filter(r=>r.type==='temperature').length;
       if (hour >= oh && dTemps === 0)
         alerts.push(`⚠ ${dInfo.icon} ${dInfo.label}: No equipment checks logged today`);
@@ -1623,7 +1636,9 @@ async function pullDraftsFromSheets() {
 
     // Re-apply ticks to all checklist forms — active or not
     // Safe to call unconditionally: restoreDraft only sets checked=true, never unticks
-    ['opening','closing'].forEach(t => {
+    const draftTypes = ['opening','closing'];
+    if (state.settings.cleaningEnabled) draftTypes.push('cleaning');
+    draftTypes.forEach(t => {
       const dept = getFormDept(t);
       restoreDraft(t, dept);
       updateChecklistProgress(t, dept);

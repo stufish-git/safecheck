@@ -47,6 +47,7 @@
     <button class="tab-btn" data-tab="goods-in"         onclick="showTab('goods-in')"><span class="tab-icon">📦</span><span class="tab-label">Goods In</span></button>
     <button class="tab-btn" data-tab="probe"            onclick="showTab('probe')">    <span class="tab-icon">🍖</span><span class="tab-label">Probe</span></button>
     <button class="tab-btn" data-tab="closing"          onclick="showTab('closing')">  <span class="tab-icon">☽</span><span class="tab-label">Closing</span></button>
+    <button class="tab-btn" id="tab-btn-cleaning" data-tab="cleaning" onclick="showTab('cleaning')" style="display:none"><span class="tab-icon">◎</span><span class="tab-label">Cleaning</span></button>
     <button class="tab-btn" data-tab="weekly"           onclick="showTab('weekly')">   <span class="tab-icon">▦</span><span class="tab-label">Weekly</span></button>
     <button class="tab-btn" data-tab="history"          onclick="showTab('history')">  <span class="tab-icon">◷</span><span class="tab-label">History</span></button>
     <button class="tab-btn" data-tab="tasks"            onclick="showTab('tasks')">    <span class="tab-icon">☑</span><span class="tab-label">Tasks</span></button>
@@ -554,6 +555,7 @@
         <button class="settings-tab-btn" data-settings-tab="security"   onclick="showSettingsSection('security')">Security</button>
         <button class="settings-tab-btn" data-settings-tab="trading"   onclick="showSettingsSection('trading')">Trading Days</button>
         <button class="settings-tab-btn" data-settings-tab="email"     onclick="showSettingsSection('email')">Email Reports</button>
+        <button class="settings-tab-btn" data-settings-tab="features"  onclick="showSettingsSection('features')">Features</button>
       </div>
 
       <!-- RESTAURANT -->
@@ -1021,6 +1023,26 @@
         </div>
 
       </div>
+
+      <!-- FEATURES -->
+      <div id="settings-panel-features" class="settings-panel">
+        <div class="check-group">
+          <h3 class="group-title">Optional Tabs</h3>
+          <div style="padding:16px 20px">
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6">
+              Enable or disable optional tabs across all devices. Changes sync automatically within 60 seconds.
+            </p>
+            <label class="check-item" style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:8px">
+              <input type="checkbox" id="set-cleaning-enabled" onchange="saveFeatureSettings()"/>
+              <span style="font-size:14px;color:var(--text)">◎ Enable Cleaning Schedule tab</span>
+            </label>
+            <p style="font-size:12px;color:var(--text-muted);margin:4px 0 0 34px;line-height:1.5">
+              Adds a daily Cleaning Schedule checklist for kitchen and FOH. When enabled, missing cleaning will appear as a dashboard alert and count towards compliance. Reports integration coming in a future version.
+            </p>
+          </div>
+        </div>
+      </div>
+
     </section>
 
   </main>

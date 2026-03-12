@@ -31,6 +31,7 @@ const DEFAULT_SETTINGS = {
   openingTimes: { kitchen:'08:00', foh:'09:00' },
   emailEnabled: false,
   emailRecipients: [],
+  cleaningEnabled: false,
   tradingDays: {
     open:    true,
     kitchen: { mon:true, tue:true, wed:true, thu:true, fri:true, sat:true, sun:true },
@@ -379,6 +380,7 @@ function deepMergeSettings(def, saved) {
   if (saved.openingTimes)    m.openingTimes    = { ...m.openingTimes, ...saved.openingTimes };
   if (saved.emailEnabled !== undefined) m.emailEnabled = saved.emailEnabled;
   if (Array.isArray(saved.emailRecipients)) m.emailRecipients = saved.emailRecipients;
+  if (saved.cleaningEnabled !== undefined) m.cleaningEnabled = saved.cleaningEnabled;
   if (Array.isArray(saved.suppliers)) m.suppliers = saved.suppliers;
   if (saved.tradingDays) {
     m.tradingDays = JSON.parse(JSON.stringify(saved.tradingDays));
@@ -434,9 +436,14 @@ function rebuildAllChecklists() {
     const closeDept = (state.tabDept && state.tabDept['closing'])  || 'kitchen';
     rebuildChecklist('opening',  openDept);
     rebuildChecklist('closing',  closeDept);
+    if (state.settings.cleaningEnabled) {
+      const cleanDept = (state.tabDept && state.tabDept['cleaning']) || 'kitchen';
+      rebuildChecklist('cleaning', cleanDept);
+    }
   } else {
     rebuildChecklist('opening', dept);
     rebuildChecklist('closing', dept);
+    if (state.settings.cleaningEnabled) rebuildChecklist('cleaning', dept);
   }
 }
 
@@ -568,6 +575,27 @@ function applyDeviceIdentity() {
     const sel = document.getElementById(type + '-dept-selector');
     if (sel) sel.style.display = isMgmt ? 'flex' : 'none';
   });
+  // Cleaning dept selector — only show when cleaning is enabled AND user is management
+  const cleanSel = document.getElementById('cleaning-dept-selector');
+  if (cleanSel) cleanSel.style.display = (isMgmt && state.settings.cleaningEnabled) ? 'flex' : 'none';
+
+  applyCleaningTabVisibility();
+}
+
+// ── Cleaning tab visibility ───────────────────────────
+function applyCleaningTabVisibility() {
+  const btn = document.getElementById('tab-btn-cleaning');
+  if (btn) btn.style.display = state.settings.cleaningEnabled ? '' : 'none';
+}
+
+function saveFeatureSettings() {
+  state.settings.cleaningEnabled = document.getElementById('set-cleaning-enabled')?.checked || false;
+  saveSettings();
+  syncSettingsToSheets();
+  applyCleaningTabVisibility();
+  applyDeviceIdentity();
+  rebuildAllChecklists();
+  updateDashboard();
 }
 
 // ── PIN ───────────────────────────────────────────────
@@ -646,6 +674,9 @@ function renderSettingsPage() {
   updateThemeButtons(currentTheme());
   renderStaffList(); renderEquipmentList(); renderCheckEditors(); renderTaskEditor(); renderProbeProductList();
   renderSupplierList(); renderEmailSettings(); renderTradingSchedule();
+  // Features panel
+  const cleaningEl = document.getElementById('set-cleaning-enabled');
+  if (cleaningEl) cleaningEl.checked = !!state.settings.cleaningEnabled;
   showSettingsSection('restaurant');
 }
 
