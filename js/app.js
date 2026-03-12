@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.31.0';
+const APP_VERSION = '5.35.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -798,6 +798,7 @@ function submitAllEquipment() {
   updateEquipDayStatus();
   updateDashboard();
   showToast(`${submitted} equipment check${submitted!==1?'s':''} submitted ✓`, 'success');
+  setTimeout(() => showTab('dashboard'), 1200);
 }
 
 // ── Equipment log (today's entries) ──────────────────
@@ -1078,14 +1079,33 @@ function renderManagerDashboard() {
       }
       if (sec.type === 'temperature') {
         const temps   = deptRecords.filter(r => r.type==='temperature');
-        const hasFail = temps.some(r => r.fields?.temp_status==='FAIL');
-        const hasWarn = temps.some(r => r.fields?.temp_status==='WARNING');
-        const status  = hasFail ? { text:'⚠ Breach', cls:'overdue' } : hasWarn ? { text:'! Warning', cls:'partial' } : temps.length > 0 ? { text:'✓ All OK', cls:'complete' } : { text:'—', cls:'' };
-        const pct     = Math.min(100, temps.length * 12.5);
+        const fails   = temps.filter(r => r.fields?.temp_status==='FAIL').length;
+        const warns   = temps.filter(r => r.fields?.temp_status==='WARNING').length;
+        const passes  = temps.length - fails - warns;
+        const hasFail = fails > 0;
+        const hasWarn = warns > 0;
+
+        // Progress bar: green portion for passes, red/amber for issues
+        const total   = Math.max(temps.length, 1);
+        const passPct = Math.round((passes / total) * 100);
+        const failPct = Math.round(((fails + warns) / total) * 100);
+        const barHtml = temps.length === 0
+          ? `<div class="pb"><div class="pf" style="width:0%;background:var(--temp)"></div></div>`
+          : `<div class="pb" style="display:flex;gap:2px">
+              ${passes > 0 ? `<div class="pf" style="width:${passPct}%;background:var(--success);border-radius:3px 0 0 3px"></div>` : ''}
+              ${(fails + warns) > 0 ? `<div class="pf" style="width:${failPct}%;background:${hasFail ? 'var(--danger)' : 'var(--warning)'};border-radius:${passes > 0 ? '0 3px 3px 0' : '3px'}"></div>` : ''}
+            </div>`;
+
+        const statusText = temps.length === 0 ? '—'
+          : (hasFail || hasWarn)
+            ? `<span style="color:var(--success)">${passes} OK</span> · <span style="color:${hasFail ? 'var(--danger)' : 'var(--warning)'}">${fails + warns} ${hasFail ? 'breach' : 'warn'}${(fails + warns) !== 1 ? 'es' : ''}</span>`
+            : `✓ All OK · ${passes} item${passes !== 1 ? 's' : ''}`;
+        const statusCls = hasFail ? 'overdue' : hasWarn ? 'partial' : temps.length > 0 ? 'complete' : '';
+
         return `<div class="mgr-card" onclick="showTab('equipment')">
           <div class="mgr-card-header"><span class="mgr-card-icon" style="color:var(--temp)">${sec.icon}</span><span class="mgr-card-label">${sec.label}</span></div>
-          <div class="pb"><div class="pf" style="width:${pct}%;background:var(--temp)"></div></div>
-          <div class="mgr-card-status ${status.cls}">${status.text} · ${temps.length} item${temps.length!==1?'s':''}</div>
+          ${barHtml}
+          <div class="mgr-card-status ${statusCls}">${statusText}</div>
         </div>`;
       }
       if (sec.type === 'food_probe') {

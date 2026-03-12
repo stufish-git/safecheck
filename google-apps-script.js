@@ -387,15 +387,16 @@ function removeDailyEmailTrigger() {
 }
 
 // ── Trading calendar check (Apps Script side) ───────────
-function isTradingAS(dept, settings) {
+function isTradingAS(dept, settings, date) {
   if (dept === 'mgmt') return true;
   const td = settings.tradingDays;
   if (!td) return true;
   // Master switch
   if (td.open === false) return false;
-  // Per-day dept schedule
+  // Per-day dept schedule — use provided date or today
   const dayNames = ['sun','mon','tue','wed','thu','fri','sat'];
-  const day = dayNames[new Date().getDay()];
+  const d = date ? new Date(date + 'T12:00:00') : new Date();
+  const day = dayNames[d.getDay()];
   if (td[dept] && td[dept][day] === false) return false;
   return true;
 }
@@ -1120,8 +1121,8 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
     }
     var p = Math.round(actual/expected*100);
     var c = pctColor(p);
-    var barFill = '<div style="display:inline-block;width:' + Math.round(p*60/100) + 'px;height:5px;background:' + c + ';border-radius:3px;vertical-align:middle"></div>';
-    var barBg   = '<div style="display:inline-block;width:60px;height:5px;background:#e2e8f0;border-radius:3px;vertical-align:middle;position:relative">' + barFill + '</div>';
+    var barBg = '<div style="display:inline-block;width:60px;height:5px;background:#e2e8f0;border-radius:3px;vertical-align:middle;position:relative">' +
+                '<div style="position:absolute;left:0;top:0;width:' + Math.round(p*60/100) + 'px;height:5px;background:' + c + ';border-radius:3px"></div></div>';
     return '<tr><td style="padding:5px 16px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + label + '</td>' +
            '<td style="padding:5px 16px;text-align:right;white-space:nowrap">' + barBg +
            '&nbsp;<span style="font-size:12px;font-weight:700;color:' + c + ';font-family:Arial,sans-serif">' + p + '%</span>' +
@@ -1139,8 +1140,8 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
     return '<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:8px;border-collapse:collapse;margin-bottom:8px">' +
       '<tr style="background:#f8fafc"><td style="padding:10px 16px"><span style="font-size:14px;font-weight:700;color:' + color + ';font-family:Arial,sans-serif">' + icon + ' ' + label + '</span></td>' +
       '<td style="padding:10px 16px;text-align:right">' +
-      '<div style="display:inline-block;width:120px;height:6px;background:#e2e8f0;border-radius:3px;vertical-align:middle">' +
-      '<div style="width:' + barW + 'px;height:6px;background:' + oc + ';border-radius:3px"></div></div>' +
+      '<div style="display:inline-block;width:120px;height:6px;background:#e2e8f0;border-radius:3px;vertical-align:middle;position:relative">' +
+      '<div style="position:absolute;left:0;top:0;width:' + barW + 'px;height:6px;background:' + oc + ';border-radius:3px"></div></div>' +
       '&nbsp;<span style="font-size:18px;font-weight:700;color:' + oc + ';font-family:Arial,sans-serif;vertical-align:middle">' + overall + '%</span></td></tr>' +
       complianceRow('Opening &amp; Closing Checks', checksAct, checksExp) +
       complianceRow('Equipment Checks', equipAct, equipExp) +
@@ -1148,11 +1149,16 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
       '</table>';
   }
 
-  // Count trading dates (simple: non-zero check/equip activity proxy — use all weekDates for expected)
-  // We don't have isTrading() in Apps Script so use weekDates.length as expected days
-  var kEquipAct = 0, kEquipExp = weekDates.length * 2;
-  var fEquipAct = 0, fEquipExp = weekDates.length * 2;
-  var kProbeAct = 0, kProbeExp = weekDates.length;
+  // Count trading days per dept using isTradingAS — same logic as the PWA
+  var kTradingDays = 0, fTradingDays = 0;
+  weekDates.forEach(function(date) {
+    if (isTradingAS('kitchen', settings, date)) kTradingDays++;
+    if (isTradingAS('foh',     settings, date)) fTradingDays++;
+  });
+
+  var kEquipAct = 0, kEquipExp = kTradingDays * 2;
+  var fEquipAct = 0, fEquipExp = fTradingDays * 2;
+  var kProbeAct = 0, kProbeExp = kTradingDays;
   weekDates.forEach(function(date) {
     kEquipAct += equipBatches('kitchen', date);
     fEquipAct += equipBatches('foh', date);
@@ -1169,16 +1175,47 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
     reviewHtml = '<tr><td style="padding:10px 24px;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No weekly review submitted</td></tr>';
   } else {
     const f       = weeklyRec.fields || {};
-    const rating  = f.weekly_rating  || '';
-    const issues  = f.weekly_issues  || '';
-    const actions = f.weekly_actions || '';
+    const rating  = f.weekly_rating    || '';
+    const issues  = f.weekly_issues    || '';
+    const actions = f.weekly_actions   || '';
     const signed  = f.weekly_signed_by || '';
     const rc = rating==='Good' ? '#22c55e' : rating==='Satisfactory' ? '#f59e0b' : rating==='Needs Improvement' ? '#ef4444' : '#94a3b8';
+
+    // Build checklist table from settings checks
+    var checklistHtml = '';
+    var mgmtChecks = (settings.checks && settings.checks.mgmt) ? settings.checks.mgmt : [];
+    if (mgmtChecks.length > 0) {
+      var checkRows = mgmtChecks.filter(function(c) { return c.enabled !== false; }).map(function(c, i) {
+        var answer = f[c.id];
+        if (answer !== 'Yes' && answer !== 'No') return '';
+        var ansColor = answer === 'Yes' ? '#22c55e' : '#ef4444';
+        var rowBg = i % 2 === 0 ? '' : 'background:#fafafa';
+        return '<tr style="border-top:1px solid #f1f5f9;' + rowBg + '">' +
+          '<td style="padding:7px 12px;font-size:12px;color:#334155;font-family:Arial,sans-serif">' + c.label + '</td>' +
+          '<td style="padding:7px 12px;text-align:right;white-space:nowrap"><span style="font-size:12px;font-weight:700;color:' + ansColor + ';font-family:Arial,sans-serif">' + answer + '</span></td>' +
+          '</tr>';
+      }).join('');
+
+      if (checkRows) {
+        checklistHtml = '<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:14px">' +
+          '<tr style="background:#f8fafc">' +
+          '<td style="padding:6px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;font-family:Arial,sans-serif">Checklist Item</td>' +
+          '<td style="padding:6px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;font-family:Arial,sans-serif;text-align:right;width:50px">Result</td>' +
+          '</tr>' + checkRows + '</table>';
+      }
+    }
+
     reviewHtml = '<tr><td style="padding:8px 24px 14px">' +
-      (rating  ? '<div style="display:inline-block;border:2px solid ' + rc + ';color:' + rc + ';border-radius:8px;padding:6px 14px;font-size:13px;font-weight:700;font-family:Arial,sans-serif;margin-bottom:8px">' + rating + '</div><br>' : '') +
-      (issues  ? '<p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#94a3b8;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:.05em">Issues</p><p style="margin:0 0 10px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + issues + '</p>' : '') +
-      (actions ? '<p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#94a3b8;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:.05em">Actions</p><p style="margin:0 0 10px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + actions + '</p>' : '') +
-      (signed  ? '<p style="margin:0;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">Signed by: ' + signed + ' · ' + (weeklyRec.time||'') + '</p>' : '') +
+      // Rating badge + sign-off on same line
+      '<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:14px"><tr>' +
+      '<td>' + (rating ? '<div style="display:inline-block;border:2px solid ' + rc + ';color:' + rc + ';border-radius:8px;padding:5px 14px;font-size:13px;font-weight:700;font-family:Arial,sans-serif">' + rating + '</div>' : '') + '</td>' +
+      '<td style="text-align:right;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">' + (signed ? 'Signed: ' + signed + (weeklyRec.time ? ' &middot; ' + weeklyRec.time : '') : '') + '</td>' +
+      '</tr></table>' +
+      // Full checklist
+      checklistHtml +
+      // Issues & Actions
+      (issues  ? '<p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#94a3b8;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:.05em">Issues</p><p style="margin:0 0 12px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + issues + '</p>' : '') +
+      (actions ? '<p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#94a3b8;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:.05em">Actions</p><p style="margin:0;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + actions + '</p>' : '') +
       '</td></tr>';
   }
   const reviewSection = sectionHeader('&#x1F4CB; Weekly Management Review') + reviewHtml;
