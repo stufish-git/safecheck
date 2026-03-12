@@ -1184,7 +1184,7 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
            '&nbsp;<span style="font-size:11px;color:#94a3b8;font-family:Arial,sans-serif">' + actual + '/' + expected + '</span></td></tr>';
   }
 
-  function deptCard(label, icon, color, checksAct, checksExp, equipAct, equipExp, probeAct, probeExp, cleanAct, cleanExp) {
+  function deptCard(label, icon, color, checksAct, checksExp, equipAct, equipExp, probeAct, probeExp, cleanAct, cleanExp, missingDays, tradingDays) {
     var cats = [{a:checksAct,e:checksExp},{a:equipAct,e:equipExp}];
     if (probeExp > 0) cats.push({a:probeAct,e:probeExp});
     if (cleanExp > 0) cats.push({a:cleanAct,e:cleanExp});
@@ -1193,6 +1193,16 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
     var overall = totalE > 0 ? Math.round(totalA/totalE*100) : 100;
     var oc = pctColor(overall);
     var barW = Math.round(overall * 120 / 100);
+    // Missing days caveat — shown when any trading day lacked opening+closing submission
+    var missingNoteHtml = '';
+    if (missingDays > 0) {
+      var daysWithChecks = tradingDays - missingDays;
+      missingNoteHtml = '<tr><td colspan="2" style="padding:2px 16px 10px">' +
+        '<p style="margin:0;font-size:11px;color:#f59e0b;font-family:Arial,sans-serif">' +
+        '&#x26A0; Score based on ' + daysWithChecks + ' of ' + tradingDays + ' trading day' + (tradingDays!==1?'s':'') +
+        ' &middot; ' + missingDays + ' day' + (missingDays!==1?'s':'') + ' missing opening/closing submissions' +
+        '</p></td></tr>';
+    }
     return '<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:8px;border-collapse:collapse;margin-bottom:8px">' +
       '<tr style="background:#f8fafc"><td style="padding:10px 16px"><span style="font-size:14px;font-weight:700;color:' + color + ';font-family:Arial,sans-serif">' + icon + ' ' + label + '</span></td>' +
       '<td style="padding:10px 16px;text-align:right">' +
@@ -1203,6 +1213,7 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
       complianceRow('Equipment Checks', equipAct, equipExp) +
       (probeExp > 0 ? complianceRow('Food Probes', probeAct, probeExp) : '') +
       (cleanExp > 0 ? complianceRow('Cleaning Schedule', cleanAct, cleanExp) : '') +
+      missingNoteHtml +
       '</table>';
   }
 
@@ -1228,9 +1239,29 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
     }
   });
 
+  // ── Missing day detection ─────────────────────────
+  // A day counts as "complete" only if BOTH opening and closing were submitted.
+  // Used to caveat compliance scores in the dept cards and show an
+  // incomplete week banner. Score still shows — based on submitted days only.
+  var kDaysWithChecks = 0, fDaysWithChecks = 0;
+  weekDates.forEach(function(date) {
+    if (isTradingAS('kitchen', settings, date)) {
+      var kOpen  = opening.some(function(r) { return r.date===date && r.dept==='kitchen'; });
+      var kClose = closing.some(function(r) { return r.date===date && r.dept==='kitchen'; });
+      if (kOpen && kClose) kDaysWithChecks++;
+    }
+    if (isTradingAS('foh', settings, date)) {
+      var fOpen  = opening.some(function(r) { return r.date===date && r.dept==='foh'; });
+      var fClose = closing.some(function(r) { return r.date===date && r.dept==='foh'; });
+      if (fOpen && fClose) fDaysWithChecks++;
+    }
+  });
+  var kMissingDays = kTradingDays - kDaysWithChecks;
+  var fMissingDays = fTradingDays - fDaysWithChecks;
+
   const complianceHtml =
-    deptCard('Kitchen', '🍳', '#f59e0b', kitchenPassed, kitchenChecks, kEquipAct, kEquipExp, kProbeAct, kProbeExp, kCleanAct, kCleanExp) +
-    deptCard('Front of House', '🍽', '#3b82f6', fohPassed, fohChecks, fEquipAct, fEquipExp, 0, 0, fCleanAct, fCleanExp);
+    deptCard('Kitchen', '🍳', '#f59e0b', kitchenPassed, kitchenChecks, kEquipAct, kEquipExp, kProbeAct, kProbeExp, kCleanAct, kCleanExp, kMissingDays, kTradingDays) +
+    deptCard('Front of House', '🍽', '#3b82f6', fohPassed, fohChecks, fEquipAct, fEquipExp, 0, 0, fCleanAct, fCleanExp, fMissingDays, fTradingDays);
 
   // ── Weekly management review ──────────────────────
   var reviewHtml = '';
@@ -1436,6 +1467,7 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
   const sheetsUrl = getSheetsUrl();
 
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif">' +
+  incompleteBannerHtml +
   '<div style="background:#f1f5f9;padding:24px 16px">' +
   '<table width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;margin:0 auto"><tr><td>' +
 
@@ -1445,6 +1477,20 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
   '<p style="margin:4px 0 0;font-size:20px;font-weight:700;color:#e6edf3;font-family:Arial,sans-serif">' + name + '</p>' +
   '<p style="margin:4px 0 0;font-size:13px;color:#7d8da8;font-family:Arial,sans-serif">Week: ' + weekLabel + '</p>' +
   '</td></tr></table>' +
+
+  // Incomplete week banner — shown above the grid when any trading days are missing submissions
+  var totalMissingDays = kMissingDays + fMissingDays;
+  var incompleteBannerHtml = '';
+  if (totalMissingDays > 0) {
+    incompleteBannerHtml =
+      '<table width="100%" cellpadding="0" cellspacing="0" style="background:#2d1c07;border-radius:8px;margin-bottom:2px">' +
+      '<tr><td style="padding:12px 24px">' +
+      '<p style="margin:0;font-size:13px;font-weight:700;color:#f59e0b;font-family:Arial,sans-serif">&#x26A0; Incomplete week</p>' +
+      '<p style="margin:4px 0 0;font-size:12px;color:#d97706;font-family:Arial,sans-serif">' +
+      totalMissingDays + ' trading day' + (totalMissingDays!==1?'s':'') + ' missing opening/closing submissions. ' +
+      'Compliance scores in the cards below are based on submitted days only.' +
+      '</p></td></tr></table>';
+  }
 
   // Daily overview
   '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' +
