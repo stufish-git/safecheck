@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.29.0';
+const APP_VERSION = '5.30.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -223,17 +223,40 @@ function isWeeklySubmitted(weekStart) {
 }
 
 function clearWeeklyReview(recordId) {
-  if (!confirm('This will clear the weekly review so it can be re-submitted.\n\nRemember to also delete the row from Google Sheets.\n\nContinue?')) return;
+  showConfirmModal(
+    'Clear Weekly Review',
+    'This will clear the weekly review so it can be re-submitted.\n\nRemember to also delete the row from Google Sheets.',
+    'Clear & re-submit',
+    () => {
+      addWeeklyTombstone(recordId);
+      state.records = state.records.filter(r => r.id !== recordId);
+      saveState();
+      onWeekSelectChange();
+    }
+  );
+}
 
-  // Tombstone permanently so sync never restores it
-  addWeeklyTombstone(recordId);
-
-  // Remove from local state
-  state.records = state.records.filter(r => r.id !== recordId);
-  saveState();
-
-  // Rebuild the weekly tab UI as if no submission exists
-  onWeekSelectChange();
+function showConfirmModal(title, message, confirmLabel, onConfirm) {
+  document.getElementById('confirm-modal')?.remove();
+  const el = document.createElement('div');
+  el.id = 'confirm-modal';
+  el.className = 'modal-overlay';
+  // Convert newlines to <br> for display
+  const msgHtml = message.replace(/\n\n/g, '</p><p class="modal-desc" style="margin-bottom:0">').replace(/\n/g, '<br>');
+  el.innerHTML = `
+    <div class="modal-box" style="max-width:360px">
+      <h2 class="modal-title">${title}</h2>
+      <p class="modal-desc">${msgHtml}</p>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button class="btn-cancel" style="flex:1" onclick="document.getElementById('confirm-modal').remove()">Cancel</button>
+        <button class="btn-danger" style="flex:1" id="confirm-modal-ok">${confirmLabel}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
+  document.getElementById('confirm-modal-ok').addEventListener('click', () => {
+    el.remove();
+    onConfirm();
+  });
 }
 function prefillDates() {
   const toEl = document.getElementById('history-date-to');
