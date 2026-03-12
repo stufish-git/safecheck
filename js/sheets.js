@@ -38,6 +38,29 @@ function isTombstoned(id) {
   return !!getTombstones()[id];
 }
 
+// ── Permanent weekly tombstones ───────────────────────
+// Unlike daily tombstones these never expire — needed because a weekly
+// review could be cleared days after submission and the old Sheets row
+// may still exist until manually deleted.
+const WEEKLY_TOMBSTONE_KEY = 'safechecks_cleared_weeklies';
+
+function getWeeklyTombstones() {
+  try {
+    const raw = localStorage.getItem(WEEKLY_TOMBSTONE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch(e) { return {}; }
+}
+
+function addWeeklyTombstone(id) {
+  const existing = getWeeklyTombstones();
+  existing[id] = todayStr();
+  localStorage.setItem(WEEKLY_TOMBSTONE_KEY, JSON.stringify(existing));
+}
+
+function isWeeklyTombstoned(id) {
+  return !!getWeeklyTombstones()[id];
+}
+
 // ═══════════════════════════════════════════════════════
 
 const SYNC_QUEUE_KEY   = 'safechecks_sync_queue';
@@ -405,11 +428,16 @@ function mergeRecords(local, remote) {
   const tombstones = getTombstones();
 
   // Local records go in first (skip tombstoned)
-  local.forEach(r => { if (!tombstones[r.id]) map.set(r.id, r); });
+  local.forEach(r => {
+    if (tombstones[r.id]) return;
+    if (r.type === 'weekly' && isWeeklyTombstoned(r.id)) return;
+    map.set(r.id, r);
+  });
 
   // Merge remote — never clobber non-empty local fields, skip tombstoned
   remote.forEach(r => {
     if (tombstones[r.id]) return;  // blocked — user cleared this today
+    if (r.type === 'weekly' && isWeeklyTombstoned(r.id)) return;  // permanently cleared
     const existing = map.get(r.id);
     if (existing) {
       const remoteHasFields = r.fields && Object.keys(r.fields).length > 0;

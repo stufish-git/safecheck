@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.27.0';
+const APP_VERSION = '5.29.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -220,6 +220,20 @@ function isWeeklySubmitted(weekStart) {
     r.type === 'weekly' &&
     (r.fields?.week_start === weekStart || r.date === weekStart)
   ) || null;
+}
+
+function clearWeeklyReview(recordId) {
+  if (!confirm('This will clear the weekly review so it can be re-submitted.\n\nRemember to also delete the row from Google Sheets.\n\nContinue?')) return;
+
+  // Tombstone permanently so sync never restores it
+  addWeeklyTombstone(recordId);
+
+  // Remove from local state
+  state.records = state.records.filter(r => r.id !== recordId);
+  saveState();
+
+  // Rebuild the weekly tab UI as if no submission exists
+  onWeekSelectChange();
 }
 function prefillDates() {
   const toEl = document.getElementById('history-date-to');
@@ -508,6 +522,7 @@ function applyChecklistSubmittedState(type, dept, record, progEl, bannerEl, form
         <div class="wso-week">Week ending ${weekFmt}</div>
         <div class="wso-detail">${passed} of ${checks.length} checks passed · Signed: ${signed}</div>
         <div class="wso-time">${record.timestamp}</div>
+        <button class="wso-clear-btn" onclick="showPinModal(() => clearWeeklyReview('${record.id}'))">Clear &amp; re-submit</button>
       </div>`;
     formEl.parentElement?.insertBefore(overlay, formEl);
 
