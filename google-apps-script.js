@@ -1041,15 +1041,15 @@ function handleSendWeeklyEmail(data) {
     if (sheet && sheet.getLastRow() >= 2) {
       const data2   = sheet.getDataRange().getValues();
       const headers = data2[0].map(function(h) { return String(h).trim(); });
-      const dateCol = headers.indexOf('Date');
+      const fieldsCol = headers.indexOf('Fields JSON');
+      const timeCol   = headers.indexOf('Time');
       for (var j = 1; j < data2.length; j++) {
-        var d = data2[j][dateCol];
-        if (d instanceof Date) d = getDateStr(d);
-        if (String(d) === weekStart) {
-          const fieldsCol = headers.indexOf('Fields JSON');
-          var fields = {};
-          try { fields = JSON.parse(String(data2[j][fieldsCol] || '{}')); } catch(e) {}
-          weeklyRec = { fields, time: String(data2[j][headers.indexOf('Time')] || '') };
+        // Match on week_start inside Fields JSON — more reliable than the Date column
+        // which Google Sheets can auto-reformat (e.g. DD/MM/YYYY).
+        var fields = {};
+        try { fields = JSON.parse(String(data2[j][fieldsCol] || '{}')); } catch(e) {}
+        if (fields.week_start === weekStart) {
+          weeklyRec = { fields: fields, time: String(data2[j][timeCol] || '') };
           break;
         }
       }
@@ -1260,8 +1260,8 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
   var fMissingDays = fTradingDays - fDaysWithChecks;
 
   const complianceHtml =
-    deptCard('Kitchen', '🍳', '#f59e0b', kitchenPassed, kitchenChecks, kEquipAct, kEquipExp, kProbeAct, kProbeExp, kCleanAct, kCleanExp, kMissingDays, kTradingDays) +
-    deptCard('Front of House', '🍽', '#3b82f6', fohPassed, fohChecks, fEquipAct, fEquipExp, 0, 0, fCleanAct, fCleanExp, fMissingDays, fTradingDays);
+    deptCard('Kitchen', '&#x1F373;', '#f59e0b', kitchenPassed, kitchenChecks, kEquipAct, kEquipExp, kProbeAct, kProbeExp, kCleanAct, kCleanExp, kMissingDays, kTradingDays) +
+    deptCard('Front of House', '&#x1F37D;', '#3b82f6', fohPassed, fohChecks, fEquipAct, fEquipExp, 0, 0, fCleanAct, fCleanExp, fMissingDays, fTradingDays);
 
   // ── Weekly management review ──────────────────────
   var reviewHtml = '';
@@ -1466,19 +1466,7 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
   // ── Assemble ──────────────────────────────────────
   const sheetsUrl = getSheetsUrl();
 
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif">' +
-  incompleteBannerHtml +
-  '<div style="background:#f1f5f9;padding:24px 16px">' +
-  '<table width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;margin:0 auto"><tr><td>' +
-
-  // Header
-  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#1a2332;border-radius:8px 8px 0 0">' +
-  '<tr><td style="padding:20px 24px"><p style="margin:0;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#4a6080;font-family:Arial,sans-serif">Weekly Food Safety Report</p>' +
-  '<p style="margin:4px 0 0;font-size:20px;font-weight:700;color:#e6edf3;font-family:Arial,sans-serif">' + name + '</p>' +
-  '<p style="margin:4px 0 0;font-size:13px;color:#7d8da8;font-family:Arial,sans-serif">Week: ' + weekLabel + '</p>' +
-  '</td></tr></table>' +
-
-  // Incomplete week banner — shown above the grid when any trading days are missing submissions
+  // Incomplete week banner — must be computed before the return statement
   var totalMissingDays = kMissingDays + fMissingDays;
   var incompleteBannerHtml = '';
   if (totalMissingDays > 0) {
@@ -1491,6 +1479,18 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
       'Compliance scores in the cards below are based on submitted days only.' +
       '</p></td></tr></table>';
   }
+
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif">' +
+  incompleteBannerHtml +
+  '<div style="background:#f1f5f9;padding:24px 16px">' +
+  '<table width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;margin:0 auto"><tr><td>' +
+
+  // Header
+  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#1a2332;border-radius:8px 8px 0 0">' +
+  '<tr><td style="padding:20px 24px"><p style="margin:0;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#4a6080;font-family:Arial,sans-serif">Weekly Food Safety Report</p>' +
+  '<p style="margin:4px 0 0;font-size:20px;font-weight:700;color:#e6edf3;font-family:Arial,sans-serif">' + name + '</p>' +
+  '<p style="margin:4px 0 0;font-size:13px;color:#7d8da8;font-family:Arial,sans-serif">Week: ' + weekLabel + '</p>' +
+  '</td></tr></table>' +
 
   // Daily overview
   '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' +

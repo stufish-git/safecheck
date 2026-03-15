@@ -1689,7 +1689,20 @@ body.theme-light .week-selector-select { background: #fff; border-color: #d0d6e0
   font-family: var(--mono);
 }
 
-/* Compliance badge */
+/* Compliance badges row */
+.report-compliance-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.report-badge-divider {
+  width: 1px;
+  height: 48px;
+  background: var(--border);
+  margin: 0 4px;
+}
 .report-compliance-badge {
   display: flex;
   flex-direction: column;
@@ -1700,10 +1713,17 @@ body.theme-light .week-selector-select { background: #fff; border-color: #d0d6e0
   min-width: 80px;
   flex-shrink: 0;
 }
+.report-compliance-total {
+  padding: 10px 18px;
+  min-width: 96px;
+}
 .report-compliance-pct {
   font-size: 24px;
   font-weight: 700;
   line-height: 1;
+}
+.report-compliance-total .report-compliance-pct {
+  font-size: 30px;
 }
 .report-compliance-label {
   font-size: 10px;
@@ -1712,6 +1732,107 @@ body.theme-light .week-selector-select { background: #fff; border-color: #d0d6e0
   letter-spacing: 0.05em;
   margin-top: 2px;
   opacity: 0.8;
+}
+.report-compliance-sub {
+  font-size: 10px;
+  font-family: var(--mono);
+  opacity: 0.65;
+  margin-top: 1px;
+}
+
+/* Missing submissions banner */
+.report-missing-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #fffbeb;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid #fcd34d;
+  padding: 12px 20px;
+}
+.report-missing-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.report-missing-title { font-weight: 700; font-size: 13px; color: #92400e; margin-bottom: 4px; }
+.report-missing-list { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.report-missing-list span { font-size: 12px; color: #92400e; }
+
+/* Compliance breakdown grid */
+.report-breakdown-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 0 20px 16px;
+}
+.rc-card {
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-card);
+}
+.rc-card-closed {
+  opacity: 0.55;
+}
+.rc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px 8px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+.rc-pct {
+  font-size: 18px;
+  font-weight: 800;
+}
+.rc-closed-pill {
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--bg-input);
+  color: var(--text-muted);
+  border-radius: 99px;
+  padding: 2px 8px;
+  letter-spacing: 0.05em;
+}
+.rc-bar-track {
+  height: 4px;
+  background: var(--bg-input);
+}
+.rc-bar-fill {
+  height: 100%;
+  transition: width 0.4s ease;
+}
+.rc-rows {
+  padding: 8px 12px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rc-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.rc-row-pass { background: transparent; color: var(--text); }
+.rc-row-fail { background: #fef2f2; color: var(--danger); }
+.rc-icon {
+  font-size: 11px;
+  font-weight: 700;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.rc-label { flex: 1; }
+.rc-note  { font-size: 10px; opacity: 0.65; font-style: italic; white-space: nowrap; }
+.rc-score {
+  padding: 6px 12px 8px;
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
 }
 
 /* Score bar */
@@ -2332,6 +2453,36 @@ body.theme-light .week-selector-select { background: #fff; border-color: #d0d6e0
   .failed-check-row { background: #fff0f0 !important; border-color: #fca5a5 !important; }
   .breach-row       { background: #fff0f0 !important; border-color: #fca5a5 !important; }
   .failed-check-note, .breach-action { color: #92400e !important; }
+  /* ── v140 compliance badges ─────────────────────── */
+  .report-compliance-badges { gap: 6px !important; }
+  .report-compliance-badge  { border-width: 1.5px !important; padding: 6px 10px !important; }
+  .report-compliance-total  { padding: 8px 14px !important; }
+  .report-compliance-sub    { color: inherit !important; opacity: 0.7 !important; }
+  .report-badge-divider     { background: #ccc !important; }
+
+  /* ── Missing banner — hide on print (rc-cards show ✗ rows) ── */
+  .report-missing-banner { display: none !important; }
+
+  /* ── Compliance breakdown cards ─────────────────── */
+  .report-breakdown-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+    padding: 0 0 12px !important;
+    break-inside: avoid;
+  }
+  .rc-card         { break-inside: avoid; border-color: #ccc !important; background: #fff !important; }
+  .rc-card-closed  { border-color: #ddd !important; opacity: 0.5 !important; }
+  .rc-header       { background: #fff !important; color: #000 !important; border-bottom-color: #ddd !important; }
+  .rc-pct          { color: inherit !important; }
+  .rc-bar-track    { background: #e5e5e5 !important; }
+  .rc-row          { background: transparent !important; padding: 3px 4px !important; }
+  .rc-row-fail     { background: #fff0f0 !important; color: #991b1b !important; }
+  .rc-row-pass     { color: #166534 !important; }
+  .rc-label        { color: inherit !important; }
+  .rc-note         { color: #666 !important; }
+  .rc-score        { color: #555 !important; border-top-color: #ddd !important; font-size: 10px !important; }
+  .rc-closed-pill  { background: #eee !important; color: #666 !important; }
+
 }
 
 .gi-report-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }

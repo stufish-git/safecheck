@@ -98,21 +98,45 @@ function renderDailyReport() {
   const dr = state.records.filter(r => r.date === date);
   const allDepts = ['kitchen', 'foh'];
 
-  // ── Compliance score ──────────────────────────────
+  // ── Per-dept compliance (submission-level) ──────────────
   const cleaningEnabled = state.settings.cleaningEnabled;
-  const checkTypes = cleaningEnabled ? ['opening','closing','cleaning'] : ['opening','closing'];
-  const checkRecords = dr.filter(r => checkTypes.includes(r.type));
-  let totalChecks = 0, passedChecks = 0;
-  checkRecords.forEach(r => {
-    Object.entries(r.fields || {}).forEach(([k, v]) => {
-      if (v === 'Yes' || v === 'No') { totalChecks++; if (v === 'Yes') passedChecks++; }
-    });
-  });
-  const compliancePct = totalChecks > 0 ? Math.round((passedChecks / totalChecks) * 100) : null;
-  const complianceColor = compliancePct === null ? 'var(--text-dim)'
-    : compliancePct >= 90 ? 'var(--success)'
-    : compliancePct >= 70 ? 'var(--warning)'
-    : 'var(--danger)';
+
+  function calcDeptCompliance(dept) {
+    if (!isTrading(dept, date)) return null;
+    const isKitchen = dept === 'kitchen';
+    const deptRecs  = dr.filter(r => r.dept === dept || (!r.dept && dept === 'kitchen'));
+    let earned = 0, possible = 0;
+    const add = (done) => { possible++; if (done) earned++; };
+    add(deptRecs.some(r => r.type === 'opening'));
+    add(deptRecs.some(r => r.type === 'closing'));
+    if (cleaningEnabled) add(deptRecs.some(r => r.type === 'cleaning'));
+    const equipCount = deptRecs.filter(r => r.type === 'temperature').length;
+    add(equipCount >= 1);
+    add(equipCount >= 2);
+    if (isKitchen) add(deptRecs.some(r => r.type === 'food_probe'));
+    return { earned, possible, pct: Math.round((earned / possible) * 100) };
+  }
+  const kitchenScore = calcDeptCompliance('kitchen');
+  const fohScore     = calcDeptCompliance('foh');
+  const siteEarned   = (kitchenScore?.earned ?? 0) + (fohScore?.earned ?? 0);
+  const sitePossible = (kitchenScore?.possible ?? 0) + (fohScore?.possible ?? 0);
+  const sitePct      = sitePossible > 0 ? Math.round((siteEarned / sitePossible) * 100) : null;
+  function compColor(pct) {
+    if (pct === null) return 'var(--text-dim)';
+    if (pct >= 90)   return 'var(--success)';
+    if (pct >= 70)   return 'var(--warning)';
+    return 'var(--danger)';
+  }
+  function compBadgeHTML(score, label, closed) {
+    const col = closed ? 'var(--text-dim)' : compColor(score?.pct ?? null);
+    return `<div class="report-compliance-badge" style="border-color:${col};color:${col}">
+      ${closed
+        ? `<span class="report-compliance-label">Closed</span>`
+        : score
+          ? `<span class="report-compliance-pct">${score.pct}%</span><span class="report-compliance-label">${label}</span><span class="report-compliance-sub">${score.earned}/${score.possible}</span>`
+          : `<span class="report-compliance-label">No data</span>`}
+    </div>`;
+  }
 
   // ── Opening checks (per dept) ─────────────────────
   const openingHTML = allDepts.map(dept => {
@@ -152,6 +176,63 @@ function renderDailyReport() {
   // ── Tasks ─────────────────────────────────────────
   const taskHTML = buildDailyTaskGrid(date);
 
+  // ── Missing submissions banner ───────────────────────────
+  function getMissing(dept) {
+    if (!isTrading(dept, date)) return [];
+    const isKitchen = dept === 'kitchen';
+    const deptRecs  = dr.filter(r => r.dept === dept || (!r.dept && dept === 'kitchen'));
+    const equipCount = deptRecs.filter(r => r.type === 'temperature').length;
+    const icon = DEPARTMENTS[dept].icon;
+    const m = [];
+    if (!deptRecs.some(r => r.type === 'opening'))    m.push(`${icon} Opening Checks`);
+    if (!deptRecs.some(r => r.type === 'closing'))    m.push(`${icon} Closing Checks`);
+    if (cleaningEnabled && !deptRecs.some(r => r.type === 'cleaning')) m.push(`${icon} Cleaning Schedule`);
+    if (equipCount < 2) m.push(`${icon} Equipment Temps (${equipCount} of 2)`);
+    if (isKitchen && !deptRecs.some(r => r.type === 'food_probe')) m.push(`${icon} Food Probe`);
+    return m;
+  }
+  const allMissing = [...getMissing('kitchen'), ...getMissing('foh')];
+  const missingBanner = (!siteClosed && allMissing.length) ? `
+    <div class="report-missing-banner">
+      <span class="report-missing-icon">⚠️</span>
+      <div>
+        <div class="report-missing-title">${allMissing.length} missing submission${allMissing.length > 1 ? 's' : ''}</div>
+        <div class="report-missing-list">${allMissing.map(m => `<span>• ${m}</span>`).join('')}</div>
+      </div>
+    </div>` : '';
+
+  // ── Compliance breakdown cards ───────────────────────────
+  function buildBreakdownCard(dept) {
+    const deptInfo   = DEPARTMENTS[dept];
+    const trading    = isTrading(dept, date);
+    const score      = dept === 'kitchen' ? kitchenScore : fohScore;
+    const col        = !trading ? 'var(--text-dim)' : compColor(score?.pct ?? null);
+    const isKitchen  = dept === 'kitchen';
+    const deptRecs   = dr.filter(r => r.dept === dept || (!r.dept && dept === 'kitchen'));
+    const equipCount = deptRecs.filter(r => r.type === 'temperature').length;
+    function rcRow(label, done, note) {
+      const cls = done ? 'rc-row-pass' : 'rc-row-fail';
+      return `<div class="rc-row ${cls}"><span class="rc-icon">${done ? '✓' : '✗'}</span><span class="rc-label">${label}</span>${note ? `<span class="rc-note">${note}</span>` : ''}</div>`;
+    }
+    if (!trading) return `<div class="rc-card rc-card-closed"><div class="rc-header"><span>${deptInfo.icon} ${deptInfo.label}</span><span class="rc-closed-pill">CLOSED</span></div></div>`;
+    return `<div class="rc-card">
+      <div class="rc-header" style="color:${col}">
+        <span>${deptInfo.icon} ${deptInfo.label}</span>
+        <span class="rc-pct" style="color:${col}">${score ? score.pct + '%' : '—'}</span>
+      </div>
+      <div class="rc-bar-track"><div class="rc-bar-fill" style="width:${score?.pct ?? 0}%;background:${col}"></div></div>
+      <div class="rc-rows">
+        ${rcRow('Opening Checks', deptRecs.some(r => r.type === 'opening'))}
+        ${rcRow('Closing Checks', deptRecs.some(r => r.type === 'closing'))}
+        ${cleaningEnabled ? rcRow('Cleaning Schedule', deptRecs.some(r => r.type === 'cleaning')) : ''}
+        ${rcRow('Equipment — 1 of 2', equipCount >= 1)}
+        ${rcRow('Equipment — 2 of 2', equipCount >= 2, 'required by 15:00')}
+        ${isKitchen ? rcRow('Food Probe', deptRecs.some(r => r.type === 'food_probe'), '1 required by 12:00') : ''}
+      </div>
+      <div class="rc-score">${score ? score.earned + '/' + score.possible + ' checks submitted' : 'No data'}</div>
+    </div>`;
+  }
+
   container.innerHTML = `
     <div class="report-doc" id="report-printable">
       <div class="report-doc-header">
@@ -159,23 +240,26 @@ function renderDailyReport() {
           <div class="report-restaurant-name">${state.settings.restaurantName || 'SafeChecks'}</div>
           <div class="report-doc-date">${fmtDate}</div>
         </div>
-        <div class="report-compliance-badge" style="border-color:${siteClosed ? 'var(--text-dim)' : complianceColor};color:${siteClosed ? 'var(--text-dim)' : complianceColor}">
-          ${siteClosed
-            ? `<span class="report-compliance-label">Closed</span>`
-            : compliancePct !== null
-              ? `<span class="report-compliance-pct">${compliancePct}%</span><span class="report-compliance-label">Compliance</span>`
-              : `<span class="report-compliance-label">No checks recorded</span>`}
+        <div class="report-compliance-badges">
+          ${compBadgeHTML(kitchenScore, '🍳 Kitchen', !isTrading('kitchen', date))}
+          ${compBadgeHTML(fohScore,     '🛎 FOH',     !isTrading('foh', date))}
+          <div class="report-badge-divider"></div>
+          <div class="report-compliance-badge report-compliance-total" style="border-color:${compColor(sitePct)};color:${compColor(sitePct)}">
+            ${sitePct !== null
+              ? `<span class="report-compliance-pct">${sitePct}%</span><span class="report-compliance-label">Site Total</span><span class="report-compliance-sub">${siteEarned}/${sitePossible}</span>`
+              : `<span class="report-compliance-label">Closed</span>`}
+          </div>
         </div>
       </div>
 
       ${siteClosed ? `<div class="report-closed-banner">🔒 Closed day — no checks expected. Any records below were submitted voluntarily.</div>` : ''}
+      ${missingBanner}
 
-      ${!siteClosed && compliancePct !== null ? `
-      <div class="report-score-bar-wrap">
-        <div class="report-score-bar-track">
-          <div class="report-score-bar-fill" style="width:${compliancePct}%;background:${complianceColor}"></div>
-        </div>
-        <span class="report-score-bar-label" style="color:${complianceColor}">${passedChecks}/${totalChecks} checks passed</span>
+      ${!siteClosed ? `
+      <div class="report-section-title">Compliance Breakdown</div>
+      <div class="report-breakdown-grid">
+        ${buildBreakdownCard('kitchen')}
+        ${buildBreakdownCard('foh')}
       </div>` : ''}
 
       <div class="report-section-title">Opening Checks</div>
