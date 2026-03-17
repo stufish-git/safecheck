@@ -487,18 +487,15 @@ function sendDailySummary() {
 function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, goodsIn, cleaning, tasks, depts, settings) {
   const DEPT_LABELS = { kitchen: '&#x1F373; Kitchen', foh: '&#x1F37D; Front of House' };
 
-  // Compliance score
-  let totalChecks = 0, passedChecks = 0;
-  [...opening, ...closing].forEach(r => { totalChecks += r.total; passedChecks += r.passed; });
-  const pct = totalChecks > 0 ? Math.round(passedChecks / totalChecks * 100) : null;
-
-  // Count submitted vs expected checks (2 per trading dept: opening + closing)
+  // Submission-level compliance — matches screen report model
+  // 1 point per expected submission (opening + closing per trading dept)
   const tradingDepts   = depts.filter(d => isTradingAS(d, settings));
   const expectedCheckCount = tradingDepts.length * 2;
   const submittedChecks = tradingDepts.reduce((n, d) => {
     return n + (opening.find(r => r.dept === d) ? 1 : 0) + (closing.find(r => r.dept === d) ? 1 : 0);
   }, 0);
   const anyMissing = submittedChecks < expectedCheckCount;
+  const pct = expectedCheckCount > 0 ? Math.round(submittedChecks / expectedCheckCount * 100) : null;
 
   const headerBorder = anyMissing ? '#ef4444' : pct === null ? '#4a5568' : pct >= 90 ? '#22c55e' : pct >= 70 ? '#f59e0b' : '#ef4444';
   const headerBg     = anyMissing ? '#2d0a0a' : pct === null ? '#1a2332' : pct >= 90 ? '#0d3320' : pct >= 70 ? '#2d1c07' : '#2d0a0a';
@@ -675,7 +672,9 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
   // ── Assemble ──────────────────────────────────────
   const sheetsUrl = getSheetsUrl();
 
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif">' +
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>' +
+  '<style>@media print{body{background:#fff!important}table{page-break-inside:avoid}tr{page-break-inside:avoid;page-break-after:auto}.section-block{page-break-inside:avoid}}</style>' +
+  '</head><body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif">' +
   '<div style="background:#f1f5f9;padding:24px 16px">' +
   '<table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto"><tr><td>' +
 
@@ -689,7 +688,7 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
   ? '<tr><td colspan="2" style="padding:0 24px 16px"><p style="margin:0;font-size:11px;color:#ef4444;font-family:Arial,sans-serif">' + submittedChecks + ' of ' + expectedCheckCount + ' checks submitted &nbsp;&middot;&nbsp; score excluded</p></td></tr>'
   : pct !== null ? '<tr><td colspan="2" style="padding:0 24px 16px"><table width="100%" cellpadding="0" cellspacing="0"><tr>' +
   '<td style="background:' + headerBg + ';border-radius:3px;height:6px"><div style="width:' + barWidth + '%;height:6px;background:' + pctColor + ';border-radius:3px"></div></td>' +
-  '<td style="width:110px;padding-left:12px;font-size:11px;color:' + pctColor + ';font-family:Arial,sans-serif;white-space:nowrap">' + passedChecks + '/' + totalChecks + ' checks</td>' +
+  '<td style="width:110px;padding-left:12px;font-size:11px;color:' + pctColor + ';font-family:Arial,sans-serif;white-space:nowrap">' + submittedChecks + '/' + expectedCheckCount + ' submissions</td>' +
   '</tr></table></td></tr>' : '') +
   '</table>' +
 
