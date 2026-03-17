@@ -110,7 +110,8 @@ function renderDailyReport() {
     add(deptRecs.some(r => r.type === 'opening'));
     add(deptRecs.some(r => r.type === 'closing'));
     if (cleaningEnabled) add(deptRecs.some(r => r.type === 'cleaning'));
-    const equipCount = deptRecs.filter(r => r.type === 'temperature').length;
+    const equipBatches = new Set(deptRecs.filter(r => r.type === 'temperature').map(r => r.fields?.batch_id || r.id));
+    const equipCount = equipBatches.size;
     add(equipCount >= 1);
     add(equipCount >= 2);
     if (isKitchen) add(deptRecs.some(r => r.type === 'food_probe'));
@@ -181,7 +182,8 @@ function renderDailyReport() {
     if (!isTrading(dept, date)) return [];
     const isKitchen = dept === 'kitchen';
     const deptRecs  = dr.filter(r => r.dept === dept || (!r.dept && dept === 'kitchen'));
-    const equipCount = deptRecs.filter(r => r.type === 'temperature').length;
+    const equipBatches = new Set(deptRecs.filter(r => r.type === 'temperature').map(r => r.fields?.batch_id || r.id));
+    const equipCount = equipBatches.size;
     const icon = DEPARTMENTS[dept].icon;
     const m = [];
     if (!deptRecs.some(r => r.type === 'opening'))    m.push(`${icon} Opening Checks`);
@@ -209,7 +211,8 @@ function renderDailyReport() {
     const col        = !trading ? 'var(--text-dim)' : compColor(score?.pct ?? null);
     const isKitchen  = dept === 'kitchen';
     const deptRecs   = dr.filter(r => r.dept === dept || (!r.dept && dept === 'kitchen'));
-    const equipCount = deptRecs.filter(r => r.type === 'temperature').length;
+    const equipBatches = new Set(deptRecs.filter(r => r.type === 'temperature').map(r => r.fields?.batch_id || r.id));
+    const equipCount = equipBatches.size;
     function rcRow(label, done, note) {
       const cls = done ? 'rc-row-pass' : 'rc-row-fail';
       return `<div class="rc-row ${cls}"><span class="rc-icon">${done ? '✓' : '✗'}</span><span class="rc-label">${label}</span>${note ? `<span class="rc-note">${note}</span>` : ''}</div>`;
@@ -226,8 +229,8 @@ function renderDailyReport() {
         ${rcRow('Closing Checks', deptRecs.some(r => r.type === 'closing'))}
         ${cleaningEnabled ? rcRow('Cleaning Schedule', deptRecs.some(r => r.type === 'cleaning')) : ''}
         ${rcRow('Equipment — 1 of 2', equipCount >= 1)}
-        ${rcRow('Equipment — 2 of 2', equipCount >= 2, 'required by 15:00')}
-        ${isKitchen ? rcRow('Food Probe', deptRecs.some(r => r.type === 'food_probe'), '1 required by 12:00') : ''}
+        ${rcRow('Equipment — 2 of 2', equipCount >= 2, 'required after 15:00')}
+        ${isKitchen ? rcRow('Food Probe', deptRecs.some(r => r.type === 'food_probe'), '1 required') : ''}
       </div>
       <div class="rc-score">${score ? score.earned + '/' + score.possible + ' checks submitted' : 'No data'}</div>
     </div>`;
