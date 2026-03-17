@@ -560,7 +560,9 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
       const scoreColor = rec.failCount > 0 ? '#d97706' : '#16a34a';
       let failHtml = '';
       if (rec.failCount > 0 && rec.failedLabels.length) {
-        const items = rec.failedLabels.map(l => '<p style="margin:0 0 3px;font-size:12px;color:#92400e;font-family:Arial,sans-serif">✗ &nbsp;' + l + '</p>').join('');
+        var labelMap = {};
+        if (settings && settings.checks) { Object.values(settings.checks).forEach(function(dept) { if (dept && typeof dept === 'object') { Object.values(dept).forEach(function(arr) { if (Array.isArray(arr)) arr.forEach(function(c) { if (c && c.id && c.label) labelMap[c.id] = c.label; }); }); } }); }
+        const items = rec.failedLabels.map(l => { var lbl = labelMap[l] || l.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()); return '<p style="margin:0 0 3px;font-size:12px;color:#92400e;font-family:Arial,sans-serif">&#x2717; &nbsp;' + lbl + '</p>'; }).join('');
         const noteHtml = rec.notes ? '<p style="margin:6px 0 0;font-size:11px;color:#a16207;font-family:Arial,sans-serif;font-style:italic">Note: ' + rec.notes + '</p>' : '';
         failHtml = '<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:6px;background:#fffbeb;border-radius:4px;border:1px solid #fde68a"><tr><td style="padding:8px 10px">' + items + noteHtml + '</td></tr></table>';
       }
@@ -846,7 +848,7 @@ function getTodayRecords(ss, tabName, today) {
       const checkEntries = Object.entries(fields).filter(([,v]) => v === 'Yes' || v === 'No');
       const passed = checkEntries.filter(([,v]) => v === 'Yes').length;
       const total  = checkEntries.length;
-      const failed = checkEntries.filter(([,v]) => v === 'No').map(([k]) => k.replace(/_/g,' ').replace(/\w/g, c => c.toUpperCase()));
+      const failed = checkEntries.filter(([,v]) => v === 'No').map(([k]) => k);
 
       results.push({
         dept:        String(row[deptCol]   || '').toLowerCase(),
@@ -1146,14 +1148,20 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
     gridColHeaders + '</tr>' + gridRows + '</table>';
 
   // ── Compliance — dept cards ───────────────────────
-  var kitchenChecks = 0, kitchenPassed = 0, fohChecks = 0, fohPassed = 0;
-  opening.concat(closing).forEach(function(r) {
-    Object.entries(r.fields||{}).forEach(function(e) {
-      if (e[1]==='Yes'||e[1]==='No') {
-        if (r.dept==='kitchen') { kitchenChecks++; if (e[1]==='Yes') kitchenPassed++; }
-        else if (r.dept==='foh') { fohChecks++; if (e[1]==='Yes') fohPassed++; }
-      }
-    });
+  // Submission-level compliance: 1 point per expected submission per trading day
+  var kOpenAct = 0, kOpenExp = kTradingDays;
+  var kCloseAct = 0, kCloseExp = kTradingDays;
+  var fOpenAct = 0, fOpenExp = fTradingDays;
+  var fCloseAct = 0, fCloseExp = fTradingDays;
+  weekDates.forEach(function(date) {
+    if (isTradingAS('kitchen', settings, date)) {
+      if (opening.some(function(r) { return r.date===date && r.dept==='kitchen'; })) kOpenAct++;
+      if (closing.some(function(r) { return r.date===date && r.dept==='kitchen'; })) kCloseAct++;
+    }
+    if (isTradingAS('foh', settings, date)) {
+      if (opening.some(function(r) { return r.date===date && r.dept==='foh'; })) fOpenAct++;
+      if (closing.some(function(r) { return r.date===date && r.dept==='foh'; })) fCloseAct++;
+    }
   });
 
   // Equipment: batch_id groups; 2 expected per trading day
@@ -1184,8 +1192,8 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
            '&nbsp;<span style="font-size:11px;color:#94a3b8;font-family:Arial,sans-serif">' + actual + '/' + expected + '</span></td></tr>';
   }
 
-  function deptCard(label, icon, color, checksAct, checksExp, equipAct, equipExp, probeAct, probeExp, cleanAct, cleanExp, missingDays, tradingDays) {
-    var cats = [{a:checksAct,e:checksExp},{a:equipAct,e:equipExp}];
+  function deptCard(label, icon, color, openAct, openExp, closeAct, closeExp, equipAct, equipExp, probeAct, probeExp, cleanAct, cleanExp, missingDays, tradingDays) {
+    var cats = [{a:openAct,e:openExp},{a:closeAct,e:closeExp},{a:equipAct,e:equipExp}];
     if (probeExp > 0) cats.push({a:probeAct,e:probeExp});
     if (cleanExp > 0) cats.push({a:cleanAct,e:cleanExp});
     var totalA = 0, totalE = 0;
@@ -1209,7 +1217,8 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
       '<div style="display:inline-block;width:120px;height:6px;background:#e2e8f0;border-radius:3px;vertical-align:middle;position:relative">' +
       '<div style="position:absolute;left:0;top:0;width:' + barW + 'px;height:6px;background:' + oc + ';border-radius:3px"></div></div>' +
       '&nbsp;<span style="font-size:18px;font-weight:700;color:' + oc + ';font-family:Arial,sans-serif;vertical-align:middle">' + overall + '%</span></td></tr>' +
-      complianceRow('Opening &amp; Closing Checks', checksAct, checksExp) +
+      complianceRow('Opening Checks', openAct, openExp) +
+      complianceRow('Closing Checks', closeAct, closeExp) +
       complianceRow('Equipment Checks', equipAct, equipExp) +
       (probeExp > 0 ? complianceRow('Food Probes', probeAct, probeExp) : '') +
       (cleanExp > 0 ? complianceRow('Cleaning Schedule', cleanAct, cleanExp) : '') +
@@ -1260,8 +1269,8 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
   var fMissingDays = fTradingDays - fDaysWithChecks;
 
   const complianceHtml =
-    deptCard('Kitchen', '&#x1F373;', '#f59e0b', kitchenPassed, kitchenChecks, kEquipAct, kEquipExp, kProbeAct, kProbeExp, kCleanAct, kCleanExp, kMissingDays, kTradingDays) +
-    deptCard('Front of House', '&#x1F37D;', '#3b82f6', fohPassed, fohChecks, fEquipAct, fEquipExp, 0, 0, fCleanAct, fCleanExp, fMissingDays, fTradingDays);
+    deptCard('Kitchen', '&#x1F373;', '#f59e0b', kOpenAct, kOpenExp, kCloseAct, kCloseExp, kEquipAct, kEquipExp, kProbeAct, kProbeExp, kCleanAct, kCleanExp, kMissingDays, kTradingDays) +
+    deptCard('Front of House', '&#x1F37D;', '#3b82f6', fOpenAct, fOpenExp, fCloseAct, fCloseExp, fEquipAct, fEquipExp, 0, 0, fCleanAct, fCleanExp, fMissingDays, fTradingDays);
 
   // ── Weekly management review ──────────────────────
   var reviewHtml = '';
@@ -1315,16 +1324,27 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
   const reviewSection = sectionHeader('&#x1F4CB; Weekly Management Review') + reviewHtml;
 
   // ── Failed checks ─────────────────────────────────
+  // Build a label lookup from settings so we show the real check name, not the raw ID
+  var checkLabelMap = {};
+  if (settings && settings.checks) {
+    Object.values(settings.checks).forEach(function(dept) {
+      if (dept && typeof dept === 'object') {
+        Object.values(dept).forEach(function(arr) {
+          if (Array.isArray(arr)) arr.forEach(function(c) { if (c && c.id && c.label) checkLabelMap[c.id] = c.label; });
+        });
+      }
+    });
+  }
   var failedRows = '';
   opening.concat(closing).forEach(function(r) {
     var type = opening.indexOf(r) >= 0 ? 'Opening' : 'Closing';
-    var dept = r.dept === 'kitchen' ? '🍳 Kitchen' : '🍽 FOH';
-    var signed = r.signedBy || '—';
+    var dept = r.dept === 'kitchen' ? '&#x1F373; Kitchen' : '&#x1F37D; FOH';
+    var signed = r.signedBy || '&#8212;';
     Object.entries(r.fields||{}).forEach(function(e) {
       if (e[1] !== 'No') return;
-      var label = e[0].replace(/_/g,' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+      var label = checkLabelMap[e[0]] || e[0].replace(/_/g,' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
       failedRows += '<tr style="border-bottom:1px solid #fee2e2">' +
-        '<td style="padding:6px 8px;font-size:12px;color:#991b1b;font-weight:600;font-family:Arial,sans-serif">✗ ' + label + '</td>' +
+        '<td style="padding:6px 8px;font-size:12px;color:#991b1b;font-weight:600;font-family:Arial,sans-serif">&#x2717; ' + label + '</td>' +
         '<td style="padding:6px 8px;font-size:11px;color:#64748b;font-family:Arial,sans-serif">' + dept + ' ' + type + '</td>' +
         '<td style="padding:6px 8px;font-size:11px;color:#64748b;font-family:Arial,sans-serif">' + dayStr(r.date) + '</td>' +
         '<td style="padding:6px 8px;font-size:11px;color:#64748b;font-family:Arial,sans-serif">' + signed + '</td></tr>';
