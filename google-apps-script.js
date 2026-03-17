@@ -1148,21 +1148,6 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
     gridColHeaders + '</tr>' + gridRows + '</table>';
 
   // ── Compliance — dept cards ───────────────────────
-  // Submission-level compliance: 1 point per expected submission per trading day
-  var kOpenAct = 0, kOpenExp = kTradingDays;
-  var kCloseAct = 0, kCloseExp = kTradingDays;
-  var fOpenAct = 0, fOpenExp = fTradingDays;
-  var fCloseAct = 0, fCloseExp = fTradingDays;
-  weekDates.forEach(function(date) {
-    if (isTradingAS('kitchen', settings, date)) {
-      if (opening.some(function(r) { return r.date===date && r.dept==='kitchen'; })) kOpenAct++;
-      if (closing.some(function(r) { return r.date===date && r.dept==='kitchen'; })) kCloseAct++;
-    }
-    if (isTradingAS('foh', settings, date)) {
-      if (opening.some(function(r) { return r.date===date && r.dept==='foh'; })) fOpenAct++;
-      if (closing.some(function(r) { return r.date===date && r.dept==='foh'; })) fCloseAct++;
-    }
-  });
 
   // Equipment: batch_id groups; 2 expected per trading day
   function equipBatches(dept, date) {
@@ -1233,6 +1218,22 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
     if (isTradingAS('foh',     settings, date)) fTradingDays++;
   });
 
+  // Submission-level compliance: 1 point per expected submission per trading day
+  var kOpenAct = 0, kOpenExp = kTradingDays;
+  var kCloseAct = 0, kCloseExp = kTradingDays;
+  var fOpenAct = 0, fOpenExp = fTradingDays;
+  var fCloseAct = 0, fCloseExp = fTradingDays;
+  weekDates.forEach(function(date) {
+    if (isTradingAS('kitchen', settings, date)) {
+      if (opening.some(function(r) { return r.date===date && r.dept==='kitchen'; })) kOpenAct++;
+      if (closing.some(function(r) { return r.date===date && r.dept==='kitchen'; })) kCloseAct++;
+    }
+    if (isTradingAS('foh', settings, date)) {
+      if (opening.some(function(r) { return r.date===date && r.dept==='foh'; })) fOpenAct++;
+      if (closing.some(function(r) { return r.date===date && r.dept==='foh'; })) fCloseAct++;
+    }
+  });
+
   var kEquipAct = 0, kEquipExp = kTradingDays * 2;
   var fEquipAct = 0, fEquipExp = fTradingDays * 2;
   var kProbeAct = 0, kProbeExp = kTradingDays;
@@ -1286,7 +1287,7 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
 
     // Build checklist table from settings checks
     var checklistHtml = '';
-    var mgmtChecks = (settings.checks && settings.checks.mgmt) ? settings.checks.mgmt : [];
+    var mgmtChecks = (settings.checks && settings.checks.mgmt && settings.checks.mgmt.weekly) ? settings.checks.mgmt.weekly : [];
     if (mgmtChecks.length > 0) {
       var checkRows = mgmtChecks.filter(function(c) { return c.enabled !== false; }).map(function(c, i) {
         var answer = f[c.id];
