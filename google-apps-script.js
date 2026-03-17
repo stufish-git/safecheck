@@ -517,11 +517,14 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
     const deptFail = (op && op.failCount > 0) || (cl && cl.failCount > 0);
     const tempFail = temps.filter(r => r.dept === d).some(r => r.status === 'FAIL' || r.status === 'WARNING');
 
+    // Per-dept submission pct: 2 expected (opening + closing), count what was submitted
+    var deptExp = 2, deptAct = (op ? 1 : 0) + (cl ? 1 : 0);
+    var deptPct = Math.round(deptAct / deptExp * 100);
     let pill, bg, color;
     if (!trading)                  { pill = '— Closed today'; bg = '#1e293b'; color = '#64748b'; }
-    else if (missing)              { pill = '⛔ ' + (!op ? 'Opening' : '') + (!op && !cl ? ' & ' : '') + (!cl ? 'Closing' : '') + ' missing'; bg = '#fee2e2'; color = '#991b1b'; }
-    else if (deptFail || tempFail) { pill = '⚠ Issues recorded · ' + pct + '%'; bg = '#fef3c7'; color = '#92400e'; }
-    else                           { pill = '✓ All clear · 100%'; bg = '#dcfce7'; color = '#166534'; }
+    else if (missing)              { pill = '&#x26D4; ' + (!op ? 'Opening' : '') + (!op && !cl ? ' &amp; ' : '') + (!cl ? 'Closing' : '') + ' missing'; bg = '#fee2e2'; color = '#991b1b'; }
+    else if (deptFail || tempFail) { pill = '&#x26A0; Issues recorded &middot; ' + deptPct + '%'; bg = '#fef3c7'; color = '#92400e'; }
+    else                           { pill = '&#x2713; All clear &middot; ' + deptPct + '%'; bg = '#dcfce7'; color = '#166534'; }
 
     return '<tr><td style="padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:13px;color:#1e293b;font-family:Arial,sans-serif"><strong>' + DEPT_LABELS[d] + '</strong></td>' +
       '<td style="text-align:right"><span style="background:' + bg + ';color:' + color + ';padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + pill + '</span></td></tr>';
@@ -559,13 +562,18 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
       if (rec.failCount > 0 && rec.failedLabels.length) {
         var labelMap = {};
         if (settings && settings.checks) { Object.values(settings.checks).forEach(function(dept) { if (dept && typeof dept === 'object') { Object.values(dept).forEach(function(arr) { if (Array.isArray(arr)) arr.forEach(function(c) { if (c && c.id && c.label) labelMap[c.id] = c.label; }); }); } }); }
+        if (settings && settings.sharedChecks) { Object.values(settings.sharedChecks).forEach(function(arr) { if (Array.isArray(arr)) arr.forEach(function(c) { if (c && c.id && c.label) labelMap[c.id] = c.label; }); }); }
         const items = rec.failedLabels.map(l => { var lbl = labelMap[l] || l.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()); return '<p style="margin:0 0 3px;font-size:12px;color:#92400e;font-family:Arial,sans-serif">&#x2717; &nbsp;' + lbl + '</p>'; }).join('');
         const noteHtml = rec.notes ? '<p style="margin:6px 0 0;font-size:11px;color:#a16207;font-family:Arial,sans-serif;font-style:italic">Note: ' + rec.notes + '</p>' : '';
         failHtml = '<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:6px;background:#fffbeb;border-radius:4px;border:1px solid #fde68a"><tr><td style="padding:8px 10px">' + items + noteHtml + '</td></tr></table>';
       }
-      return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:5px 0"><p style="margin:0;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + DEPT_LABELS[d] +
-        ' &nbsp;<span style="color:' + scoreColor + ';font-size:12px;font-weight:600">' + rec.passed + '/' + rec.total + '</span>' +
-        ' &nbsp;<span style="color:#94a3b8;font-size:12px">' + rec.signedBy + ' · ' + fmtTime(rec.time) + '</span></p>' + failHtml + '</td></tr>';
+      var submitBadgeBg = rec.failCount > 0 ? '#fef3c7' : '#dcfce7';
+      var submitBadgeFg = rec.failCount > 0 ? '#92400e' : '#166534';
+      var submitBadgeText = rec.failCount > 0 ? '&#x26A0; Submitted · ' + rec.failCount + ' fail' + (rec.failCount !== 1 ? 's' : '') : '&#x2713; Submitted';
+      return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:5px 0"><table width="100%" cellpadding="0" cellspacing="0"><tr>' +
+        '<td style="font-size:13px;color:#334155;font-family:Arial,sans-serif">' + DEPT_LABELS[d] + '<br><span style="font-size:11px;color:#94a3b8">' + rec.signedBy + ' &middot; ' + fmtTime(rec.time) + '</span></td>' +
+        '<td style="text-align:right;vertical-align:top"><span style="background:' + submitBadgeBg + ';color:' + submitBadgeFg + ';padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + submitBadgeText + '</span></td>' +
+        '</tr></table>' + failHtml + '</td></tr>';
     }).join('');
 
     return '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' +
@@ -1333,6 +1341,11 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
           if (Array.isArray(arr)) arr.forEach(function(c) { if (c && c.id && c.label) checkLabelMap[c.id] = c.label; });
         });
       }
+    });
+  }
+  if (settings && settings.sharedChecks) {
+    Object.values(settings.sharedChecks).forEach(function(arr) {
+      if (Array.isArray(arr)) arr.forEach(function(c) { if (c && c.id && c.label) checkLabelMap[c.id] = c.label; });
     });
   }
   var failedRows = '';
