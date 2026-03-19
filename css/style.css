@@ -2165,6 +2165,16 @@ body.theme-light .week-selector-select { background: #fff; border-color: #d0d6e0
   .report-table tr       { break-inside: avoid; }
   .gi-report-row         { break-inside: avoid; }
   .report-weekly-review  { break-inside: avoid; }
+
+  /* Section blocks — keep title with its content, break between sections */
+  .report-section-block {
+    break-inside: avoid;
+    break-before: auto;
+    margin-bottom: 4px;
+  }
+  .report-section-block + .report-section-block {
+    break-before: page;
+  }
 }
 .report-rating-mismatch {
   background: rgba(239,68,68,0.08);

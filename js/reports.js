@@ -259,34 +259,50 @@ function renderDailyReport() {
       ${missingBanner}
 
       ${!siteClosed ? `
-      <div class="report-section-title">Compliance Breakdown</div>
-      <div class="report-breakdown-grid">
-        ${buildBreakdownCard('kitchen')}
-        ${buildBreakdownCard('foh')}
+      <div class="report-section-block">
+        <div class="report-section-title">Compliance Breakdown</div>
+        <div class="report-breakdown-grid">
+          ${buildBreakdownCard('kitchen')}
+          ${buildBreakdownCard('foh')}
+        </div>
       </div>` : ''}
 
-      <div class="report-section-title">Opening Checks</div>
-      <div class="report-two-col">${openingHTML}</div>
+      <div class="report-section-block">
+        <div class="report-section-title">Opening Checks</div>
+        <div class="report-two-col">${openingHTML}</div>
+      </div>
 
-      <div class="report-section-title">Closing Checks</div>
-      <div class="report-two-col">${closingHTML}</div>
+      <div class="report-section-block">
+        <div class="report-section-title">Closing Checks</div>
+        <div class="report-two-col">${closingHTML}</div>
+      </div>
 
       ${cleaningEnabled ? `
-      <div class="report-section-title">Cleaning Schedule</div>
-      <div class="report-two-col">${cleaningHTML}</div>
+      <div class="report-section-block">
+        <div class="report-section-title">Cleaning Schedule</div>
+        <div class="report-two-col">${cleaningHTML}</div>
+      </div>
       ` : ''}
 
-      <div class="report-section-title">Equipment Temperatures</div>
-      ${tempHTML}
+      <div class="report-section-block">
+        <div class="report-section-title">Equipment Temperatures</div>
+        ${tempHTML}
+      </div>
 
-      <div class="report-section-title">Food Probes</div>
-      ${probeHTML}
+      <div class="report-section-block">
+        <div class="report-section-title">Food Probes</div>
+        ${probeHTML}
+      </div>
 
-      <div class="report-section-title">Goods In</div>
-      ${goodsInHTML}
+      <div class="report-section-block">
+        <div class="report-section-title">Goods In</div>
+        ${goodsInHTML}
+      </div>
 
-      <div class="report-section-title">Tasks</div>
-      ${taskHTML}
+      <div class="report-section-block">
+        <div class="report-section-title">Tasks</div>
+        ${taskHTML}
+      </div>
     </div>
   `;
 }

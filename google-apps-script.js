@@ -569,11 +569,11 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
       }
       var submitBadgeBg = rec.failCount > 0 ? '#fef3c7' : '#dcfce7';
       var submitBadgeFg = rec.failCount > 0 ? '#92400e' : '#166534';
-      var submitBadgeText = rec.failCount > 0 ? '&#x26A0; Submitted · ' + rec.failCount + ' fail' + (rec.failCount !== 1 ? 's' : '') : '&#x2713; Submitted';
-      return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:5px 0"><table width="100%" cellpadding="0" cellspacing="0"><tr>' +
-        '<td style="font-size:13px;color:#334155;font-family:Arial,sans-serif;vertical-align:middle">' + DEPT_LABELS[d] + ' &nbsp;<span style="font-size:11px;color:#94a3b8">' + rec.signedBy + ' &middot; ' + fmtTime(rec.time) + '</span></td>' +
-        '<td style="text-align:right;vertical-align:middle"><span style="background:' + submitBadgeBg + ';color:' + submitBadgeFg + ';padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + submitBadgeText + '</span></td>' +
-        '</tr></table>' + failHtml + '</td></tr>';
+      var submitBadgeText = rec.failCount > 0 ? '&#x26A0; Submitted &middot; ' + rec.failCount + ' fail' + (rec.failCount !== 1 ? 's' : '') : '&#x2713; Submitted';
+      return '<tr style="border-bottom:1px solid #f1f5f9">' +
+        '<td style="padding:5px 0;font-size:13px;color:#334155;font-family:Arial,sans-serif;vertical-align:top">' + DEPT_LABELS[d] + ' &nbsp;<span style="font-size:11px;color:#94a3b8">' + rec.signedBy + ' &middot; ' + fmtTime(rec.time) + '</span>' + failHtml + '</td>' +
+        '<td style="padding:5px 0;text-align:right;vertical-align:top;white-space:nowrap"><span style="background:' + submitBadgeBg + ';color:' + submitBadgeFg + ';padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + submitBadgeText + '</span></td>' +
+        '</tr>';
     }).join('');
 
     return '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' +
