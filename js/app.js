@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.45.0';
+const APP_VERSION = '5.46.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -931,6 +931,7 @@ function logFoodProbe() {
   updateFoodProbeDayStatus();
   updateDashboard();
   showToast(passed ? `${product}: ${temp}°C ✓ PASS` : `${product}: ${temp}°C ⚠ FAIL — below 75°C`, passed ? 'success' : 'error');
+  setTimeout(() => showTab('dashboard'), 1200);
 }
 
 function renderFoodProbeLog() {
@@ -1853,6 +1854,7 @@ function submitGoodsIn() {
 
   updateGILogBadge();
   showGoodsInView('log');
+  setTimeout(() => showTab('dashboard'), 1200);
 }
 
 function renderGoodsInLog() {
