@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.44.0';
+const APP_VERSION = '5.45.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -296,6 +296,7 @@ function prefillDates() {
 
 // ── Tab navigation ────────────────────────────────────
 function showTab(tabId) {
+  window.scrollTo(0, 0);
   document.querySelectorAll('.tab-section').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + tabId)?.classList.add('active');
