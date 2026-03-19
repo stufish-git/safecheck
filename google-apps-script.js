@@ -523,7 +523,7 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
     let pill, bg, color;
     if (!trading)                  { pill = '— Closed today'; bg = '#1e293b'; color = '#64748b'; }
     else if (missing)              { pill = '&#x26D4; ' + (!op ? 'Opening' : '') + (!op && !cl ? ' &amp; ' : '') + (!cl ? 'Closing' : '') + ' missing'; bg = '#fee2e2'; color = '#991b1b'; }
-    else if (deptFail || tempFail) { pill = '&#x26A0; Issues recorded &middot; ' + deptPct + '%'; bg = '#fef3c7'; color = '#92400e'; }
+    else if (deptFail || tempFail) { pill = '&#x26A0; ' + deptPct + '% submitted &middot; issues recorded'; bg = '#fef3c7'; color = '#92400e'; }
     else                           { pill = '&#x2713; All clear &middot; ' + deptPct + '%'; bg = '#dcfce7'; color = '#166534'; }
 
     return '<tr><td style="padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:13px;color:#1e293b;font-family:Arial,sans-serif"><strong>' + DEPT_LABELS[d] + '</strong></td>' +
@@ -571,8 +571,8 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
       var submitBadgeFg = rec.failCount > 0 ? '#92400e' : '#166534';
       var submitBadgeText = rec.failCount > 0 ? '&#x26A0; Submitted · ' + rec.failCount + ' fail' + (rec.failCount !== 1 ? 's' : '') : '&#x2713; Submitted';
       return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:5px 0"><table width="100%" cellpadding="0" cellspacing="0"><tr>' +
-        '<td style="font-size:13px;color:#334155;font-family:Arial,sans-serif">' + DEPT_LABELS[d] + '<br><span style="font-size:11px;color:#94a3b8">' + rec.signedBy + ' &middot; ' + fmtTime(rec.time) + '</span></td>' +
-        '<td style="text-align:right;vertical-align:top"><span style="background:' + submitBadgeBg + ';color:' + submitBadgeFg + ';padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + submitBadgeText + '</span></td>' +
+        '<td style="font-size:13px;color:#334155;font-family:Arial,sans-serif;vertical-align:middle">' + DEPT_LABELS[d] + ' &nbsp;<span style="font-size:11px;color:#94a3b8">' + rec.signedBy + ' &middot; ' + fmtTime(rec.time) + '</span></td>' +
+        '<td style="text-align:right;vertical-align:middle"><span style="background:' + submitBadgeBg + ';color:' + submitBadgeFg + ';padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + submitBadgeText + '</span></td>' +
         '</tr></table>' + failHtml + '</td></tr>';
     }).join('');
 
@@ -593,7 +593,7 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
           ? '<p style="margin:3px 0 0;font-size:11px;color:#a16207;font-family:Arial,sans-serif">Action: ' + r.action + '</p>' : '';
         return '<tr style="border-bottom:1px solid #f1f5f9;' + rowBg + '">' +
           '<td style="padding:7px 8px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + r.location + '</td>' +
-          '<td style="padding:7px 8px;font-size:13px;font-weight:600;color:#334155;font-family:Arial,sans-serif">' + r.temp + '°C</td>' +
+          '<td style="padding:7px 8px;font-size:13px;font-weight:600;color:#334155;font-family:Arial,sans-serif">' + (r.temp ? r.temp + '°C' : '&mdash;') + '</td>' +
           '<td style="padding:7px 8px"><span style="background:' + badgeBg + ';color:' + badgeFg + ';padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + r.status + '</span>' + actionHtml + '</td>' +
           '<td style="padding:7px 8px;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">' + fmtTime(r.time) + '</td></tr>';
       }).join('');
