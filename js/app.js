@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.51.0';
+const APP_VERSION = '5.52.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -114,6 +114,64 @@ function loadState() {
   renderEquipmentLog();
 }
 function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.records)); }
+
+// ── Wipe all data ──────────────────────────────────────────────────────────
+function showWipeDataModal() {
+  const overlay = document.getElementById('modal-overlay');
+  const box     = document.getElementById('modal-box');
+  if (!overlay || !box) return;
+  box.innerHTML = `
+    <div class="modal-header"><h2 class="modal-title">Wipe All Data</h2></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--danger);font-weight:600;margin-bottom:12px">⚠ This will permanently delete all records from this device and from Google Sheets. Settings are not affected.</p>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;line-height:1.6">Enter the Manager PIN to confirm.</p>
+      <div class="modal-field">
+        <label>Manager PIN</label>
+        <input type="password" id="wipe-pin-input" class="text-field" maxlength="6" inputmode="numeric" placeholder="Enter PIN"/>
+      </div>
+      <p id="wipe-pin-error" style="color:var(--danger);font-size:12px;margin-top:4px;display:none">Incorrect PIN</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn-danger" onclick="confirmWipeData()">Wipe All Data</button>
+    </div>`;
+  overlay.classList.add('active');
+  setTimeout(() => document.getElementById('wipe-pin-input')?.focus(), 100);
+}
+
+async function confirmWipeData() {
+  const pin = document.getElementById('wipe-pin-input')?.value;
+  const err = document.getElementById('wipe-pin-error');
+  if (!verifyPin(pin)) {
+    if (err) { err.style.display = 'block'; }
+    return;
+  }
+  closeModal();
+  showToast('Wiping all data…', 'info');
+
+  // Clear localStorage records and all draft keys
+  state.records = [];
+  saveState();
+  Object.keys(localStorage)
+    .filter(k => k.startsWith('draft_'))
+    .forEach(k => localStorage.removeItem(k));
+
+  // Clear Google Sheets if connected
+  if (state.config.sheetsUrl) {
+    try {
+      await fetch(state.config.sheetsUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'wipeAllData' })
+      });
+    } catch(e) {
+      console.warn('Sheets wipe failed:', e);
+    }
+  }
+
+  updateDashboard();
+  showToast('All data wiped ✓', 'success');
+}
 
 // ── Date helpers ──────────────────────────────────────
 function todayStr()     { return new Date().toISOString().split('T')[0]; }

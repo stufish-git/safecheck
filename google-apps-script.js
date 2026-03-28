@@ -44,6 +44,7 @@ function doPost(e) {
     const data = JSON.parse(e.postData.contents);
 
     if (data.action === 'saveSettings')   return handleSaveSettings(data);
+    if (data.action === 'wipeAllData')      return handleWipeAllData();
     if (data.action === 'sendDailyEmail')   return handleSendDailyEmail(data);
     if (data.action === 'sendWeeklyEmail')  return handleSendWeeklyEmail(data);
 
@@ -358,6 +359,27 @@ function handleReadDrafts(ss) {
 }
 
 // ── Settings: save ────────────────────────────────────────
+// ── Wipe all data ─────────────────────────────────────────────────────────
+function handleWipeAllData() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var dataTabs = [
+      'Opening Checks', 'Closing Checks', 'Cleaning Schedule',
+      'Weekly Review', 'Temperature Log', 'Food Probe Log',
+      'Task Completions', 'Goods In Log', 'Drafts'
+    ];
+    dataTabs.forEach(function(tabName) {
+      var sheet = ss.getSheetByName(tabName);
+      if (!sheet) return;
+      var lastRow = sheet.getLastRow();
+      if (lastRow > 1) sheet.deleteRows(2, lastRow - 1);
+    });
+    return jsonResponse({ status: 'ok', wiped: dataTabs });
+  } catch(e) {
+    return jsonResponse({ status: 'error', message: e.toString() });
+  }
+}
+
 function handleSaveSettings(data) {
   const ss    = SpreadsheetApp.getActiveSpreadsheet();
   let   sheet = ss.getSheetByName(SETTINGS_TAB);
