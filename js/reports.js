@@ -360,11 +360,11 @@ function buildTemperatureTable(temps) {
     const deptInfo = DEPARTMENTS[r.dept];
     return `
       <tr>
-        <td>${deptInfo ? `<span style="color:${deptInfo.color}">${deptInfo.icon}</span> ` : ''}${f.temp_location || '—'}</td>
+        <td>${deptInfo ? `<span style="color:${deptInfo.color}">${deptInfo.icon}</span> ` : ''}${f.temp_location || '—'}${hasAction ? `<br><span class="report-action-text report-mobile-action">⚠ ${f.temp_corrective_action}</span>` : ''}</td>
         <td class="report-temp-val">${f.temp_value ? f.temp_value + '°C' : '—'}</td>
         <td><span class="report-status-badge ${cls}">${status}</span></td>
-        <td class="report-action-col">${hasAction ? `<span class="report-action-text">⚠ ${f.temp_corrective_action}</span>` : '<span class="report-ok-text">—</span>'}</td>
-        <td class="report-meta">${f.temp_logged_by || '—'}<br><span class="report-time">${r.timestamp?.split(' ')[1] || ''}</span></td>
+        <td class="report-action-col report-hide-mobile">${hasAction ? `<span class="report-action-text">⚠ ${f.temp_corrective_action}</span>` : '<span class="report-ok-text">—</span>'}</td>
+        <td class="report-meta report-hide-mobile">${f.temp_logged_by || '—'}<br><span class="report-time">${r.timestamp?.split(' ')[1] || ''}</span></td>
       </tr>`;
   }).join('');
 

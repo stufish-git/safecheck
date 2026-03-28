@@ -2458,6 +2458,7 @@ body.theme-light .week-selector-select { background: #fff; border-color: #d0d6e0
 .probe-chip-fail      { background: rgba(239,68,68,0.15);  color: var(--danger); font-weight: 700; }
 
 .report-table-wrap { padding: 0 20px 12px; }
+.report-mobile-action { display: none; }
 
 @media print {
   .failed-check-row { background: #fff0f0 !important; border-color: #fca5a5 !important; }
@@ -2517,3 +2518,33 @@ body.theme-light .week-selector-select { background: #fff; border-color: #d0d6e0
 .gi-rr-temp { font-size: 14px; font-weight: 700; font-family: var(--mono); }
 .gi-rr-outcome { font-size: 11px; font-family: var(--mono); font-weight: 600; margin-top: 2px; }
 .gi-rr-expiry { font-size: 10px; font-family: var(--mono); margin-top: 2px; }
+
+/* ── Mobile report fixes (max 480px) ────────────────── */
+@media (max-width: 480px) {
+  /* Header: stack name above badges on narrow screens */
+  .report-doc-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .report-compliance-badges {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .report-compliance-badge {
+    min-width: 70px;
+    padding: 6px 10px;
+  }
+  .report-compliance-total {
+    min-width: 82px;
+    padding: 8px 12px;
+  }
+  .report-compliance-pct { font-size: 20px; }
+  .report-compliance-total .report-compliance-pct { font-size: 24px; }
+
+  /* Equipment/probe table: tighter padding, hide corrective & meta columns */
+  .report-table th,
+  .report-table td { padding: 7px 8px; }
+  .report-hide-mobile { display: none !important; }
+  .report-mobile-action { display: inline !important; }
+}

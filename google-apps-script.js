@@ -1261,16 +1261,21 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
   // Used to caveat compliance scores in the dept cards and show an
   // incomplete week banner. Score still shows — based on submitted days only.
   var kDaysWithChecks = 0, fDaysWithChecks = 0;
+  var kMissingOpen = 0, kMissingClose = 0, fMissingOpen = 0, fMissingClose = 0;
   weekDates.forEach(function(date) {
     if (isTradingAS('kitchen', settings, date)) {
       var kOpen  = opening.some(function(r) { return r.date===date && r.dept==='kitchen'; });
       var kClose = closing.some(function(r) { return r.date===date && r.dept==='kitchen'; });
       if (kOpen && kClose) kDaysWithChecks++;
+      if (!kOpen)  kMissingOpen++;
+      if (!kClose) kMissingClose++;
     }
     if (isTradingAS('foh', settings, date)) {
       var fOpen  = opening.some(function(r) { return r.date===date && r.dept==='foh'; });
       var fClose = closing.some(function(r) { return r.date===date && r.dept==='foh'; });
       if (fOpen && fClose) fDaysWithChecks++;
+      if (!fOpen)  fMissingOpen++;
+      if (!fClose) fMissingClose++;
     }
   });
   var kMissingDays = kTradingDays - kDaysWithChecks;
@@ -1503,13 +1508,25 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
   var totalMissingDays = kMissingDays + fMissingDays;
   var incompleteBannerHtml = '';
   if (totalMissingDays > 0) {
+    var missingParts = [];
+    if (kMissingDays > 0) {
+      var kDetail = [];
+      if (kMissingOpen  > 0) kDetail.push('opening missing on ' + kMissingOpen  + ' day' + (kMissingOpen !==1?'s':''));
+      if (kMissingClose > 0) kDetail.push('closing missing on ' + kMissingClose + ' day' + (kMissingClose!==1?'s':''));
+      missingParts.push('&#x1F373; Kitchen: ' + kDetail.join(', '));
+    }
+    if (fMissingDays > 0) {
+      var fDetail = [];
+      if (fMissingOpen  > 0) fDetail.push('opening missing on ' + fMissingOpen  + ' day' + (fMissingOpen !==1?'s':''));
+      if (fMissingClose > 0) fDetail.push('closing missing on ' + fMissingClose + ' day' + (fMissingClose!==1?'s':''));
+      missingParts.push('&#x1F37D; FOH: ' + fDetail.join(', '));
+    }
     incompleteBannerHtml =
       '<table width="100%" cellpadding="0" cellspacing="0" style="background:#2d1c07;border-radius:8px;margin-bottom:2px">' +
       '<tr><td style="padding:12px 24px">' +
       '<p style="margin:0;font-size:13px;font-weight:700;color:#f59e0b;font-family:Arial,sans-serif">&#x26A0; Incomplete week</p>' +
       '<p style="margin:4px 0 0;font-size:12px;color:#d97706;font-family:Arial,sans-serif">' +
-      totalMissingDays + ' trading day' + (totalMissingDays!==1?'s':'') + ' missing opening/closing submissions. ' +
-      'Compliance scores in the cards below are based on submitted days only.' +
+      missingParts.join(' &nbsp;&middot;&nbsp; ') + '. Compliance scores in the cards below are based on submitted days only.' +
       '</p></td></tr></table>';
   }
 
