@@ -371,7 +371,7 @@ function buildTemperatureTable(temps) {
   return `
     <table class="report-table">
       <thead><tr>
-        <th>Location</th><th>Temp</th><th>Status</th><th>Corrective Action</th><th>Logged By</th>
+        <th>Location</th><th>Temp</th><th>Status</th><th class="report-hide-mobile">Corrective Action</th><th class="report-hide-mobile">Logged By</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;

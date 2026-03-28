@@ -46,12 +46,12 @@
     <button class="tab-btn" data-tab="equipment"        onclick="showTab('equipment')"><span class="tab-icon">🌡</span><span class="tab-label">Equipment</span></button>
     <button class="tab-btn" data-tab="goods-in"         onclick="showTab('goods-in')"><span class="tab-icon">📦</span><span class="tab-label">Goods In</span></button>
     <button class="tab-btn" data-tab="probe"            onclick="showTab('probe')">    <span class="tab-icon">🍖</span><span class="tab-label">Probe</span></button>
-    <button class="tab-btn" data-tab="closing"          onclick="showTab('closing')">  <span class="tab-icon">☽</span><span class="tab-label">Closing</span></button>
     <button class="tab-btn" id="tab-btn-cleaning" data-tab="cleaning" onclick="showTab('cleaning')" style="display:none"><span class="tab-icon">◎</span><span class="tab-label">Cleaning</span></button>
-    <button class="tab-btn" data-tab="weekly"           onclick="showTab('weekly')">   <span class="tab-icon">▦</span><span class="tab-label">Weekly</span></button>
-    <button class="tab-btn" data-tab="history"          onclick="showTab('history')">  <span class="tab-icon">◷</span><span class="tab-label">History</span></button>
     <button class="tab-btn" data-tab="tasks"            onclick="showTab('tasks')">    <span class="tab-icon">☑</span><span class="tab-label">Tasks</span></button>
+    <button class="tab-btn" data-tab="closing"          onclick="showTab('closing')">  <span class="tab-icon">☽</span><span class="tab-label">Closing</span></button>
+    <button class="tab-btn" data-tab="weekly"           onclick="showTab('weekly')">   <span class="tab-icon">▦</span><span class="tab-label">Weekly</span></button>
     <button class="tab-btn" data-tab="reports"          onclick="showTab('reports')">   <span class="tab-icon">📊</span><span class="tab-label">Reports</span></button>
+    <button class="tab-btn" data-tab="history"          onclick="showTab('history')">  <span class="tab-icon">◷</span><span class="tab-label">History</span></button>
     <button class="tab-btn" data-tab="settings"         onclick="showSettingsTab()">   <span class="tab-icon">⚙</span><span class="tab-label">Settings</span></button>
   </nav>
 
@@ -546,16 +546,16 @@
 
       <div class="settings-tabs">
         <button class="settings-tab-btn active" data-settings-tab="restaurant" onclick="showSettingsSection('restaurant')">Restaurant</button>
+        <button class="settings-tab-btn" data-settings-tab="trading"   onclick="showSettingsSection('trading')">Trading Days</button>
+        <button class="settings-tab-btn" data-settings-tab="tasks-cfg"  onclick="showSettingsSection('tasks-cfg')">Tasks</button>
+        <button class="settings-tab-btn" data-settings-tab="suppliers"  onclick="showSettingsSection('suppliers')">Suppliers</button>
         <button class="settings-tab-btn" data-settings-tab="staff"      onclick="showSettingsSection('staff')">Staff</button>
         <button class="settings-tab-btn" data-settings-tab="equipment"  onclick="showSettingsSection('equipment')">Equipment</button>
         <button class="settings-tab-btn" data-settings-tab="probes"     onclick="showSettingsSection('probes')">Probe Products</button>
-        <button class="settings-tab-btn" data-settings-tab="suppliers"  onclick="showSettingsSection('suppliers')">Suppliers</button>
         <button class="settings-tab-btn" data-settings-tab="checks"     onclick="showSettingsSection('checks')">Checklists</button>
-        <button class="settings-tab-btn" data-settings-tab="tasks-cfg"  onclick="showSettingsSection('tasks-cfg')">Tasks</button>
-        <button class="settings-tab-btn" data-settings-tab="security"   onclick="showSettingsSection('security')">Security</button>
-        <button class="settings-tab-btn" data-settings-tab="trading"   onclick="showSettingsSection('trading')">Trading Days</button>
         <button class="settings-tab-btn" data-settings-tab="email"     onclick="showSettingsSection('email')">Email Reports</button>
         <button class="settings-tab-btn" data-settings-tab="features"  onclick="showSettingsSection('features')">Features</button>
+        <button class="settings-tab-btn" data-settings-tab="security"   onclick="showSettingsSection('security')">Security</button>
       </div>
 
       <!-- RESTAURANT -->
