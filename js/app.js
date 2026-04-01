@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.53.0';
+const APP_VERSION = '5.56.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -1753,7 +1753,7 @@ function getDraftProgress(type, dept) {
 //  GOODS IN — Delivery logging
 // ═══════════════════════════════════════════════════════
 
-let giType    = 'fresh';    // 'fresh' | 'frozen'
+let giType    = 'fresh';    // 'fresh' | 'frozen' | 'ambient'
 let giOutcome = 'accepted'; // 'accepted' | 'rejected'
 let giExpiry  = false;
 
@@ -1806,11 +1806,23 @@ function showGoodsInView(view) {
 
 function setGIType(type) {
   giType = type;
-  document.getElementById('gi-btn-fresh').className  = 'gi-type-btn' + (type==='fresh'  ? ' gi-fresh-sel'  : '');
-  document.getElementById('gi-btn-frozen').className = 'gi-type-btn' + (type==='frozen' ? ' gi-frozen-sel' : '');
-  // Re-evaluate hint with new thresholds
-  const tempVal = document.getElementById('gi-temp')?.value;
-  if (tempVal) updateGITempHint(tempVal);
+  document.getElementById('gi-btn-fresh').className   = 'gi-type-btn' + (type==='fresh'   ? ' gi-fresh-sel'   : '');
+  document.getElementById('gi-btn-frozen').className  = 'gi-type-btn' + (type==='frozen'  ? ' gi-frozen-sel'  : '');
+  document.getElementById('gi-btn-ambient').className = 'gi-type-btn' + (type==='ambient' ? ' gi-ambient-sel' : '');
+  // Show/hide temp panel — ambient deliveries don't require temperature
+  const tempPanel = document.getElementById('gi-temp-panel');
+  if (tempPanel) tempPanel.style.display = type === 'ambient' ? 'none' : '';
+  // Clear temp field and hint when switching to ambient
+  if (type === 'ambient') {
+    const tempEl = document.getElementById('gi-temp');
+    const hintEl = document.getElementById('gi-temp-hint');
+    if (tempEl) tempEl.value = '';
+    if (hintEl) { hintEl.textContent = '—'; hintEl.className = 'gi-temp-hint'; }
+  } else {
+    // Re-evaluate hint with new thresholds
+    const tempVal = document.getElementById('gi-temp')?.value;
+    if (tempVal) updateGITempHint(tempVal);
+  }
 }
 
 function stepGITemp(delta) {
@@ -1864,13 +1876,32 @@ function submitGoodsIn() {
   const tempVal  = document.getElementById('gi-temp')?.value;
   const signedBy = document.getElementById('gi-signed-by')?.value;
 
-  if (!supplier) { showToast('Select a supplier', 'error'); return; }
-  if (!tempVal)  { showToast('Enter delivery temperature', 'error'); return; }
-  if (!signedBy) { showToast('Select staff member', 'error'); return; }
+  if (!supplier)  { showToast('Select a supplier', 'error'); return; }
+  if (giType !== 'ambient' && !tempVal) { showToast('Enter delivery temperature', 'error'); return; }
+  if (!giExpiry)  { showToast('Expiry dates must be checked before submitting', 'error'); return; }
+  if (!signedBy)  { showToast('Select staff member', 'error'); return; }
 
-  const temp   = parseFloat(tempVal);
-  const thr    = GI_THRESHOLDS[giType];
-  const status = temp > thr.fail ? 'FAIL' : temp > thr.warn ? 'WARNING' : 'OK';
+  const isAmbient = giType === 'ambient';
+  const temp   = isAmbient ? null : parseFloat(tempVal);
+  const thr    = isAmbient ? null : GI_THRESHOLDS[giType];
+  const status = isAmbient ? '' : (temp > thr.fail ? 'FAIL' : temp > thr.warn ? 'WARNING' : 'OK');
+
+  const fields = {
+    gi_supplier:       supplier,
+    gi_type:           giType,
+    gi_expiry_checked: 'Yes',
+    gi_outcome:        giOutcome,
+    gi_notes:          document.getElementById('gi-notes')?.value.trim() || '',
+    gi_signed_by:      signedBy,
+  };
+  if (!isAmbient) {
+    fields.gi_temp        = tempVal;
+    fields.gi_temp_status = status;
+  }
+
+  const summary = isAmbient
+    ? `${supplier} · ambient · expiry checked · ${giOutcome} · ${signedBy}`
+    : `${supplier} · ${giType} · ${tempVal}°C ${status} · ${giOutcome} · ${signedBy}`;
 
   const record = {
     id:        crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
@@ -1879,17 +1910,8 @@ function submitGoodsIn() {
     date:      todayStr(),
     timestamp: nowTimestamp(),
     iso:       nowISO(),
-    fields: {
-      gi_supplier:     supplier,
-      gi_type:         giType,
-      gi_temp:         tempVal,
-      gi_temp_status:  status,
-      gi_expiry_checked: giExpiry ? 'Yes' : 'No',
-      gi_outcome:      giOutcome,
-      gi_notes:        document.getElementById('gi-notes')?.value.trim() || '',
-      gi_signed_by:    signedBy,
-    },
-    summary: `${supplier} · ${giType} · ${tempVal}°C ${status} · ${giOutcome} · ${signedBy}`,
+    fields,
+    summary,
   };
 
   state.records.push(record);
@@ -1930,7 +1952,7 @@ function renderGoodsInLog() {
     const f = r.fields || {};
     const isAccepted = f.gi_outcome === 'accepted';
     const statusCls  = f.gi_temp_status === 'FAIL' ? 'status-fail' : f.gi_temp_status === 'WARNING' ? 'status-warn' : 'status-ok';
-    const typeIcon   = f.gi_type === 'frozen' ? '❄️' : '🌿';
+    const typeIcon   = f.gi_type === 'frozen' ? '❄️' : f.gi_type === 'ambient' ? '📦' : '🌿';
     return `
       <div class="gi-log-entry ${isAccepted ? 'gi-accepted' : 'gi-rejected'}">
         <div class="gi-log-top">

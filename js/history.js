@@ -164,6 +164,11 @@ async function loadOlderFromSheets() {
 function buildSummary(r) {
   if (r.type==='temperature') return `${r.fields?.temp_location||''}: ${r.fields?.temp_value||''}°C — ${r.fields?.temp_status||''}`;
   if (r.type==='food_probe')  return `${r.fields?.probe_product||''}: ${r.fields?.probe_temp||''}°C — ${r.fields?.probe_status||''} · ${r.fields?.probe_staff||''}`;
+  if (r.type==='task_completion') {
+    const action = r.fields?.task_action === 'untick' ? 'Unticked' : 'Completed';
+    const by = r.fields?.task_done_by;
+    return by ? `${action} by ${by}` : action;
+  }
   const checks = Object.entries(r.fields||{}).filter(([,v])=>v==='Yes'||v==='No');
   return `${checks.filter(([,v])=>v==='Yes').length}/${checks.length} checks passed`;
 }

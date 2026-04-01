@@ -187,10 +187,13 @@
             <button class="gi-type-btn" id="gi-btn-frozen" onclick="setGIType('frozen')">
               <span class="gi-type-icon">&#x2744;&#xFE0F;</span>Frozen
             </button>
+            <button class="gi-type-btn" id="gi-btn-ambient" onclick="setGIType('ambient')">
+              <span class="gi-type-icon">&#x1F4E6;</span>Ambient
+            </button>
           </div>
         </div>
 
-        <div class="check-group" style="margin-bottom:12px">
+        <div class="check-group" id="gi-temp-panel" style="margin-bottom:12px">
           <h3 class="group-title">Delivery Temperature</h3>
           <div class="gi-temp-row">
             <button class="equip-stepper" type="button" onclick="stepGITemp(-1)">&#8722;</button>

@@ -658,10 +658,12 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
     goodsIn.forEach(function(r) {
       var f = r.fields || {};
       var isAcc = f.gi_outcome === 'accepted';
-      var tempColor = f.gi_temp_status === 'FAIL' ? '#ef4444' : f.gi_temp_status === 'WARNING' ? '#f59e0b' : '#22c55e';
+      var isAmb1 = f.gi_type === 'ambient';
+      var tempColor = isAmb1 ? '#94a3b8' : f.gi_temp_status === 'FAIL' ? '#ef4444' : f.gi_temp_status === 'WARNING' ? '#f59e0b' : '#22c55e';
+      var typeIcon1 = f.gi_type === 'frozen' ? '&#x2744;' : isAmb1 ? '&#x1F4E6;' : '&#x1F33F;';
       giRows += '<tr>' +
         '<td style="padding:6px 8px;font-size:13px;font-family:Arial,sans-serif;font-weight:600">' + (f.gi_supplier||'—') + '</td>' +
-        '<td style="padding:6px 8px;font-size:12px;font-family:Arial,sans-serif;color:#94a3b8">' + (f.gi_type==='frozen'?'&#x2744;':'&#x1F33F;') + ' ' + (f.gi_type||'') + '</td>' +
+        '<td style="padding:6px 8px;font-size:12px;font-family:Arial,sans-serif;color:#94a3b8">' + typeIcon1 + ' ' + (f.gi_type||'') + '</td>' +
         '<td style="padding:6px 8px;font-size:13px;font-family:monospace;font-weight:600;color:' + tempColor + '">' + (f.gi_temp ? f.gi_temp+'°C' : '—') + '</td>' +
         '<td style="padding:6px 8px"><span style="background:' + (isAcc?'#dcfce7':'#fee2e2') + ';color:' + (isAcc?'#166534':'#991b1b') + ';padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + (isAcc?'Accepted':'Rejected') + '</span></td>' +
         '<td style="padding:6px 8px;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif">' + (f.gi_signed_by||'—') + '</td>' +
@@ -1485,12 +1487,14 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
     goodsIn.forEach(function(r) {
       const f = r.fields || {};
       const isAcc = f.gi_outcome === 'accepted';
-      const typeIcon = f.gi_type === 'frozen' ? '&#x2744;' : '&#x1F33F;';
+      const isAmb2 = f.gi_type === 'ambient';
+      const typeIcon = f.gi_type === 'frozen' ? '&#x2744;' : isAmb2 ? '&#x1F4E6;' : '&#x1F33F;';
+      const tempStyle = isAmb2 ? 'color:#94a3b8' : 'font-weight:600';
       giRows += '<tr style="border-bottom:1px solid #f1f5f9">' +
         '<td style="padding:6px 8px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + dayStr(r.date) + '</td>' +
         '<td style="padding:6px 8px;font-size:13px;font-weight:600;font-family:Arial,sans-serif">' + (f.gi_supplier||'—') + '</td>' +
         '<td style="padding:6px 8px;font-size:12px;font-family:Arial,sans-serif;color:#94a3b8">' + typeIcon + ' ' + (f.gi_type||'') + '</td>' +
-        '<td style="padding:6px 8px;font-size:13px;font-family:monospace;font-weight:600">' + (f.gi_temp ? f.gi_temp+'°C' : '—') + '</td>' +
+        '<td style="padding:6px 8px;font-size:13px;font-family:monospace;' + tempStyle + '">' + (f.gi_temp ? f.gi_temp+'°C' : '—') + '</td>' +
         '<td style="padding:6px 8px"><span style="background:' + (isAcc?'#dcfce7':'#fee2e2') + ';color:' + (isAcc?'#166534':'#991b1b') + ';padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + (isAcc?'Accepted':'Rejected') + '</span></td></tr>';
       if (f.gi_notes) giRows += '<tr><td colspan="5" style="padding:0 8px 6px;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">↳ ' + f.gi_notes + '</td></tr>';
     });

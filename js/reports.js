@@ -424,7 +424,10 @@ function buildDailyTaskGrid(dateStr) {
 
   const allTasks = (state.settings.tasks || []).filter(t => t.enabled);
   // taskMatchesFrequency filters out first/last/odd/even tasks on wrong weeks
-  const dayTasks = allTasks.filter(t => t.day === dayName && taskMatchesFrequency(t, weekStart));
+  const recurringTasks = allTasks.filter(t => t.day === dayName && taskMatchesFrequency(t, weekStart));
+  // One-off tasks stored in localStorage — include for this week/day
+  const oneOffTasks = loadOneOffTasks().filter(t => t.weekStart === weekStart && t.day === dayName);
+  const dayTasks = [...recurringTasks, ...oneOffTasks];
 
   if (!dayTasks.length) {
     return `<div class="report-empty-row">No tasks scheduled for this day</div>`;
@@ -854,8 +857,8 @@ function buildGoodsInSection(records) {
   const rows = records.map(r => {
     const f = r.fields || {};
     const isAccepted = f.gi_outcome === 'accepted';
-    const tempCls = f.gi_temp_status === 'FAIL' ? 'status-fail' : f.gi_temp_status === 'WARNING' ? 'status-warn' : 'status-ok';
-    const typeIcon = f.gi_type === 'frozen' ? '❄' : '🌿';
+    const tempCls = f.gi_type === 'ambient' ? 'report-temp-dim' : f.gi_temp_status === 'FAIL' ? 'status-fail' : f.gi_temp_status === 'WARNING' ? 'status-warn' : 'status-ok';
+    const typeIcon = f.gi_type === 'frozen' ? '❄' : f.gi_type === 'ambient' ? '📦' : '🌿';
     return `
       <div class="gi-report-row ${isAccepted ? 'gi-row-accepted' : 'gi-row-rejected'}">
         <div class="gi-rr-left">
@@ -993,9 +996,9 @@ function buildWeeklyGoodsInTable(weekDates) {
   const rows = records.map(r => {
     const f = r.fields || {};
     const isAcc   = f.gi_outcome === 'accepted';
-    const tempCls = f.gi_temp_status === 'FAIL' ? 'status-fail' : f.gi_temp_status === 'WARNING' ? 'status-warn' : 'status-ok';
+    const tempCls = f.gi_type === 'ambient' ? 'report-temp-dim' : f.gi_temp_status === 'FAIL' ? 'status-fail' : f.gi_temp_status === 'WARNING' ? 'status-warn' : 'status-ok';
     const dayName = DAY_ABBR[new Date(r.date + 'T12:00:00').getDay()];
-    const typeIcon = f.gi_type === 'frozen' ? '❄' : '🌿';
+    const typeIcon = f.gi_type === 'frozen' ? '❄' : f.gi_type === 'ambient' ? '📦' : '🌿';
     return `<tr>
       <td><div style="font-weight:600;font-size:12px">${f.gi_supplier || '—'}</div>
           ${f.gi_notes ? `<div class="report-action-text" style="font-style:italic;font-size:11px">${f.gi_notes}</div>` : ''}</td>
