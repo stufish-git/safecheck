@@ -474,6 +474,7 @@ function sendDailySummary() {
   const temps      = getTodayRecords(ss, 'Temperature Log', today);
   const probes     = getTodayRecords(ss, 'Food Probe Log',  today);
   const goodsIn    = getTodayRecords(ss, 'Goods In Log',   today);
+  const cleaning   = settings.cleaningEnabled ? getTodayRecords(ss, 'Cleaning Schedule', today) : [];
   const tasks      = getTodayTasks(ss, today, settings);
 
   // ── Determine subject prefix ────────────────────────
@@ -492,7 +493,7 @@ function sendDailySummary() {
   const subject = prefix + ' Daily Summary — ' + name + ' — ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "EEE d MMM yyyy");
 
   // ── Build HTML ──────────────────────────────────────
-  const html = buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, goodsIn, tasks, depts, settings);
+  const html = buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, goodsIn, cleaning, tasks, depts, settings);
 
   // ── Send ────────────────────────────────────────────
   recipients.forEach(addr => {
@@ -509,248 +510,267 @@ function sendDailySummary() {
 function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, goodsIn, cleaning, tasks, depts, settings) {
   const DEPT_LABELS = { kitchen: '&#x1F373; Kitchen', foh: '&#x1F37D; Front of House' };
 
-  // Submission-level compliance — matches screen report model
-  // 1 point per expected submission (opening + closing per trading dept)
-  const tradingDepts   = depts.filter(d => isTradingAS(d, settings));
+  // Compliance scoring
+  const tradingDepts       = depts.filter(d => isTradingAS(d, settings));
   const expectedCheckCount = tradingDepts.length * 2;
-  const submittedChecks = tradingDepts.reduce((n, d) => {
+  const submittedChecks    = tradingDepts.reduce((n, d) => {
     return n + (opening.find(r => r.dept === d) ? 1 : 0) + (closing.find(r => r.dept === d) ? 1 : 0);
   }, 0);
   const anyMissing = submittedChecks < expectedCheckCount;
-  const pct = expectedCheckCount > 0 ? Math.round(submittedChecks / expectedCheckCount * 100) : null;
+  const pct        = expectedCheckCount > 0 ? Math.round(submittedChecks / expectedCheckCount * 100) : null;
 
-  const headerBorder = anyMissing ? '#ef4444' : pct === null ? '#4a5568' : pct >= 90 ? '#22c55e' : pct >= 70 ? '#f59e0b' : '#ef4444';
-  const headerBg     = anyMissing ? '#2d0a0a' : pct === null ? '#1a2332' : pct >= 90 ? '#0d3320' : pct >= 70 ? '#2d1c07' : '#2d0a0a';
-  const pctColor     = headerBorder;
-  const barWidth     = pct !== null ? pct : 0;
+  const badgeColor = anyMissing ? '#dc2626' : pct === null ? '#64748b' : pct >= 90 ? '#16a34a' : pct >= 70 ? '#d97706' : '#dc2626';
+  const badgeBg    = anyMissing ? '#fef2f2' : pct === null ? '#f8fafc' : pct >= 90 ? '#f0fdf4' : pct >= 70 ? '#fffbeb' : '#fef2f2';
+  const badgeBorder= badgeColor;
+  const barColor   = badgeColor;
+  const barWidth   = pct !== null ? pct : 0;
 
   const badgeHtml = anyMissing
-    ? '<div style="display:inline-block;background:#2d0a0a;border:2px solid #ef4444;border-radius:8px;padding:8px 16px;text-align:center"><p style="margin:0;font-size:14px;font-weight:700;color:#ef4444;font-family:Arial,sans-serif;line-height:1.3">Incomplete</p></div>'
+    ? '<div style="display:inline-block;background:' + badgeBg + ';border:2px solid ' + badgeBorder + ';border-radius:10px;padding:10px 18px;text-align:center"><p style="margin:0;font-size:14px;font-weight:700;color:' + badgeColor + ';font-family:Arial,sans-serif">Incomplete</p></div>'
     : pct !== null
-      ? '<div style="display:inline-block;background:' + headerBg + ';border:2px solid ' + pctColor + ';border-radius:8px;padding:8px 16px;text-align:center"><p style="margin:0;font-size:22px;font-weight:700;color:' + pctColor + ';font-family:Arial,sans-serif;line-height:1">' + pct + '%</p><p style="margin:2px 0 0;font-size:10px;color:' + pctColor + ';font-family:Arial,sans-serif;letter-spacing:.05em;text-transform:uppercase;opacity:.8">Compliance</p></div>'
-      : '<div style="display:inline-block;background:#1a2332;border:2px solid #4a5568;border-radius:8px;padding:8px 16px;text-align:center"><p style="margin:0;font-size:11px;color:#7d8da8;font-family:Arial,sans-serif">No checks<br>recorded</p></div>';
+      ? '<div style="display:inline-block;background:' + badgeBg + ';border:2px solid ' + badgeBorder + ';border-radius:10px;padding:10px 18px;text-align:center"><p style="margin:0;font-size:24px;font-weight:700;color:' + badgeColor + ';font-family:Arial,sans-serif;line-height:1">' + pct + '%</p><p style="margin:3px 0 0;font-size:10px;color:' + badgeColor + ';font-family:Arial,sans-serif;letter-spacing:.06em;text-transform:uppercase">Compliance</p></div>'
+      : '<div style="display:inline-block;background:#f8fafc;border:2px solid #cbd5e1;border-radius:10px;padding:10px 18px;text-align:center"><p style="margin:0;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif">No checks<br>recorded</p></div>';
 
-  // ── Overview section ──────────────────────────────
-  const overviewRows = depts.map(d => {
-    const trading = isTradingAS(d, settings);
-    const op = opening.find(r => r.dept === d);
-    const cl = closing.find(r => r.dept === d);
-    const missing = trading && (!op || !cl);
+  // ── Dot helper ───────────────────────────────────────
+  function dot(color) {
+    return '<span style="font-size:9px;color:' + color + '">&#x25CF;</span>';
+  }
+  function dotText(color, text) {
+    return dot(color) + ' <span style="font-size:12px;font-weight:600;color:' + color + ';font-family:Arial,sans-serif">' + text + '</span>';
+  }
+
+  // ── Overview rows ────────────────────────────────────
+  const overviewRows = depts.map(function(d) {
+    const trading  = isTradingAS(d, settings);
+    const op       = opening.find(r => r.dept === d);
+    const cl       = closing.find(r => r.dept === d);
+    const missing  = trading && (!op || !cl);
     const deptFail = (op && op.failCount > 0) || (cl && cl.failCount > 0);
     const tempFail = temps.filter(r => r.dept === d).some(r => r.status === 'FAIL' || r.status === 'WARNING');
-
-    // Per-dept submission pct: 2 expected (opening + closing), count what was submitted
     var deptExp = 2, deptAct = (op ? 1 : 0) + (cl ? 1 : 0);
     var deptPct = Math.round(deptAct / deptExp * 100);
-    let pill, bg, color;
-    if (!trading)                  { pill = '— Closed today'; bg = '#1e293b'; color = '#64748b'; }
-    else if (missing)              { pill = '&#x26D4; ' + (!op ? 'Opening' : '') + (!op && !cl ? ' &amp; ' : '') + (!cl ? 'Closing' : '') + ' missing'; bg = '#fee2e2'; color = '#991b1b'; }
-    else if (deptFail || tempFail) { pill = '&#x26A0; ' + deptPct + '% submitted &middot; issues recorded'; bg = '#fef3c7'; color = '#92400e'; }
-    else                           { pill = '&#x2713; All clear &middot; ' + deptPct + '%'; bg = '#dcfce7'; color = '#166534'; }
 
-    return '<tr><td style="padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:13px;color:#1e293b;font-family:Arial,sans-serif"><strong>' + DEPT_LABELS[d] + '</strong></td>' +
-      '<td style="text-align:right"><span style="background:' + bg + ';color:' + color + ';padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + pill + '</span></td></tr>';
+    var status;
+    if (!trading)               { status = dotText('#94a3b8', 'Closed today'); }
+    else if (!op && !cl)        { status = dotText('#dc2626', 'Opening &amp; Closing missing'); }
+    else if (!op)               { status = dotText('#dc2626', 'Opening missing'); }
+    else if (!cl)               { status = dotText('#dc2626', 'Closing missing'); }
+    else if (deptFail||tempFail){ status = dotText('#d97706', deptPct + '% submitted &middot; issues recorded'); }
+    else                        { status = dotText('#16a34a', 'All clear &middot; ' + deptPct + '%'); }
+
+    return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:10px 0;font-size:13px;color:#1e293b;font-family:Arial,sans-serif"><strong>' + DEPT_LABELS[d] + '</strong></td>' +
+      '<td style="text-align:right;padding:10px 0;white-space:nowrap">' + status + '</td></tr>';
   }).join('');
 
-  // Cleaning overview row (when enabled)
+  // Cleaning overview row
   var cleaningOverviewRow = '';
   if (settings.cleaningEnabled) {
     var cleanCount = cleaning.length;
-    var cleanFail  = cleaning.some(function(r) {
-      return Object.entries(r.fields||{}).some(function(e) { return e[1] === 'No'; });
-    });
-    var cpill, cbg, ccolor;
-    if (!cleanCount)      { cpill = '— Not recorded'; cbg = '#f1f5f9'; ccolor = '#64748b'; }
-    else if (cleanFail)   { cpill = '⚠ Issues recorded'; cbg = '#fef3c7'; ccolor = '#92400e'; }
-    else                  { cpill = '✓ All clear'; cbg = '#dcfce7'; ccolor = '#166534'; }
-    cleaningOverviewRow = '<tr><td style="padding:6px 0;font-size:13px;color:#1e293b;font-family:Arial,sans-serif"><strong>&#x1F9F9; Cleaning Schedule</strong></td>' +
-      '<td style="text-align:right"><span style="background:' + cbg + ';color:' + ccolor + ';padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + cpill + '</span></td></tr>';
+    var cleanFail  = cleaning.some(function(r) { return Object.entries(r.fields||{}).some(function(e) { return e[1] === 'No'; }); });
+    var cStatus;
+    if (!cleanCount)    { cStatus = dotText('#94a3b8', 'Not recorded'); }
+    else if (cleanFail) { cStatus = dotText('#d97706', 'Issues recorded'); }
+    else                { cStatus = dotText('#16a34a', 'All clear'); }
+    cleaningOverviewRow = '<tr><td style="padding:10px 0;font-size:13px;color:#1e293b;font-family:Arial,sans-serif"><strong>&#x1F9F9; Cleaning Schedule</strong></td>' +
+      '<td style="text-align:right;padding:10px 0;white-space:nowrap">' + cStatus + '</td></tr>';
   }
 
-  // ── Opening/closing check sections ────────────────
+  // ── Check section builder ─────────────────────────────
   function buildCheckSection(title, records) {
-    const rows = depts.map(d => {
+    const rows = depts.map(function(d) {
       const rec = records.find(r => r.dept === d);
       if (!rec) {
         if (!isTradingAS(d, settings)) {
-          return '<tr><td style="padding:5px 0;font-size:13px;color:#64748b;font-family:Arial,sans-serif;font-style:italic">' + DEPT_LABELS[d] + '</td>' +
-            '<td style="text-align:right"><span style="background:#1e293b;color:#64748b;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;font-family:Arial,sans-serif">Closed</span></td></tr>';
+          return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:10px 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">' + DEPT_LABELS[d] + '</td>' +
+            '<td style="text-align:right;padding:10px 0;white-space:nowrap">' + dotText('#94a3b8', 'Closed') + '</td></tr>';
         }
-        return '<tr><td style="padding:5px 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">' + DEPT_LABELS[d] + '</td>' +
-          '<td style="text-align:right"><span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">Not submitted</span></td></tr>';
+        return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:10px 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">' + DEPT_LABELS[d] + '</td>' +
+          '<td style="text-align:right;padding:10px 0;white-space:nowrap">' + dotText('#dc2626', 'Not submitted') + '</td></tr>';
       }
-      const scoreColor = rec.failCount > 0 ? '#d97706' : '#16a34a';
-      let failHtml = '';
+      var failHtml = '';
       if (rec.failCount > 0 && rec.failedLabels.length) {
         var labelMap = {};
         if (settings && settings.checks) { Object.values(settings.checks).forEach(function(dept) { if (dept && typeof dept === 'object') { Object.values(dept).forEach(function(arr) { if (Array.isArray(arr)) arr.forEach(function(c) { if (c && c.id && c.label) labelMap[c.id] = c.label; }); }); } }); }
         if (settings && settings.sharedChecks) { Object.values(settings.sharedChecks).forEach(function(arr) { if (Array.isArray(arr)) arr.forEach(function(c) { if (c && c.id && c.label) labelMap[c.id] = c.label; }); }); }
-        const items = rec.failedLabels.map(l => { var lbl = labelMap[l] || l.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()); return '<p style="margin:0 0 3px;font-size:12px;color:#92400e;font-family:Arial,sans-serif">&#x2717; &nbsp;' + lbl + '</p>'; }).join('');
-        const noteHtml = rec.notes ? '<p style="margin:6px 0 0;font-size:11px;color:#a16207;font-family:Arial,sans-serif;font-style:italic">Note: ' + rec.notes + '</p>' : '';
-        failHtml = '<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:6px;background:#fffbeb;border-radius:4px;border:1px solid #fde68a"><tr><td style="padding:8px 10px">' + items + noteHtml + '</td></tr></table>';
+        const items = rec.failedLabels.map(function(l) {
+          var lbl = labelMap[l] || l.replace(/_/g,' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+          return '<p style="margin:0 0 3px;font-size:12px;font-weight:600;color:#d97706;font-family:Arial,sans-serif">&#x2717; &nbsp;' + lbl + '</p>';
+        }).join('');
+        const noteHtml = rec.notes ? '<p style="margin:5px 0 0;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">Note: ' + rec.notes + '</p>' : '';
+        failHtml = '<div style="margin-top:6px">' + items + noteHtml + '</div>';
       }
-      var submitBadgeBg = rec.failCount > 0 ? '#fef3c7' : '#dcfce7';
-      var submitBadgeFg = rec.failCount > 0 ? '#92400e' : '#166534';
-      var submitBadgeText = rec.failCount > 0 ? '&#x26A0; Submitted &middot; ' + rec.failCount + ' fail' + (rec.failCount !== 1 ? 's' : '') : '&#x2713; Submitted';
-      return '<tr style="border-bottom:1px solid #f1f5f9">' +
-        '<td style="padding:5px 0;font-size:13px;color:#334155;font-family:Arial,sans-serif;vertical-align:top">' + DEPT_LABELS[d] + ' &nbsp;<span style="font-size:11px;color:#94a3b8">' + rec.signedBy + ' &middot; ' + fmtTime(rec.time) + '</span>' + failHtml + '</td>' +
-        '<td style="padding:5px 0;text-align:right;vertical-align:top;white-space:nowrap"><span style="background:' + submitBadgeBg + ';color:' + submitBadgeFg + ';padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + submitBadgeText + '</span></td>' +
-        '</tr>';
+      var statusHtml = rec.failCount > 0
+        ? dotText('#d97706', rec.failCount + ' fail' + (rec.failCount !== 1 ? 's' : ''))
+        : dotText('#16a34a', 'Submitted');
+      return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:10px 0;font-size:13px;color:#334155;font-family:Arial,sans-serif;vertical-align:top">' +
+        DEPT_LABELS[d] + ' &nbsp;<span style="font-size:11px;color:#94a3b8">' + rec.signedBy + ' &middot; ' + fmtTime(rec.time) + '</span>' + failHtml + '</td>' +
+        '<td style="padding:10px 0;text-align:right;vertical-align:top;white-space:nowrap">' + statusHtml + '</td></tr>';
     }).join('');
-
-    return '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' +
-      sectionHeader(title) +
-      '<tr><td style="padding:4px 24px 14px"><table width="100%" cellpadding="0" cellspacing="0">' + rows + '</table></td></tr></table>';
+    return sectionBlock(title, '<table width="100%" cellpadding="0" cellspacing="0">' + rows + '</table>');
   }
 
-  // ── Temperature section ───────────────────────────
+  // ── Temperature section ──────────────────────────────
   const tempCount = temps.length;
-  const tempRows = tempCount === 0
-    ? '<tr><td colspan="4" style="padding:10px 8px;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No temperature readings recorded today</td></tr>'
-    : temps.map(r => {
-        const badgeBg = r.status === 'OK' ? '#dcfce7' : r.status === 'WARNING' ? '#fef3c7' : '#fee2e2';
-        const badgeFg = r.status === 'OK' ? '#166534' : r.status === 'WARNING' ? '#92400e' : '#991b1b';
-        const rowBg   = r.status === 'FAIL' ? 'background:#fef2f2' : r.status === 'WARNING' ? 'background:#fffbeb' : '';
-        const actionHtml = r.action && r.action !== 'None required'
-          ? '<p style="margin:3px 0 0;font-size:11px;color:#a16207;font-family:Arial,sans-serif">Action: ' + r.action + '</p>' : '';
-        return '<tr style="border-bottom:1px solid #f1f5f9;' + rowBg + '">' +
-          '<td style="padding:7px 8px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + r.location + '</td>' +
-          '<td style="padding:7px 8px;font-size:13px;font-weight:600;color:#334155;font-family:Arial,sans-serif">' + (r.temp ? r.temp + '°C' : '&mdash;') + '</td>' +
-          '<td style="padding:7px 8px"><span style="background:' + badgeBg + ';color:' + badgeFg + ';padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + r.status + '</span>' + actionHtml + '</td>' +
-          '<td style="padding:7px 8px;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">' + fmtTime(r.time) + '</td></tr>';
+  const tempRows  = tempCount === 0
+    ? '<tr><td colspan="4" style="padding:10px 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No temperature readings recorded today</td></tr>'
+    : temps.map(function(r) {
+        var dotColor = r.status === 'OK' ? '#16a34a' : r.status === 'WARNING' ? '#d97706' : '#dc2626';
+        var actionHtml = r.action && r.action !== 'None required'
+          ? '<p style="margin:4px 0 0;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">Action: ' + r.action + '</p>' : '';
+        return '<tr style="border-bottom:1px solid #f1f5f9">' +
+          '<td style="padding:9px 8px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + r.location + '</td>' +
+          '<td style="padding:9px 8px;font-size:13px;font-weight:600;color:#334155;font-family:monospace">' + (r.temp ? r.temp + '&deg;C' : '&mdash;') + '</td>' +
+          '<td style="padding:9px 8px">' + dot(dotColor) + ' <span style="font-size:12px;font-weight:600;color:' + dotColor + ';font-family:Arial,sans-serif">' + r.status + '</span>' + actionHtml + '</td>' +
+          '<td style="padding:9px 8px;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">' + fmtTime(r.time) + '</td></tr>';
       }).join('');
 
-  const expectedChecks = 2;
-  const uniqueDays = new Set(temps.map(r => r.time.split(':')[0])).size; // rough proxy
-  const tempCountNote = tempCount > 0 && tempCount < expectedChecks
-    ? ' &nbsp;<span style="color:#f59e0b;font-weight:400;font-size:11px">only ' + tempCount + ' of ' + expectedChecks + ' expected checks done</span>' : '';
+  const tempSection = sectionBlock(
+    'Equipment Temperatures &nbsp;<span style="font-weight:400;color:#94a3b8">' + tempCount + ' reading' + (tempCount !== 1 ? 's' : '') + '</span>',
+    '<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
+    '<tr style="background:#f8fafc">' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Location</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Temp</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Status / Action</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Time</td></tr>' +
+    tempRows + '</table>'
+  );
 
-  const tempSection = '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' +
-    '<tr><td style="padding:14px 24px 4px"><p style="margin:0;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8;font-family:Arial,sans-serif">Equipment Temperatures &nbsp;<span style="font-weight:400;color:#cbd5e1">' + tempCount + ' reading' + (tempCount !== 1 ? 's' : '') + '</span>' + tempCountNote + '</p></td></tr>' +
-    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
-    '<tr style="background:#f8fafc"><td style="font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;padding:5px 8px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Location</td><td style="font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;padding:5px 8px;font-weight:600;text-transform:uppercase">Temp</td><td style="font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;padding:5px 8px;font-weight:600;text-transform:uppercase">Status / Action</td><td style="font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;padding:5px 8px;font-weight:600;text-transform:uppercase">Time</td></tr>' +
-    tempRows + '</table></td></tr></table>';
-
-  // ── Probe section ─────────────────────────────────
+  // ── Probe section ────────────────────────────────────
   const probeCount = probes.length;
-  const probeRows = probeCount === 0
-    ? '<td colspan="2" style="padding:10px 0"><span style="background:#fee2e2;color:#991b1b;padding:4px 12px;border-radius:4px;font-size:12px;font-weight:600;font-family:Arial,sans-serif">⛔ No food probes recorded today</span></td>'
-    : probes.map(r => {
-        const pass = r.status === 'PASS';
-        const bg = pass ? '#dcfce7' : '#fee2e2';
-        const fg = pass ? '#166534' : '#991b1b';
-        const actionHtml = !pass && r.action && r.action !== 'None required'
-          ? '<table width="100%" cellpadding="0" cellspacing="0" style="margin-top:4px;background:#fef2f2;border-radius:4px;border:1px solid #fecaca"><tr><td style="padding:6px 10px;font-size:11px;color:#991b1b;font-family:Arial,sans-serif">Action: ' + r.action + '</td></tr></table>' : '';
-        const coolingHtml = r.cooling ? '<p style="margin:3px 0 0;font-size:11px;color:#60a5fa;font-family:Arial,sans-serif">&#x2744; Cooled for ' + r.cooling + '</p>' : '';
-        return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:6px 0"><p style="margin:0;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + r.product + '</p>' + coolingHtml + actionHtml + '</td>' +
-          '<td style="text-align:right;vertical-align:top;padding:6px 0;font-size:12px;font-family:Arial,sans-serif"><strong style="color:#334155">' + r.temp + '°C</strong> <span style="background:' + bg + ';color:' + fg + ';padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;margin-left:6px">' + r.status + '</span> <span style="color:#94a3b8;margin-left:6px">' + r.staff + '</span></td></tr>';
+  const probeRows  = probeCount === 0
+    ? '<tr><td colspan="2" style="padding:10px 0">' + dotText('#dc2626', 'No food probes recorded today') + '</td></tr>'
+    : probes.map(function(r) {
+        var pass = r.status === 'PASS';
+        var dotColor = pass ? '#16a34a' : '#dc2626';
+        var actionHtml = !pass && r.action && r.action !== 'None required'
+          ? '<p style="margin:4px 0 0;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">Action: ' + r.action + '</p>' : '';
+        var coolingHtml = r.cooling ? '<p style="margin:3px 0 0;font-size:11px;color:#60a5fa;font-family:Arial,sans-serif">&#x2744; Cooled for ' + r.cooling + '</p>' : '';
+        return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:9px 0;font-size:13px;color:#334155;font-family:Arial,sans-serif;vertical-align:top">' +
+          r.product + coolingHtml + actionHtml + '</td>' +
+          '<td style="text-align:right;vertical-align:top;padding:9px 0;font-size:13px;font-family:Arial,sans-serif;white-space:nowrap">' +
+          '<strong style="color:#334155;margin-right:10px">' + r.temp + '&deg;C</strong>' +
+          dot(dotColor) + ' <span style="font-size:12px;font-weight:600;color:' + dotColor + ';font-family:Arial,sans-serif">' + r.status + '</span>' +
+          ' <span style="color:#94a3b8;margin-left:8px;font-size:12px">' + r.staff + '</span></td></tr>';
       }).join('');
 
-  const probeSection = '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' +
-    '<tr><td style="padding:14px 24px 4px"><p style="margin:0;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8;font-family:Arial,sans-serif">Food Probes &nbsp;<span style="font-weight:400;color:#cbd5e1">' + (probeCount > 0 ? probeCount + ' reading' + (probeCount !== 1 ? 's' : '') : '') + '</span></p></td></tr>' +
-    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0">' + probeRows + '</table></td></tr></table>';
+  const probeSection = sectionBlock(
+    'Food Probes &nbsp;<span style="font-weight:400;color:#94a3b8">' + (probeCount > 0 ? probeCount + ' reading' + (probeCount !== 1 ? 's' : '') : '') + '</span>',
+    '<table width="100%" cellpadding="0" cellspacing="0">' + probeRows + '</table>'
+  );
 
-  // ── Goods In section ──────────────────────────────
+  // ── Goods In section ─────────────────────────────────
   var giRows = '';
   if (!goodsIn.length) {
-    giRows = '<tr><td colspan="5" style="padding:10px 8px;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No deliveries recorded today</td></tr>';
+    giRows = '<tr><td colspan="5" style="padding:10px 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No deliveries recorded today</td></tr>';
   } else {
     goodsIn.forEach(function(r) {
-      var f = r.fields || {};
-      var isAcc = f.gi_outcome === 'accepted';
-      var isAmb1 = f.gi_type === 'ambient';
-      var tempColor = isAmb1 ? '#94a3b8' : f.gi_temp_status === 'FAIL' ? '#ef4444' : f.gi_temp_status === 'WARNING' ? '#f59e0b' : '#22c55e';
-      var typeIcon1 = f.gi_type === 'frozen' ? '&#x2744;' : isAmb1 ? '&#x1F4E6;' : '&#x1F33F;';
-      giRows += '<tr>' +
-        '<td style="padding:6px 8px;font-size:13px;font-family:Arial,sans-serif;font-weight:600">' + (f.gi_supplier||'—') + '</td>' +
-        '<td style="padding:6px 8px;font-size:12px;font-family:Arial,sans-serif;color:#94a3b8">' + typeIcon1 + ' ' + (f.gi_type||'') + '</td>' +
-        '<td style="padding:6px 8px;font-size:13px;font-family:monospace;font-weight:600;color:' + tempColor + '">' + (f.gi_temp ? f.gi_temp+'°C' : '—') + '</td>' +
-        '<td style="padding:6px 8px"><span style="background:' + (isAcc?'#dcfce7':'#fee2e2') + ';color:' + (isAcc?'#166534':'#991b1b') + ';padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + (isAcc?'Accepted':'Rejected') + '</span></td>' +
-        '<td style="padding:6px 8px;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif">' + (f.gi_signed_by||'—') + '</td>' +
-        '</tr>';
+      var f       = r.fields || {};
+      var isAcc   = f.gi_outcome === 'accepted';
+      var isAmb   = f.gi_type === 'ambient';
+      var typeIcon = f.gi_type === 'frozen' ? '&#x2744;' : isAmb ? '&#x1F4E6;' : '&#x1F33F;';
+      var tempColor = isAmb ? '#94a3b8' : f.gi_temp_status === 'FAIL' ? '#dc2626' : f.gi_temp_status === 'WARNING' ? '#d97706' : '#16a34a';
+      var outColor  = isAcc ? '#16a34a' : '#dc2626';
+      giRows += '<tr style="border-bottom:1px solid #f1f5f9">' +
+        '<td style="padding:9px 8px;font-size:13px;font-weight:600;font-family:Arial,sans-serif;color:#1e293b">' + (f.gi_supplier||'&mdash;') + '</td>' +
+        '<td style="padding:9px 8px;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">' + typeIcon + ' ' + (f.gi_type||'') + '</td>' +
+        '<td style="padding:9px 8px;font-size:13px;font-family:monospace;font-weight:600;color:' + tempColor + '">' + (f.gi_temp ? f.gi_temp + '&deg;C' : '&mdash;') + '</td>' +
+        '<td style="padding:9px 8px;font-size:12px;font-weight:700;color:' + outColor + ';font-family:Arial,sans-serif">' + (isAcc ? 'Accepted' : 'Rejected') + '</td>' +
+        '<td style="padding:9px 8px;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif">' + (f.gi_signed_by||'&mdash;') + '</td></tr>';
       if (f.gi_notes) {
-        giRows += '<tr><td colspan="5" style="padding:0 8px 8px;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">↳ ' + f.gi_notes + '</td></tr>';
+        giRows += '<tr><td colspan="5" style="padding:0 8px 8px;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">&#x21B3; ' + f.gi_notes + '</td></tr>';
       }
     });
   }
-  var giSection = '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' +
-    sectionHeader('&#x1F4E6; Goods In') +
-    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
-    '<thead><tr>' +
-    '<th style="text-align:left;padding:6px 8px;font-size:10px;font-family:Arial,sans-serif;color:#64748b;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #1e293b">Supplier</th>' +
-    '<th style="text-align:left;padding:6px 8px;font-size:10px;font-family:Arial,sans-serif;color:#64748b;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #1e293b">Type</th>' +
-    '<th style="text-align:left;padding:6px 8px;font-size:10px;font-family:Arial,sans-serif;color:#64748b;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #1e293b">Temp</th>' +
-    '<th style="text-align:left;padding:6px 8px;font-size:10px;font-family:Arial,sans-serif;color:#64748b;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #1e293b">Outcome</th>' +
-    '<th style="text-align:left;padding:6px 8px;font-size:10px;font-family:Arial,sans-serif;color:#64748b;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #1e293b">Signed By</th>' +
-    '</tr></thead><tbody>' + giRows + '</tbody></table></td></tr></table>';
+  const giSection = sectionBlock(
+    '&#x1F4E6; Goods In',
+    '<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
+    '<tr style="background:#f8fafc">' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Supplier</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Type</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Temp</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Outcome</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Signed By</td></tr>' +
+    giRows + '</table>'
+  );
 
-  // ── Tasks section ─────────────────────────────────
+  // ── Tasks section ─────────────────────────────────────
   const doneCount = tasks.filter(t => t.done).length;
-  const taskRows = tasks.length === 0
-    ? '<tr><td colspan="2" style="padding:8px 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No tasks scheduled today</td></tr>'
-    : tasks.map(r => {
-        const icon = r.done ? '<span style="color:#16a34a;font-weight:600">✓</span>' : '';
-        const taskStyle = r.done ? 'color:#334155' : 'color:#94a3b8;font-style:italic';
-        const rightCell = r.done
-          ? '<span style="color:#94a3b8;font-size:12px;font-family:Arial,sans-serif">' + r.doneBy + '</span>'
-          : '<span style="background:#f1f5f9;color:#94a3b8;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;font-family:Arial,sans-serif">Not done</span>';
-        return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:5px 0;font-size:13px;font-family:Arial,sans-serif;' + taskStyle + '">' + icon + (r.done ? ' ' : '') + r.label + '</td><td style="text-align:right">' + rightCell + '</td></tr>';
+  const taskRows  = tasks.length === 0
+    ? '<tr><td colspan="2" style="padding:9px 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No tasks scheduled today</td></tr>'
+    : tasks.map(function(r) {
+        if (r.done) {
+          return '<tr style="border-bottom:1px solid #f1f5f9">' +
+            '<td style="padding:9px 0;font-size:13px;color:#334155;font-family:Arial,sans-serif">' +
+            '<span style="color:#16a34a;font-weight:700">&#x2713;</span> ' + r.label + '</td>' +
+            '<td style="text-align:right;padding:9px 0;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif;white-space:nowrap">' + r.doneBy + '</td></tr>';
+        }
+        return '<tr style="border-bottom:1px solid #f1f5f9">' +
+          '<td style="padding:9px 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">' + r.label + '</td>' +
+          '<td style="text-align:right;padding:9px 0;white-space:nowrap">' + dotText('#94a3b8', 'Not done') + '</td></tr>';
       }).join('');
 
-  const taskSection = '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' +
-    '<tr><td style="padding:14px 24px 4px"><p style="margin:0;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8;font-family:Arial,sans-serif">Tasks &nbsp;<span style="font-weight:400;color:#cbd5e1">' + doneCount + ' / ' + tasks.length + ' complete</span></p></td></tr>' +
-    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0">' + taskRows + '</table></td></tr></table>';
+  const taskSection = sectionBlock(
+    'Tasks &nbsp;<span style="font-weight:400;color:#94a3b8">' + doneCount + ' / ' + tasks.length + ' complete</span>',
+    '<table width="100%" cellpadding="0" cellspacing="0">' + taskRows + '</table>'
+  );
 
-  // ── Assemble ──────────────────────────────────────
+  // ── Assemble ──────────────────────────────────────────
   const sheetsUrl = getSheetsUrl();
+  const divider   = '<div style="height:1px;background:#e2e8f0"></div>';
 
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>' +
-  '<style>@media print{body{background:#fff!important}table{page-break-inside:avoid}tr{page-break-inside:avoid;page-break-after:auto}.section-block{page-break-inside:avoid}}</style>' +
-  '</head><body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif">' +
-  '<div style="background:#f1f5f9;padding:24px 16px">' +
-  '<table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto"><tr><td>' +
+    '<style>@media print{body{background:#fff!important}}</style>' +
+    '</head><body style="margin:0;padding:24px 16px;background:#f8fafc;font-family:Arial,Helvetica,sans-serif">' +
+    '<div style="max-width:600px;margin:0 auto">' +
 
-  // Header
-  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#1a2332;border-radius:8px 8px 0 0;overflow:hidden">' +
-  '<tr><td style="padding:20px 24px"><p style="margin:0;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#4a6080;font-family:Arial,sans-serif">Food Safety Report</p>' +
-  '<p style="margin:4px 0 0;font-size:20px;font-weight:700;color:#e6edf3;font-family:Arial,sans-serif">' + name + '</p>' +
-  '<p style="margin:4px 0 0;font-size:13px;color:#7d8da8;font-family:Arial,sans-serif">' + dayLabel + ' &nbsp;·&nbsp; Generated 23:59</p></td>' +
-  '<td style="padding:20px 24px;text-align:right;vertical-align:middle">' + badgeHtml + '</td></tr>' +
-  (anyMissing
-  ? '<tr><td colspan="2" style="padding:0 24px 16px"><p style="margin:0;font-size:11px;color:#ef4444;font-family:Arial,sans-serif">' + submittedChecks + ' of ' + expectedCheckCount + ' checks submitted &nbsp;&middot;&nbsp; score excluded</p></td></tr>'
-  : pct !== null ? '<tr><td colspan="2" style="padding:0 24px 16px"><table width="100%" cellpadding="0" cellspacing="0"><tr>' +
-  '<td style="background:' + headerBg + ';border-radius:3px;height:6px"><div style="width:' + barWidth + '%;height:6px;background:' + pctColor + ';border-radius:3px"></div></td>' +
-  '<td style="width:110px;padding-left:12px;font-size:11px;color:' + pctColor + ';font-family:Arial,sans-serif;white-space:nowrap">' + submittedChecks + '/' + expectedCheckCount + ' submissions</td>' +
-  '</tr></table></td></tr>' : '') +
-  '</table>' +
+    // Header
+    '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px 12px 0 0;border:1px solid #e2e8f0;border-bottom:none">' +
+    '<tr><td style="padding:28px 28px 20px">' +
+    '<p style="margin:0;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#94a3b8;font-family:Arial,sans-serif">Food Safety Report</p>' +
+    '<p style="margin:6px 0 0;font-size:22px;font-weight:700;color:#0f172a;font-family:Arial,sans-serif">' + name + '</p>' +
+    '<p style="margin:4px 0 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif">' + dayLabel + ' &nbsp;&middot;&nbsp; Generated 23:59</p></td>' +
+    '<td style="padding:28px 28px 20px;text-align:right;vertical-align:middle">' + badgeHtml + '</td></tr>' +
+    (pct !== null ? '<tr><td colspan="2" style="padding:0 28px 24px"><table width="100%" cellpadding="0" cellspacing="0"><tr>' +
+    '<td style="background:#f1f5f9;border-radius:4px;height:4px"><div style="width:' + barWidth + '%;height:4px;background:' + barColor + ';border-radius:4px"></div></td>' +
+    '<td style="width:110px;padding-left:12px;font-size:11px;color:' + barColor + ';font-family:Arial,sans-serif;white-space:nowrap">' + submittedChecks + '/' + expectedCheckCount + ' submitted</td>' +
+    '</tr></table></td></tr>' : '') +
+    '</table>' + divider +
 
-  // Overview
-  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' +
-  sectionHeader('Overview') +
-  '<tr><td style="padding:8px 24px 16px"><table width="100%" cellpadding="0" cellspacing="0">' + overviewRows + cleaningOverviewRow + '</table></td></tr></table>' +
+    // Overview
+    '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">' +
+    sectionHeader('Overview') +
+    '<tr><td style="padding:0 28px 20px"><table width="100%" cellpadding="0" cellspacing="0">' + overviewRows + cleaningOverviewRow + '</table></td></tr></table>' + divider +
 
-  // Checks
-  buildCheckSection('Opening Checks', opening) +
-  buildCheckSection('Closing Checks', closing) +
-  (settings.cleaningEnabled && cleaning.length ? buildCheckSection('&#x1F9F9; Cleaning Schedule', cleaning) : '') +
+    // Check sections
+    buildCheckSection('Opening Checks', opening) + divider +
+    buildCheckSection('Closing Checks', closing) + divider +
+    (settings.cleaningEnabled && cleaning.length ? buildCheckSection('&#x1F9F9; Cleaning Schedule', cleaning) + divider : '') +
 
-  // Temps, Probes, Goods In, Tasks
-  tempSection + probeSection + giSection + taskSection +
+    // Data sections
+    tempSection + divider + probeSection + divider + giSection + divider + taskSection + divider +
 
-  // Footer
-  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#1a2332;border-radius:0 0 8px 8px;margin-top:2px">' +
-  '<tr><td style="padding:16px 24px">' +
-  (sheetsUrl ? '<p style="margin:0;font-size:12px;color:#4a6080;font-family:Arial,sans-serif">Full records &nbsp;·&nbsp; <a href="' + sheetsUrl + '" style="color:#60a5fa;text-decoration:none">Open in Google Sheets</a></p>' : '') +
-  '<p style="margin:6px 0 0;font-size:11px;color:#334a60;font-family:Arial,sans-serif">Sent by SafeChecks &nbsp;·&nbsp; To manage recipients, open Settings in the app</p>' +
-  '</td></tr></table>' +
+    // Footer
+    '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:0 0 12px 12px;border:1px solid #e2e8f0;border-top:none">' +
+    '<tr><td style="padding:20px 28px">' +
+    (sheetsUrl ? '<p style="margin:0;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">Full records &nbsp;&middot;&nbsp; <a href="' + sheetsUrl + '" style="color:#3b82f6;text-decoration:none">Open in Google Sheets</a></p>' : '') +
+    '<p style="margin:6px 0 0;font-size:11px;color:#cbd5e1;font-family:Arial,sans-serif">Sent by SafeChecks &nbsp;&middot;&nbsp; To manage recipients, open Settings in the app</p>' +
+    '</td></tr></table>' +
 
-  '</td></tr></table></div></body></html>';
+    '</div></body></html>';
+}
+
+// ── Section block helper ──────────────────────────────
+function sectionBlock(title, innerHtml) {
+  return '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">' +
+    sectionHeader(title) +
+    '<tr><td style="padding:0 28px 20px">' + innerHtml + '</td></tr></table>';
 }
 
 // ── Section header helper ─────────────────────────────
 function sectionHeader(title) {
-  return '<tr><td style="padding:14px 24px 4px"><p style="margin:0;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8;font-family:Arial,sans-serif">' + title + '</p></td></tr>';
+  return '<tr><td style="padding:20px 28px 8px"><p style="margin:0;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#cbd5e1;font-family:Arial,sans-serif">' + title + '</p></td></tr>';
 }
+
 
 // ── Data helpers ──────────────────────────────────────
 // ── Format time for display — extracts HH:MM from any timestamp string ──
@@ -1110,32 +1130,41 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
     const d = new Date(date + 'T12:00:00');
     return DAY_ABBR[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth()+1);
   }
-  function pctColor(p) { return p >= 90 ? '#22c55e' : p >= 70 ? '#f59e0b' : '#ef4444'; }
-  function pctBg(p)    { return p >= 90 ? '#0d3320' : p >= 70 ? '#2d1c07' : '#2d0a0a'; }
+  function pctColor(p) { return p >= 90 ? '#16a34a' : p >= 70 ? '#d97706' : '#dc2626'; }
+  function dot(color) { return '<span style="font-size:9px;color:' + color + '">&#x25CF;</span>'; }
+  function dotText(color, text) { return dot(color) + ' <span style="font-size:12px;font-weight:600;color:' + color + ';font-family:Arial,sans-serif">' + text + '</span>'; }
+  // Split free-text into sentence dot lines
+  function sentenceDots(text, color) {
+    if (!text) return '';
+    return text.split(/\.\s+/).filter(Boolean).map(function(s) {
+      var clean = s.replace(/\.$/, '').trim();
+      return '<p style="margin:0 0 5px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + dot(color) + ' &nbsp;' + clean + '</p>';
+    }).join('');
+  }
+  const divider = '<div style="height:1px;background:#e2e8f0"></div>';
+  const sheetsUrl = getSheetsUrl();
 
-  // ── Daily overview grid ──────────────────────────
+  // ── Daily overview grid ──────────────────────────────
   function equipCell(date) {
-    var recs = temps.filter(function(r) { return r.date === date; });
-    if (!recs.length) return '<td style="text-align:center;padding:5px 4px;font-size:12px;color:#4a6080">—</td>';
+    var recs   = temps.filter(function(r) { return r.date === date; });
+    if (!recs.length) return '<td style="text-align:center;padding:6px 4px;font-size:12px;color:#94a3b8">—</td>';
     var fails  = recs.filter(function(r) { return r.status==='FAIL'||r.status==='WARNING'; }).length;
     var passes = recs.length - fails;
-    var hasFail = fails > 0;
-    var icon = hasFail ? '⚠' : '✓';
-    var iconColor = hasFail ? '#f59e0b' : '#22c55e';
-    var countHtml = hasFail
-      ? '<span style="font-size:9px;display:block"><span style="color:#22c55e">' + passes + '✓</span> <span style="color:#ef4444">' + fails + '✗</span></span>'
-      : '<span style="font-size:9px;display:block;color:#7d8da8">' + recs.length + '</span>';
-    return '<td style="text-align:center;padding:5px 4px;font-size:13px;color:' + iconColor + '">' + icon + countHtml + '</td>';
+    var icon   = fails > 0 ? '⚠' : '✓';
+    var color  = fails > 0 ? '#d97706' : '#16a34a';
+    var sub    = fails > 0
+      ? '<span style="font-size:9px;display:block"><span style="color:#16a34a">' + passes + '✓</span> <span style="color:#dc2626">' + fails + '✗</span></span>'
+      : '<span style="font-size:9px;display:block;color:#94a3b8">' + recs.length + '</span>';
+    return '<td style="text-align:center;padding:6px 4px;font-size:13px;color:' + color + '">' + icon + sub + '</td>';
   }
-
   function simpleCell(date, type, dept) {
     var recs = [];
-    if (type === 'opening') recs = opening.filter(function(r) { return r.date===date && r.dept===dept; });
-    else if (type === 'closing') recs = closing.filter(function(r) { return r.date===date && r.dept===dept; });
-    else if (type === 'cleaning') recs = cleaning.filter(function(r) { return r.date===date && r.dept===dept; });
-    else if (type === 'probe')   recs = probes.filter(function(r) { return r.date===date; });
-    else if (type === 'goodsin') recs = goodsIn.filter(function(r) { return r.date===date; });
-    if (!recs.length) return '<td style="text-align:center;padding:5px 4px;font-size:13px;color:#4a6080">—</td>';
+    if (type==='opening') recs = opening.filter(function(r) { return r.date===date && r.dept===dept; });
+    else if (type==='closing') recs = closing.filter(function(r) { return r.date===date && r.dept===dept; });
+    else if (type==='cleaning') recs = cleaning.filter(function(r) { return r.date===date && r.dept===dept; });
+    else if (type==='probe')   recs = probes.filter(function(r) { return r.date===date; });
+    else if (type==='goodsin') recs = goodsIn.filter(function(r) { return r.date===date; });
+    if (!recs.length) return '<td style="text-align:center;padding:6px 4px;font-size:13px;color:#94a3b8">—</td>';
     var hasFail = false;
     if (type==='opening'||type==='closing'||type==='cleaning') {
       recs.forEach(function(r) { Object.entries(r.fields||{}).forEach(function(e) { if (e[1]==='No') hasFail=true; }); });
@@ -1144,468 +1173,428 @@ function buildWeeklyEmailHtml(name, weekLabel, weekDates, opening, closing, temp
     } else if (type==='goodsin') {
       hasFail = recs.some(function(r) { return (r.fields||{}).gi_outcome==='rejected'||(r.fields||{}).gi_temp_status==='FAIL'; });
     }
-    var icon = hasFail ? '⚠' : '✓';
-    var color = hasFail ? '#f59e0b' : '#22c55e';
-    var count = (type==='probe'||type==='goodsin') ? '<span style="font-size:9px;display:block;color:#7d8da8">' + recs.length + '</span>' : '';
-    return '<td style="text-align:center;padding:5px 4px;font-size:13px;color:' + color + '">' + icon + count + '</td>';
+    var icon  = hasFail ? '⚠' : '✓';
+    var color = hasFail ? '#d97706' : '#16a34a';
+    var count = (type==='probe'||type==='goodsin') ? '<span style="font-size:9px;display:block;color:#94a3b8">' + recs.length + '</span>' : '';
+    return '<td style="text-align:center;padding:6px 4px;font-size:13px;color:' + color + '">' + icon + count + '</td>';
   }
 
   const gridColHeaders = weekDates.map(function(date) {
     const d = new Date(date + 'T12:00:00');
-    return '<th style="text-align:center;padding:5px 4px;font-size:11px;color:#4a6080;min-width:36px">' + DAY_ABBR[d.getDay()] + '<br><span style="font-weight:400;font-size:9px">' + d.getDate() + '/' + (d.getMonth()+1) + '</span></th>';
+    return '<th style="text-align:center;padding:5px 4px;font-size:11px;color:#94a3b8;font-weight:600;min-width:36px">' + DAY_ABBR[d.getDay()] + '<br><span style="font-weight:400;font-size:9px">' + d.getDate() + '/' + (d.getMonth()+1) + '</span></th>';
   }).join('');
 
   const gridDefs = [
-    ['opening',     'kitchen', '&#x1F373; Opening'],
-    ['opening',     'foh',     '&#x1F37D; Opening'],
-    ['closing',     'kitchen', '&#x1F373; Closing'],
-    ['closing',     'foh',     '&#x1F37D; Closing'],
-    ['equipment',   null,      '&#x1F321; Equipment'],
-    ['probe',       null,      '&#x1F356; Probes'],
-    ['goodsin',     null,      '&#x1F4E6; Goods In'],
+    ['opening','kitchen','&#x1F373; Opening'],
+    ['opening','foh',    '&#x1F37D; Opening'],
+    ['closing','kitchen','&#x1F373; Closing'],
+    ['closing','foh',    '&#x1F37D; Closing'],
+    ['equipment',null,   '&#x1F321; Equipment'],
+    ['probe',null,       '&#x1F356; Probes'],
+    ['goodsin',null,     '&#x1F4E6; Goods In'],
   ].concat(settings.cleaningEnabled ? [
-    ['cleaning',    'kitchen', '&#x1F9F9; Cleaning K'],
-    ['cleaning',    'foh',     '&#x1F9F9; Cleaning F'],
+    ['cleaning','kitchen','&#x1F9F9; Cleaning K'],
+    ['cleaning','foh',    '&#x1F9F9; Cleaning F'],
   ] : []);
+
   const gridRows = gridDefs.map(function(row) {
     const cells = weekDates.map(function(date) {
-      return row[0] === 'equipment' ? equipCell(date) : simpleCell(date, row[0], row[1]);
+      return row[0]==='equipment' ? equipCell(date) : simpleCell(date, row[0], row[1]);
     }).join('');
-    return '<tr><td style="padding:5px 8px;font-size:12px;color:#7d8da8;font-family:Arial,sans-serif;white-space:nowrap">' + row[2] + '</td>' + cells + '</tr>';
+    return '<tr style="border-top:1px solid #f1f5f9"><td style="padding:6px 8px;font-size:12px;color:#64748b;font-family:Arial,sans-serif;white-space:nowrap">' + row[2] + '</td>' + cells + '</tr>';
   }).join('');
 
   const gridHtml = '<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-family:Arial,sans-serif">' +
-    '<tr><th style="text-align:left;padding:5px 8px;font-size:10px;color:#4a6080;text-transform:uppercase;letter-spacing:.05em">Check</th>' +
+    '<tr><th style="text-align:left;padding:5px 8px;font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;font-weight:600">Check</th>' +
     gridColHeaders + '</tr>' + gridRows + '</table>';
 
-  // ── Compliance — dept cards ───────────────────────
-
-  // Equipment: batch_id groups; 2 expected per trading day
+  // ── Compliance ───────────────────────────────────────
   function equipBatches(dept, date) {
     var recs = temps.filter(function(r) { return r.date===date && (!dept || r.dept===dept); });
     var batches = {};
     recs.forEach(function(r) { var k = r.batch_id || r.location + r.time; batches[k] = true; });
     return Math.min(Object.keys(batches).length, 2);
   }
-
-  // Probe count for a date (kitchen only)
-  function probeOnDate(date) {
-    return probes.some(function(r) { return r.date===date; }) ? 1 : 0;
-  }
+  function probeOnDate(date) { return probes.some(function(r) { return r.date===date; }) ? 1 : 0; }
 
   function complianceRow(label, actual, expected) {
-    if (expected === 0) {
-      return '<tr><td style="padding:5px 16px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + label + '</td>' +
-             '<td style="padding:5px 16px;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif;text-align:right">N/A</td></tr>';
-    }
-    var p = Math.round(actual/expected*100);
-    var c = pctColor(p);
-    var barBg = '<div style="display:inline-block;width:60px;height:5px;background:#e2e8f0;border-radius:3px;vertical-align:middle;position:relative">' +
-                '<div style="position:absolute;left:0;top:0;width:' + Math.round(p*60/100) + 'px;height:5px;background:' + c + ';border-radius:3px"></div></div>';
-    return '<tr><td style="padding:5px 16px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + label + '</td>' +
-           '<td style="padding:5px 16px;text-align:right;white-space:nowrap">' + barBg +
-           '&nbsp;<span style="font-size:12px;font-weight:700;color:' + c + ';font-family:Arial,sans-serif">' + p + '%</span>' +
-           '&nbsp;<span style="font-size:11px;color:#94a3b8;font-family:Arial,sans-serif">' + actual + '/' + expected + '</span></td></tr>';
+    if (expected === 0) return '';
+    var p  = Math.round(actual/expected*100);
+    var c  = pctColor(p);
+    var bw = Math.round(p);
+    return '<tr style="border-top:1px solid #f1f5f9"><td style="padding:10px 16px" colspan="2">' +
+      '<p style="margin:0 0 5px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + label +
+      '<span style="float:right;font-size:13px;font-weight:700;color:' + c + ';font-family:Arial,sans-serif">' + p + '% ' +
+      '<span style="font-size:11px;font-weight:400;color:#94a3b8">' + actual + '/' + expected + '</span></span></p>' +
+      '<div style="width:100%;height:4px;background:#f1f5f9;border-radius:3px">' +
+      '<div style="width:' + bw + '%;height:4px;background:' + c + ';border-radius:3px"></div></div>' +
+      '</td></tr>';
   }
 
-  function deptCard(label, icon, color, openAct, openExp, closeAct, closeExp, equipAct, equipExp, probeAct, probeExp, cleanAct, cleanExp, missingDays, tradingDays) {
-    var cats = [{a:openAct,e:openExp},{a:closeAct,e:closeExp},{a:equipAct,e:equipExp}];
-    if (probeExp > 0) cats.push({a:probeAct,e:probeExp});
-    if (cleanExp > 0) cats.push({a:cleanAct,e:cleanExp});
+  function deptCard(label, icon, color, rows, missingLines) {
     var totalA = 0, totalE = 0;
-    cats.forEach(function(c) { if (c.e > 0) { totalA += c.a; totalE += c.e; } });
+    rows.forEach(function(r) { if (r.e > 0) { totalA += r.a; totalE += r.e; } });
     var overall = totalE > 0 ? Math.round(totalA/totalE*100) : 100;
     var oc = pctColor(overall);
-    var barW = Math.round(overall * 120 / 100);
-    // Missing days caveat — shown when any trading day lacked opening+closing submission
-    var missingNoteHtml = '';
-    if (missingDays > 0) {
-      var daysWithChecks = tradingDays - missingDays;
-      missingNoteHtml = '<tr><td colspan="2" style="padding:2px 16px 10px">' +
-        '<p style="margin:0;font-size:11px;color:#f59e0b;font-family:Arial,sans-serif">' +
-        '&#x26A0; Score based on ' + daysWithChecks + ' of ' + tradingDays + ' trading day' + (tradingDays!==1?'s':'') +
-        ' &middot; ' + missingDays + ' day' + (missingDays!==1?'s':'') + ' missing opening/closing submissions' +
-        '</p></td></tr>';
+    var missingHtml = '';
+    if (missingLines && missingLines.length) {
+      missingHtml = '<tr style="border-top:1px solid #f1f5f9"><td colspan="2" style="padding:10px 16px 14px">' +
+        '<p style="margin:0 0 5px;font-size:11px;font-weight:600;color:#d97706;font-family:Arial,sans-serif">Score based on submitted days only</p>' +
+        missingLines.map(function(line) {
+          return '<p style="margin:0 0 3px;font-size:11px;color:' + line.color + ';font-family:Arial,sans-serif"><span style="font-size:8px">&#x25CF;</span> &nbsp;' + line.text + '</p>';
+        }).join('') + '</td></tr>';
     }
-    return '<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:8px;border-collapse:collapse;margin-bottom:8px">' +
-      '<tr style="background:#f8fafc"><td style="padding:10px 16px"><span style="font-size:14px;font-weight:700;color:' + color + ';font-family:Arial,sans-serif">' + icon + ' ' + label + '</span></td>' +
-      '<td style="padding:10px 16px;text-align:right">' +
-      '<div style="display:inline-block;width:120px;height:6px;background:#e2e8f0;border-radius:3px;vertical-align:middle;position:relative">' +
-      '<div style="position:absolute;left:0;top:0;width:' + barW + 'px;height:6px;background:' + oc + ';border-radius:3px"></div></div>' +
-      '&nbsp;<span style="font-size:18px;font-weight:700;color:' + oc + ';font-family:Arial,sans-serif;vertical-align:middle">' + overall + '%</span></td></tr>' +
-      complianceRow('Opening Checks', openAct, openExp) +
-      complianceRow('Closing Checks', closeAct, closeExp) +
-      complianceRow('Equipment Checks', equipAct, equipExp) +
-      (probeExp > 0 ? complianceRow('Food Probes', probeAct, probeExp) : '') +
-      (cleanExp > 0 ? complianceRow('Cleaning Schedule', cleanAct, cleanExp) : '') +
-      missingNoteHtml +
-      '</table>';
+    var rowsHtml = rows.map(function(r) { return r.e > 0 ? complianceRow(r.label, r.a, r.e) : ''; }).join('');
+    var lastPad  = missingLines && missingLines.length ? '' : ' style="padding-bottom:14px"';
+    // patch last complianceRow padding if no missing note
+    if (!missingLines || !missingLines.length) {
+      rowsHtml = rowsHtml.replace(/(<tr style="border-top:1px solid #f1f5f9"><td style="padding:10px 16px" colspan="2">)(?!.*<tr style)/, function(m) {
+        return m.replace('padding:10px 16px', 'padding:10px 16px 14px');
+      });
+    }
+    return '<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:10px;border-collapse:collapse;margin-bottom:10px">' +
+      '<tr style="background:#f8fafc"><td style="padding:14px 16px;font-size:15px;font-weight:700;color:' + color + ';font-family:Arial,sans-serif">' + icon + ' ' + label + '</td>' +
+      '<td style="padding:14px 16px;text-align:right;font-size:22px;font-weight:700;color:' + oc + ';font-family:Arial,sans-serif">' + overall + '%</td></tr>' +
+      rowsHtml + missingHtml + '</table>';
   }
 
-  // Count trading days per dept using isTradingAS — same logic as the PWA
+  // Count trading days
   var kTradingDays = 0, fTradingDays = 0;
   weekDates.forEach(function(date) {
     if (isTradingAS('kitchen', settings, date)) kTradingDays++;
     if (isTradingAS('foh',     settings, date)) fTradingDays++;
   });
 
-  // Submission-level compliance: 1 point per expected submission per trading day
-  var kOpenAct = 0, kOpenExp = kTradingDays;
-  var kCloseAct = 0, kCloseExp = kTradingDays;
-  var fOpenAct = 0, fOpenExp = fTradingDays;
-  var fCloseAct = 0, fCloseExp = fTradingDays;
+  var kOpenAct=0,kCloseAct=0,fOpenAct=0,fCloseAct=0;
+  var kEquipAct=0,fEquipAct=0,kProbeAct=0;
+  var kCleanAct=0,fCleanAct=0;
+  var kMissingOpen=0,kMissingClose=0,fMissingOpen=0,fMissingClose=0;
+  var kDaysOk=0,fDaysOk=0;
+
   weekDates.forEach(function(date) {
     if (isTradingAS('kitchen', settings, date)) {
-      if (opening.some(function(r) { return r.date===date && r.dept==='kitchen'; })) kOpenAct++;
-      if (closing.some(function(r) { return r.date===date && r.dept==='kitchen'; })) kCloseAct++;
+      var kOp = opening.some(function(r) { return r.date===date && r.dept==='kitchen'; });
+      var kCl = closing.some(function(r) { return r.date===date && r.dept==='kitchen'; });
+      if (kOp) kOpenAct++;  else kMissingOpen++;
+      if (kCl) kCloseAct++; else kMissingClose++;
+      if (kOp && kCl) kDaysOk++;
+      kEquipAct += equipBatches('kitchen', date);
+      kProbeAct += probeOnDate(date);
+      if (settings.cleaningEnabled && cleaning.some(function(r) { return r.date===date && r.dept==='kitchen'; })) kCleanAct++;
     }
     if (isTradingAS('foh', settings, date)) {
-      if (opening.some(function(r) { return r.date===date && r.dept==='foh'; })) fOpenAct++;
-      if (closing.some(function(r) { return r.date===date && r.dept==='foh'; })) fCloseAct++;
+      var fOp = opening.some(function(r) { return r.date===date && r.dept==='foh'; });
+      var fCl = closing.some(function(r) { return r.date===date && r.dept==='foh'; });
+      if (fOp) fOpenAct++;  else fMissingOpen++;
+      if (fCl) fCloseAct++; else fMissingClose++;
+      if (fOp && fCl) fDaysOk++;
+      fEquipAct += equipBatches('foh', date);
+      if (settings.cleaningEnabled && cleaning.some(function(r) { return r.date===date && r.dept==='foh'; })) fCleanAct++;
     }
   });
 
-  var kEquipAct = 0, kEquipExp = kTradingDays * 2;
-  var fEquipAct = 0, fEquipExp = fTradingDays * 2;
-  var kProbeAct = 0, kProbeExp = kTradingDays;
-  var kCleanAct = 0, kCleanExp = settings.cleaningEnabled ? kTradingDays : 0;
-  var fCleanAct = 0, fCleanExp = settings.cleaningEnabled ? fTradingDays : 0;
-  weekDates.forEach(function(date) {
-    kEquipAct += equipBatches('kitchen', date);
-    fEquipAct += equipBatches('foh', date);
-    kProbeAct += probeOnDate(date);
-    if (settings.cleaningEnabled) {
-      if (cleaning.some(function(r) { return r.date===date && r.dept==='kitchen'; })) kCleanAct++;
-      if (cleaning.some(function(r) { return r.date===date && r.dept==='foh'; }))     fCleanAct++;
-    }
-  });
+  var kMissingDays = kTradingDays - kDaysOk;
+  var fMissingDays = fTradingDays - fDaysOk;
 
-  // ── Missing day detection ─────────────────────────
-  // A day counts as "complete" only if BOTH opening and closing were submitted.
-  // Used to caveat compliance scores in the dept cards and show an
-  // incomplete week banner. Score still shows — based on submitted days only.
-  var kDaysWithChecks = 0, fDaysWithChecks = 0;
-  var kMissingOpen = 0, kMissingClose = 0, fMissingOpen = 0, fMissingClose = 0;
-  weekDates.forEach(function(date) {
-    if (isTradingAS('kitchen', settings, date)) {
-      var kOpen  = opening.some(function(r) { return r.date===date && r.dept==='kitchen'; });
-      var kClose = closing.some(function(r) { return r.date===date && r.dept==='kitchen'; });
-      if (kOpen && kClose) kDaysWithChecks++;
-      if (!kOpen)  kMissingOpen++;
-      if (!kClose) kMissingClose++;
-    }
-    if (isTradingAS('foh', settings, date)) {
-      var fOpen  = opening.some(function(r) { return r.date===date && r.dept==='foh'; });
-      var fClose = closing.some(function(r) { return r.date===date && r.dept==='foh'; });
-      if (fOpen && fClose) fDaysWithChecks++;
-      if (!fOpen)  fMissingOpen++;
-      if (!fClose) fMissingClose++;
-    }
-  });
-  var kMissingDays = kTradingDays - kDaysWithChecks;
-  var fMissingDays = fTradingDays - fDaysWithChecks;
+  function missingLines(missingOpen, missingClose) {
+    var lines = [];
+    if (missingOpen  > 0) lines.push({ color: '#d97706', text: missingOpen  + ' day' + (missingOpen !==1?'s':'') + ' missing opening submission' });
+    if (missingClose > 0) lines.push({ color: '#dc2626', text: missingClose + ' day' + (missingClose!==1?'s':'') + ' missing closing submission' });
+    return lines;
+  }
+
+  var kRows = [
+    { label: 'Opening Checks',   a: kOpenAct,  e: kTradingDays },
+    { label: 'Closing Checks',   a: kCloseAct, e: kTradingDays },
+    { label: 'Equipment Checks', a: kEquipAct, e: kTradingDays * 2 },
+    { label: 'Food Probes',      a: kProbeAct, e: kTradingDays },
+  ];
+  if (settings.cleaningEnabled) kRows.push({ label: 'Cleaning Schedule', a: kCleanAct, e: kTradingDays });
+  var fRows = [
+    { label: 'Opening Checks',   a: fOpenAct,  e: fTradingDays },
+    { label: 'Closing Checks',   a: fCloseAct, e: fTradingDays },
+    { label: 'Equipment Checks', a: fEquipAct, e: fTradingDays * 2 },
+  ];
+  if (settings.cleaningEnabled) fRows.push({ label: 'Cleaning Schedule', a: fCleanAct, e: fTradingDays });
 
   const complianceHtml =
-    deptCard('Kitchen', '&#x1F373;', '#f59e0b', kOpenAct, kOpenExp, kCloseAct, kCloseExp, kEquipAct, kEquipExp, kProbeAct, kProbeExp, kCleanAct, kCleanExp, kMissingDays, kTradingDays) +
-    deptCard('Front of House', '&#x1F37D;', '#3b82f6', fOpenAct, fOpenExp, fCloseAct, fCloseExp, fEquipAct, fEquipExp, 0, 0, fCleanAct, fCleanExp, fMissingDays, fTradingDays);
+    deptCard('Kitchen',        '&#x1F373;', '#d97706', kRows, kMissingDays > 0 ? missingLines(kMissingOpen, kMissingClose) : null) +
+    deptCard('Front of House', '&#x1F37D;', '#3b82f6', fRows, fMissingDays > 0 ? missingLines(fMissingOpen, fMissingClose) : null);
 
-  // ── Weekly management review ──────────────────────
-  var reviewHtml = '';
+  // ── Incomplete week banner ───────────────────────────
+  var totalMissingDays = kMissingDays + fMissingDays;
+  var incompleteBanner = '';
+  if (totalMissingDays > 0) {
+    var parts = [];
+    if (kMissingDays > 0) {
+      var kLines = '';
+      if (kMissingOpen  > 0) kLines += '<p style="margin:0 0 3px;font-size:12px;color:#64748b;font-family:Arial,sans-serif"><span style="font-size:9px;color:#d97706">&#x25CF;</span> <span style="font-weight:600;color:#d97706">Opening missing on ' + kMissingOpen + ' day' + (kMissingOpen!==1?'s':'') + '</span></p>';
+      if (kMissingClose > 0) kLines += '<p style="margin:0 0 3px;font-size:12px;color:#64748b;font-family:Arial,sans-serif"><span style="font-size:9px;color:#dc2626">&#x25CF;</span> <span style="font-weight:600;color:#dc2626">Closing missing on ' + kMissingClose + ' day' + (kMissingClose!==1?'s':'') + '</span></p>';
+      parts.push('<p style="margin:0 0 5px;font-size:12px;font-weight:700;color:#1e293b;font-family:Arial,sans-serif">&#x1F373; Kitchen</p>' + kLines);
+    }
+    if (fMissingDays > 0) {
+      var fLines = '';
+      if (fMissingOpen  > 0) fLines += '<p style="margin:0 0 3px;font-size:12px;color:#64748b;font-family:Arial,sans-serif"><span style="font-size:9px;color:#d97706">&#x25CF;</span> <span style="font-weight:600;color:#d97706">Opening missing on ' + fMissingOpen + ' day' + (fMissingOpen!==1?'s':'') + '</span></p>';
+      if (fMissingClose > 0) fLines += '<p style="margin:0 0 3px;font-size:12px;color:#64748b;font-family:Arial,sans-serif"><span style="font-size:9px;color:#dc2626">&#x25CF;</span> <span style="font-weight:600;color:#dc2626">Closing missing on ' + fMissingClose + ' day' + (fMissingClose!==1?'s':'') + '</span></p>';
+      parts.push('<p style="margin:12px 0 5px;font-size:12px;font-weight:700;color:#1e293b;font-family:Arial,sans-serif">&#x1F37D; Front of House</p>' + fLines);
+    }
+    incompleteBanner = divider +
+      '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">' +
+      '<tr><td style="padding:16px 28px">' +
+      '<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px"><tr>' +
+      '<td style="font-size:16px;font-weight:700;color:#0f172a;font-family:Arial,sans-serif">Incomplete week</td>' +
+      '<td style="text-align:right;font-size:18px">&#x26A0;</td></tr></table>' +
+      parts.join('') +
+      '<p style="margin:12px 0 0;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">Compliance scores are based on submitted days only.</p>' +
+      '</td></tr></table>';
+  }
+
+  // ── Weekly management review ─────────────────────────
+  var reviewBody = '';
   if (!weeklyRec) {
-    reviewHtml = '<tr><td style="padding:10px 24px;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No weekly review submitted</td></tr>';
+    reviewBody = '<p style="margin:0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No weekly review submitted</p>';
   } else {
-    const f       = weeklyRec.fields || {};
-    const rating  = f.weekly_rating    || '';
-    const issues  = f.weekly_issues    || '';
-    const actions = f.weekly_actions   || '';
-    const signed  = f.weekly_signed_by || '';
-    const rc = rating==='Good' ? '#22c55e' : rating==='Satisfactory' ? '#f59e0b' : rating==='Needs Improvement' ? '#ef4444' : '#94a3b8';
+    const f      = weeklyRec.fields || {};
+    const rating = f.weekly_rating    || '';
+    const issues = f.weekly_issues    || '';
+    const actions= f.weekly_actions   || '';
+    const signed = f.weekly_signed_by || '';
+    const rc     = rating==='Good' ? '#16a34a' : rating==='Satisfactory' ? '#d97706' : rating==='Needs Improvement' ? '#dc2626' : '#94a3b8';
 
-    // Build checklist table from settings checks
     var checklistHtml = '';
     var mgmtChecks = (settings.checks && settings.checks.mgmt && settings.checks.mgmt.weekly) ? settings.checks.mgmt.weekly : [];
-    if (mgmtChecks.length > 0) {
+    if (mgmtChecks.length) {
       var checkRows = mgmtChecks.filter(function(c) { return c.enabled !== false; }).map(function(c, i) {
         var answer = f[c.id];
         if (answer !== 'Yes' && answer !== 'No') return '';
-        var ansColor = answer === 'Yes' ? '#22c55e' : '#ef4444';
-        var rowBg = i % 2 === 0 ? '' : 'background:#fafafa';
-        return '<tr style="border-top:1px solid #f1f5f9;' + rowBg + '">' +
+        var ac = answer === 'Yes' ? '#16a34a' : '#dc2626';
+        return '<tr style="border-top:1px solid #f1f5f9' + (i%2===1?';background:#fafafa':'') + '">' +
           '<td style="padding:7px 12px;font-size:12px;color:#334155;font-family:Arial,sans-serif">' + c.label + '</td>' +
-          '<td style="padding:7px 12px;text-align:right;white-space:nowrap"><span style="font-size:12px;font-weight:700;color:' + ansColor + ';font-family:Arial,sans-serif">' + answer + '</span></td>' +
-          '</tr>';
+          '<td style="padding:7px 12px;text-align:right"><span style="font-size:12px;font-weight:700;color:' + ac + ';font-family:Arial,sans-serif">' + answer + '</span></td></tr>';
       }).join('');
-
       if (checkRows) {
-        checklistHtml = '<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:14px">' +
-          '<tr style="background:#f8fafc">' +
-          '<td style="padding:6px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;font-family:Arial,sans-serif">Checklist Item</td>' +
-          '<td style="padding:6px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;font-family:Arial,sans-serif;text-align:right;width:50px">Result</td>' +
-          '</tr>' + checkRows + '</table>';
+        checklistHtml = '<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-bottom:16px">' +
+          '<tr style="background:#f8fafc"><td style="padding:6px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;font-family:Arial,sans-serif">Checklist Item</td>' +
+          '<td style="padding:6px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;font-family:Arial,sans-serif;text-align:right;width:50px">Result</td></tr>' +
+          checkRows + '</table>';
       }
     }
 
-    reviewHtml = '<tr><td style="padding:8px 24px 14px">' +
-      // Rating badge + sign-off on same line
-      '<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:14px"><tr>' +
+    reviewBody =
+      '<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px"><tr>' +
       '<td>' + (rating ? '<div style="display:inline-block;border:2px solid ' + rc + ';color:' + rc + ';border-radius:8px;padding:5px 14px;font-size:13px;font-weight:700;font-family:Arial,sans-serif">' + rating + '</div>' : '') + '</td>' +
       '<td style="text-align:right;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">' + (signed ? 'Signed: ' + signed + (weeklyRec.time ? ' &middot; ' + weeklyRec.time : '') : '') + '</td>' +
       '</tr></table>' +
-      // Full checklist
       checklistHtml +
-      // Issues & Actions
-      (issues  ? '<p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#94a3b8;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:.05em">Issues</p><p style="margin:0 0 12px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + issues + '</p>' : '') +
-      (actions ? '<p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#94a3b8;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:.05em">Actions</p><p style="margin:0;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + actions + '</p>' : '') +
-      '</td></tr>';
+      (issues  ? '<p style="margin:0 0 6px;font-size:11px;font-weight:700;color:#94a3b8;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:.05em">Issues</p>' + sentenceDots(issues, '#64748b') + '<div style="margin-bottom:14px"></div>' : '') +
+      (actions ? '<p style="margin:0 0 6px;font-size:11px;font-weight:700;color:#94a3b8;font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:.05em">Actions</p>' + sentenceDots(actions, '#64748b') : '');
   }
-  const reviewSection = sectionHeader('&#x1F4CB; Weekly Management Review') + reviewHtml;
 
-  // ── Failed checks ─────────────────────────────────
-  // Build a label lookup from settings so we show the real check name, not the raw ID
+  // ── Failed checks ─────────────────────────────────────
   var checkLabelMap = {};
-  if (settings && settings.checks) {
-    Object.values(settings.checks).forEach(function(dept) {
-      if (dept && typeof dept === 'object') {
-        Object.values(dept).forEach(function(arr) {
-          if (Array.isArray(arr)) arr.forEach(function(c) { if (c && c.id && c.label) checkLabelMap[c.id] = c.label; });
-        });
-      }
-    });
-  }
-  if (settings && settings.sharedChecks) {
-    Object.values(settings.sharedChecks).forEach(function(arr) {
-      if (Array.isArray(arr)) arr.forEach(function(c) { if (c && c.id && c.label) checkLabelMap[c.id] = c.label; });
-    });
-  }
+  if (settings && settings.checks) { Object.values(settings.checks).forEach(function(dept) { if (dept && typeof dept==='object') { Object.values(dept).forEach(function(arr) { if (Array.isArray(arr)) arr.forEach(function(c) { if (c && c.id && c.label) checkLabelMap[c.id]=c.label; }); }); } }); }
+  if (settings && settings.sharedChecks) { Object.values(settings.sharedChecks).forEach(function(arr) { if (Array.isArray(arr)) arr.forEach(function(c) { if (c && c.id && c.label) checkLabelMap[c.id]=c.label; }); }); }
+
   var failedRows = '';
   opening.concat(closing).forEach(function(r) {
-    var type = opening.indexOf(r) >= 0 ? 'Opening' : 'Closing';
-    var dept = r.dept === 'kitchen' ? '&#x1F373; Kitchen' : '&#x1F37D; FOH';
-    var signed = r.signedBy || '&#8212;';
+    var checkType = opening.indexOf(r) >= 0 ? 'Opening' : 'Closing';
+    var deptLabel = r.dept==='kitchen' ? '&#x1F373; Kitchen' : '&#x1F37D; FOH';
     Object.entries(r.fields||{}).forEach(function(e) {
       if (e[1] !== 'No') return;
       var label = checkLabelMap[e[0]] || e[0].replace(/_/g,' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
-      failedRows += '<tr style="border-bottom:1px solid #fee2e2">' +
-        '<td style="padding:6px 8px;font-size:12px;color:#991b1b;font-weight:600;font-family:Arial,sans-serif">&#x2717; ' + label + '</td>' +
-        '<td style="padding:6px 8px;font-size:11px;color:#64748b;font-family:Arial,sans-serif">' + dept + ' ' + type + '</td>' +
-        '<td style="padding:6px 8px;font-size:11px;color:#64748b;font-family:Arial,sans-serif">' + dayStr(r.date) + '</td>' +
-        '<td style="padding:6px 8px;font-size:11px;color:#64748b;font-family:Arial,sans-serif">' + signed + '</td></tr>';
+      failedRows += '<tr style="border-bottom:1px solid #f1f5f9">' +
+        '<td style="padding:8px;font-size:12px;color:#64748b;font-family:Arial,sans-serif;white-space:nowrap">' + dayStr(r.date) + '</td>' +
+        '<td style="padding:8px;font-size:11px;color:#64748b;font-family:Arial,sans-serif;white-space:nowrap">' + deptLabel + ' ' + checkType + '</td>' +
+        '<td style="padding:8px;font-size:12px;font-weight:600;color:#dc2626;font-family:Arial,sans-serif">&#x2717; ' + label + '</td>' +
+        '<td style="padding:8px;font-size:11px;color:#64748b;font-family:Arial,sans-serif">' + (r.signedBy||'&mdash;') + '</td></tr>';
     });
   });
   const failedSection = failedRows
-    ? sectionHeader('&#x26A0; Failed Checks') +
-      '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#fef2f2;border-radius:6px">' +
-      '<tr style="background:#fee2e2"><td style="font-size:10px;color:#991b1b;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Check</td>' +
-      '<td style="font-size:10px;color:#991b1b;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Dept</td>' +
-      '<td style="font-size:10px;color:#991b1b;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Day</td>' +
-      '<td style="font-size:10px;color:#991b1b;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Signed</td></tr>' +
-      failedRows + '</table></td></tr>'
+    ? sectionBlock('&#x26A0; Failed Checks',
+        '<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
+        '<tr style="background:#f8fafc"><td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Date</td>' +
+        '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Dept</td>' +
+        '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Check</td>' +
+        '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Signed</td></tr>' +
+        failedRows + '</table>')
     : '';
 
-  // ── Temperature breaches ──────────────────────────
+  // ── Temperature breaches ──────────────────────────────
   var breachRows = '';
   temps.filter(function(r) { return r.status==='FAIL'; }).forEach(function(r) {
-    breachRows += '<tr style="border-bottom:1px solid #fee2e2">' +
-      '<td style="padding:6px 8px;font-size:13px;font-weight:600;color:#334155;font-family:Arial,sans-serif">' + r.location + '</td>' +
-      '<td style="padding:6px 8px;font-size:13px;font-weight:700;color:#ef4444;font-family:monospace">' + (r.temp ? r.temp+'°C' : '—') + '</td>' +
-      '<td style="padding:6px 8px"><span style="background:#fee2e2;color:#991b1b;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">FAIL</span></td>' +
-      '<td style="padding:6px 8px;font-size:11px;color:#64748b;font-family:Arial,sans-serif">' + dayStr(r.date) + (r.time ? ' · ' + fmtTime(r.time) : '') + '</td>' +
-      '<td style="padding:6px 8px;font-size:11px;color:#f59e0b;font-family:Arial,sans-serif;font-style:italic">' + (r.action && r.action!=='See notes' ? '↳ ' + r.action : '') + '</td></tr>';
+    var timeStr = r.time ? fmtTime(r.time) : '';
+    breachRows += '<tr style="border-bottom:1px solid #f1f5f9">' +
+      '<td style="padding:9px 8px;font-size:11px;color:#64748b;font-family:Arial,sans-serif">' + dayStr(r.date) + (timeStr ? '<br><span style="color:#94a3b8">' + timeStr + '</span>' : '') + '</td>' +
+      '<td style="padding:9px 8px;font-size:13px;font-weight:600;color:#334155;font-family:Arial,sans-serif">' + r.location + '</td>' +
+      '<td style="padding:9px 8px;font-size:13px;font-weight:700;color:#dc2626;font-family:monospace">' + (r.temp ? r.temp + '&deg;C' : '&mdash;') + '</td>' +
+      '<td style="padding:9px 8px;white-space:nowrap">' + dot('#dc2626') + ' <span style="font-size:12px;font-weight:600;color:#dc2626;font-family:Arial,sans-serif">FAIL</span></td>' +
+      '<td style="padding:9px 8px;font-size:11px;color:#64748b;font-family:Arial,sans-serif;font-style:italic">' + (r.action && r.action!=='None required' ? r.action : '&mdash;') + '</td></tr>';
   });
   const breachSection = breachRows
-    ? sectionHeader('&#x1F6A8; Temperature Breaches') +
-      '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background:#fef2f2;border-radius:6px">' +
-      '<tr style="background:#fee2e2"><td style="font-size:10px;color:#991b1b;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Equipment</td>' +
-      '<td style="font-size:10px;color:#991b1b;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Reading</td>' +
-      '<td style="font-size:10px;color:#991b1b;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Status</td>' +
-      '<td style="font-size:10px;color:#991b1b;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">When</td>' +
-      '<td style="font-size:10px;color:#991b1b;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Action</td></tr>' +
-      breachRows + '</table></td></tr>'
+    ? sectionBlock('&#x1F6A8; Temperature Breaches',
+        '<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
+        '<tr style="background:#f8fafc">' +
+        '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Date</td>' +
+        '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Equipment</td>' +
+        '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Reading</td>' +
+        '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Status</td>' +
+        '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Action</td></tr>' +
+        breachRows + '</table>')
     : '';
 
-  // ── Full equipment log ─────────────────────────────
-  var tempRows = '';
-  if (!temps.length) {
-    tempRows = '<tr><td colspan="5" style="padding:10px 8px;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No equipment checks this week</td></tr>';
-  } else {
-    temps.forEach(function(r) {
-      const bg = r.status==='OK' ? '#dcfce7' : r.status==='WARNING' ? '#fef3c7' : '#fee2e2';
-      const fg = r.status==='OK' ? '#166534' : r.status==='WARNING' ? '#92400e' : '#991b1b';
-      const rowBg = r.status==='FAIL' ? 'background:#fef2f2' : r.status==='WARNING' ? 'background:#fffbeb' : '';
-      const action = r.action && r.action!=='None required' && r.action!=='See notes' ? r.action : '';
-      tempRows += '<tr style="border-bottom:1px solid #f1f5f9;' + rowBg + '">' +
-        '<td style="padding:6px 8px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + dayStr(r.date) + '</td>' +
-        '<td style="padding:6px 8px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + r.location + '</td>' +
-        '<td style="padding:6px 8px;font-size:13px;font-weight:600;color:#334155;font-family:monospace">' + (r.temp ? r.temp+'°C' : '—') + '</td>' +
-        '<td style="padding:6px 8px"><span style="background:' + bg + ';color:' + fg + ';padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + r.status + '</span></td>' +
-        '<td style="padding:6px 8px;font-size:11px;color:#f59e0b;font-family:Arial,sans-serif;font-style:italic">' + (action ? '↳ ' + action : '—') + '</td></tr>';
-    });
-  }
-  const tempSection = sectionHeader('&#x1F321; Equipment Checks · ' + temps.length + ' reading' + (temps.length!==1?'s':'')) +
-    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
-    '<tr style="background:#f8fafc">' +
-    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Day</td>' +
-    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Equipment</td>' +
-    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Reading</td>' +
-    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Status</td>' +
-    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Action</td></tr>' +
-    tempRows + '</table></td></tr>';
+  // ── Equipment log ─────────────────────────────────────
+  var tempRows = !temps.length
+    ? '<tr><td colspan="5" style="padding:10px 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No equipment checks this week</td></tr>'
+    : temps.map(function(r) {
+        var dc = r.status==='OK' ? '#16a34a' : r.status==='WARNING' ? '#d97706' : '#dc2626';
+        var action = r.action && r.action!=='None required' && r.action!=='See notes' ? r.action : '&mdash;';
+        return '<tr style="border-bottom:1px solid #f1f5f9">' +
+          '<td style="padding:8px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + dayStr(r.date) + '</td>' +
+          '<td style="padding:8px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + r.location + '</td>' +
+          '<td style="padding:8px;font-size:13px;font-weight:600;color:#334155;font-family:monospace">' + (r.temp ? r.temp + '&deg;C' : '&mdash;') + '</td>' +
+          '<td style="padding:8px;white-space:nowrap">' + dot(dc) + ' <span style="font-size:12px;font-weight:600;color:' + dc + ';font-family:Arial,sans-serif">' + r.status + '</span></td>' +
+          '<td style="padding:8px;font-size:11px;color:#64748b;font-family:Arial,sans-serif;font-style:italic">' + action + '</td></tr>';
+      }).join('');
 
-  // ── Food probe log ────────────────────────────────
-  var probeRows = '';
-  if (!probes.length) {
-    probeRows = '<tr><td colspan="4" style="padding:10px 8px;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No food probes this week</td></tr>';
-  } else {
-    probes.forEach(function(r) {
-      const pass = r.status === 'PASS';
-      const bg = pass ? '#dcfce7' : '#fee2e2';
-      const fg = pass ? '#166534' : '#991b1b';
-      const rowBg = pass ? '' : 'background:#fef2f2';
-      const coolingHtml = r.cooling ? '<p style="margin:3px 0 0;font-size:11px;color:#60a5fa;font-family:Arial,sans-serif">&#x2744; Cooled for ' + r.cooling + '</p>' : '';
-      probeRows += '<tr style="border-bottom:1px solid #f1f5f9;' + rowBg + '">' +
-        '<td style="padding:6px 8px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + dayStr(r.date) + '</td>' +
-        '<td style="padding:6px 8px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + r.product + coolingHtml + '</td>' +
-        '<td style="padding:6px 8px;font-size:13px;font-weight:600;font-family:monospace;color:#334155">' + (r.temp ? r.temp+'°C' : '—') + '</td>' +
-        '<td style="padding:6px 8px"><span style="background:' + bg + ';color:' + fg + ';padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + r.status + '</span>' +
-        (!pass && r.action ? '<p style="margin:3px 0 0;font-size:11px;color:#f59e0b;font-family:Arial,sans-serif;font-style:italic">↳ ' + r.action + '</p>' : '') + '</td></tr>';
-    });
-  }
-  const probeSection = sectionHeader('&#x1F356; Food Probes · ' + (probes.length || 'none')) +
-    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
+  const tempSection = sectionBlock(
+    '&#x1F321; Equipment Checks &nbsp;<span style="font-weight:400;color:#94a3b8">' + temps.length + ' reading' + (temps.length!==1?'s':'') + '</span>',
+    '<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
     '<tr style="background:#f8fafc">' +
-    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Day</td>' +
-    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Product</td>' +
-    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Core Temp</td>' +
-    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Result</td></tr>' +
-    probeRows + '</table></td></tr>';
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Date</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Equipment</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Reading</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Status</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Action</td></tr>' +
+    tempRows + '</table>'
+  );
 
-  // ── Goods In ──────────────────────────────────────
-  var giRows = '';
-  if (!goodsIn.length) {
-    giRows = '<tr><td colspan="5" style="padding:10px 8px;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No deliveries this week</td></tr>';
-  } else {
-    goodsIn.forEach(function(r) {
-      const f = r.fields || {};
-      const isAcc = f.gi_outcome === 'accepted';
-      const isAmb2 = f.gi_type === 'ambient';
-      const typeIcon = f.gi_type === 'frozen' ? '&#x2744;' : isAmb2 ? '&#x1F4E6;' : '&#x1F33F;';
-      const tempStyle = isAmb2 ? 'color:#94a3b8' : 'font-weight:600';
-      giRows += '<tr style="border-bottom:1px solid #f1f5f9">' +
-        '<td style="padding:6px 8px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + dayStr(r.date) + '</td>' +
-        '<td style="padding:6px 8px;font-size:13px;font-weight:600;font-family:Arial,sans-serif">' + (f.gi_supplier||'—') + '</td>' +
-        '<td style="padding:6px 8px;font-size:12px;font-family:Arial,sans-serif;color:#94a3b8">' + typeIcon + ' ' + (f.gi_type||'') + '</td>' +
-        '<td style="padding:6px 8px;font-size:13px;font-family:monospace;' + tempStyle + '">' + (f.gi_temp ? f.gi_temp+'°C' : '—') + '</td>' +
-        '<td style="padding:6px 8px"><span style="background:' + (isAcc?'#dcfce7':'#fee2e2') + ';color:' + (isAcc?'#166534':'#991b1b') + ';padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;font-family:Arial,sans-serif">' + (isAcc?'Accepted':'Rejected') + '</span></td></tr>';
-      if (f.gi_notes) giRows += '<tr><td colspan="5" style="padding:0 8px 6px;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">↳ ' + f.gi_notes + '</td></tr>';
-    });
-  }
-  const giSection = sectionHeader('&#x1F4E6; Goods In · ' + (goodsIn.length || 'none')) +
-    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
+  // ── Food probes ───────────────────────────────────────
+  var probeRows = !probes.length
+    ? '<tr><td colspan="4" style="padding:10px 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No food probes this week</td></tr>'
+    : probes.map(function(r) {
+        var pass = r.status === 'PASS';
+        var dc   = pass ? '#16a34a' : '#dc2626';
+        var coolingHtml = r.cooling ? '<p style="margin:3px 0 0;font-size:11px;color:#60a5fa;font-family:Arial,sans-serif">&#x2744; Cooled for ' + r.cooling + '</p>' : '';
+        var rows = '<tr style="border-bottom:1px solid #f1f5f9">' +
+          '<td style="padding:8px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + dayStr(r.date) + '</td>' +
+          '<td style="padding:8px;font-size:13px;color:#334155;font-family:Arial,sans-serif">' + r.product + coolingHtml + '</td>' +
+          '<td style="padding:8px;font-size:13px;font-weight:600;color:#334155;font-family:monospace">' + (r.temp ? r.temp + '&deg;C' : '&mdash;') + '</td>' +
+          '<td style="padding:8px;white-space:nowrap">' + dot(dc) + ' <span style="font-size:12px;font-weight:600;color:' + dc + ';font-family:Arial,sans-serif">' + r.status + '</span></td></tr>';
+        if (!pass && r.action && r.action!=='None required') {
+          rows += '<tr style="border-bottom:1px solid #f1f5f9"><td colspan="4" style="padding:0 8px 8px;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">&#x21B3; Action: ' + r.action + '</td></tr>';
+        }
+        return rows;
+      }).join('');
+
+  const probeSection = sectionBlock(
+    '&#x1F356; Food Probes &nbsp;<span style="font-weight:400;color:#94a3b8">' + (probes.length || 'none') + '</span>',
+    '<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
     '<tr style="background:#f8fafc">' +
-    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Day</td>' +
-    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Supplier</td>' +
-    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Type</td>' +
-    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Temp</td>' +
-    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:4px 8px;font-weight:600;text-transform:uppercase">Outcome</td></tr>' +
-    giRows + '</table></td></tr>';
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Date</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Product</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Core Temp</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Result</td></tr>' +
+    probeRows + '</table>'
+  );
 
-  // ── Tasks ─────────────────────────────────────────
+  // ── Goods In ──────────────────────────────────────────
+  var giRows = !goodsIn.length
+    ? '<tr><td colspan="5" style="padding:10px 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No deliveries this week</td></tr>'
+    : goodsIn.map(function(r) {
+        const f      = r.fields || {};
+        const isAcc  = f.gi_outcome === 'accepted';
+        const isAmb  = f.gi_type === 'ambient';
+        const tIcon  = f.gi_type==='frozen' ? '&#x2744;' : isAmb ? '&#x1F4E6;' : '&#x1F33F;';
+        const tColor = isAmb ? '#94a3b8' : f.gi_temp_status==='FAIL' ? '#dc2626' : f.gi_temp_status==='WARNING' ? '#d97706' : '#16a34a';
+        const oColor = isAcc ? '#16a34a' : '#dc2626';
+        var rows = '<tr style="border-bottom:1px solid #f1f5f9">' +
+          '<td style="padding:8px;font-size:12px;color:#64748b;font-family:Arial,sans-serif">' + dayStr(r.date) + '</td>' +
+          '<td style="padding:8px;font-size:13px;font-weight:600;font-family:Arial,sans-serif;color:#1e293b">' + (f.gi_supplier||'&mdash;') + '</td>' +
+          '<td style="padding:8px;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">' + tIcon + ' ' + (f.gi_type||'') + '</td>' +
+          '<td style="padding:8px;font-size:13px;font-family:monospace;font-weight:600;color:' + tColor + '">' + (f.gi_temp ? f.gi_temp + '&deg;C' : '&mdash;') + '</td>' +
+          '<td style="padding:8px;font-size:12px;font-weight:700;color:' + oColor + ';font-family:Arial,sans-serif">' + (isAcc ? 'Accepted' : 'Rejected') + '</td></tr>';
+        if (f.gi_notes) rows += '<tr style="border-bottom:1px solid #f1f5f9"><td colspan="5" style="padding:0 8px 8px;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">&#x21B3; ' + f.gi_notes + '</td></tr>';
+        return rows;
+      }).join('');
+
+  const giSection = sectionBlock(
+    '&#x1F4E6; Goods In &nbsp;<span style="font-weight:400;color:#94a3b8">' + (goodsIn.length || 'none') + '</span>',
+    '<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">' +
+    '<tr style="background:#f8fafc">' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Date</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Supplier</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Type</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Temp</td>' +
+    '<td style="font-size:10px;color:#94a3b8;font-family:Arial,sans-serif;padding:6px 8px;font-weight:600;text-transform:uppercase">Outcome</td></tr>' +
+    giRows + '</table>'
+  );
+
+  // ── Tasks ─────────────────────────────────────────────
   const doneCount = tasks.filter(function(t) { return t.done; }).length;
-  var taskRows = '';
-  if (!tasks.length) {
-    taskRows = '<tr><td colspan="3" style="padding:10px 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No tasks scheduled this week</td></tr>';
-  } else {
-    taskRows = tasks.map(function(t) {
-      const d = new Date((t.date||'') + 'T12:00:00');
-      const ds = t.date ? DAY_ABBR[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth()+1) : '';
-      return '<tr style="border-bottom:1px solid #f1f5f9">' +
-        '<td style="padding:5px 0;font-size:12px;color:#64748b;font-family:Arial,sans-serif;width:60px">' + ds + '</td>' +
-        '<td style="padding:5px 8px;font-size:13px;color:' + (t.done?'#334155':'#94a3b8') + ';font-family:Arial,sans-serif;font-style:' + (t.done?'normal':'italic') + '">' + (t.done?'✓ ':'') + t.label + '</td>' +
-        '<td style="text-align:right"><span style="font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">' + (t.done ? (t.doneBy||'') : '<span style="background:#f1f5f9;color:#94a3b8;padding:2px 8px;border-radius:4px;font-size:11px">Not done</span>') + '</span></td></tr>';
-    }).join('');
-  }
-  const taskSection = sectionHeader('&#x2705; Tasks · ' + doneCount + ' / ' + tasks.length + ' complete') +
-    '<tr><td style="padding:0 24px 14px"><table width="100%" cellpadding="0" cellspacing="0">' + taskRows + '</table></td></tr>';
+  var taskRows = !tasks.length
+    ? '<tr><td colspan="3" style="padding:9px 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">No tasks scheduled this week</td></tr>'
+    : tasks.map(function(t) {
+        const d  = new Date((t.date||'') + 'T12:00:00');
+        const ds = t.date ? DAY_ABBR[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth()+1) : '';
+        if (t.done) {
+          return '<tr style="border-bottom:1px solid #f1f5f9">' +
+            '<td style="padding:9px 0;font-size:12px;color:#64748b;font-family:Arial,sans-serif;width:60px">' + ds + '</td>' +
+            '<td style="padding:9px 8px;font-size:13px;color:#334155;font-family:Arial,sans-serif"><span style="color:#16a34a;font-weight:700">&#x2713;</span> ' + t.label + '</td>' +
+            '<td style="text-align:right;padding:9px 0;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif;white-space:nowrap">' + (t.doneBy||'') + '</td></tr>';
+        }
+        return '<tr style="border-bottom:1px solid #f1f5f9">' +
+          '<td style="padding:9px 0;font-size:12px;color:#64748b;font-family:Arial,sans-serif;width:60px">' + ds + '</td>' +
+          '<td style="padding:9px 8px;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif;font-style:italic">' + t.label + '</td>' +
+          '<td style="text-align:right;padding:9px 0;white-space:nowrap"><span style="font-size:9px;color:#94a3b8">&#x25CF;</span> <span style="font-size:12px;font-weight:600;color:#94a3b8;font-family:Arial,sans-serif">Not done</span></td></tr>';
+      }).join('');
 
-  // ── Assemble ──────────────────────────────────────
-  const sheetsUrl = getSheetsUrl();
+  const taskSection = sectionBlock(
+    '&#x2705; Tasks &nbsp;<span style="font-weight:400;color:#94a3b8">' + doneCount + ' / ' + tasks.length + ' complete</span>',
+    '<table width="100%" cellpadding="0" cellspacing="0">' + taskRows + '</table>'
+  );
 
-  // Incomplete week banner — must be computed before the return statement
-  var totalMissingDays = kMissingDays + fMissingDays;
-  var incompleteBannerHtml = '';
-  if (totalMissingDays > 0) {
-    var missingParts = [];
-    if (kMissingDays > 0) {
-      var kDetail = [];
-      if (kMissingOpen  > 0) kDetail.push('opening missing on ' + kMissingOpen  + ' day' + (kMissingOpen !==1?'s':''));
-      if (kMissingClose > 0) kDetail.push('closing missing on ' + kMissingClose + ' day' + (kMissingClose!==1?'s':''));
-      missingParts.push('&#x1F373; Kitchen: ' + kDetail.join(', '));
-    }
-    if (fMissingDays > 0) {
-      var fDetail = [];
-      if (fMissingOpen  > 0) fDetail.push('opening missing on ' + fMissingOpen  + ' day' + (fMissingOpen !==1?'s':''));
-      if (fMissingClose > 0) fDetail.push('closing missing on ' + fMissingClose + ' day' + (fMissingClose!==1?'s':''));
-      missingParts.push('&#x1F37D; FOH: ' + fDetail.join(', '));
-    }
-    incompleteBannerHtml =
-      '<table width="100%" cellpadding="0" cellspacing="0" style="background:#2d1c07;border-radius:8px;margin-bottom:2px">' +
-      '<tr><td style="padding:12px 24px">' +
-      '<p style="margin:0;font-size:13px;font-weight:700;color:#f59e0b;font-family:Arial,sans-serif">&#x26A0; Incomplete week</p>' +
-      '<p style="margin:4px 0 0;font-size:12px;color:#d97706;font-family:Arial,sans-serif">' +
-      missingParts.join(' &nbsp;&middot;&nbsp; ') + '. Compliance scores in the cards below are based on submitted days only.' +
-      '</p></td></tr></table>';
-  }
+  // ── Assemble ──────────────────────────────────────────
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>' +
+    '<style>@media print{body{background:#fff!important}}</style>' +
+    '</head><body style="margin:0;padding:24px 16px;background:#f8fafc;font-family:Arial,Helvetica,sans-serif">' +
+    '<div style="max-width:640px;margin:0 auto">' +
 
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif">' +
-  incompleteBannerHtml +
-  '<div style="background:#f1f5f9;padding:24px 16px">' +
-  '<table width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;margin:0 auto"><tr><td>' +
+    // Header
+    '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px 12px 0 0;border:1px solid #e2e8f0;border-bottom:none">' +
+    '<tr><td style="padding:28px 28px 24px">' +
+    '<p style="margin:0;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#94a3b8;font-family:Arial,sans-serif">Weekly Food Safety Report</p>' +
+    '<p style="margin:6px 0 0;font-size:22px;font-weight:700;color:#0f172a;font-family:Arial,sans-serif">' + name + '</p>' +
+    '<p style="margin:4px 0 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif">Week: ' + weekLabel + '</p>' +
+    '</td></tr></table>' +
 
-  // Header
-  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#1a2332;border-radius:8px 8px 0 0">' +
-  '<tr><td style="padding:20px 24px"><p style="margin:0;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#4a6080;font-family:Arial,sans-serif">Weekly Food Safety Report</p>' +
-  '<p style="margin:4px 0 0;font-size:20px;font-weight:700;color:#e6edf3;font-family:Arial,sans-serif">' + name + '</p>' +
-  '<p style="margin:4px 0 0;font-size:13px;color:#7d8da8;font-family:Arial,sans-serif">Week: ' + weekLabel + '</p>' +
-  '</td></tr></table>' +
+    incompleteBanner + divider +
 
-  // Daily overview
-  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' +
-  sectionHeader('Daily Overview') +
-  '<tr><td style="padding:4px 24px 14px">' + gridHtml + '</td></tr></table>' +
+    // Daily overview
+    sectionBlock('Daily Overview', gridHtml) + divider +
 
-  // Compliance
-  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' +
-  sectionHeader('Compliance') +
-  '<tr><td style="padding:8px 24px 14px">' + complianceHtml + '</td></tr></table>' +
+    // Compliance
+    sectionBlock('Compliance', complianceHtml) + divider +
 
-  // Weekly review (directly after compliance)
-  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' + reviewSection + '</table>' +
+    // Weekly review
+    sectionBlock('&#x1F4CB; Weekly Management Review', reviewBody) + divider +
 
-  // Failed checks (only if any)
-  (failedRows ? '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' + failedSection + '</table>' : '') +
+    // Conditional sections
+    (failedRows ? failedSection + divider : '') +
+    (breachRows ? breachSection + divider : '') +
 
-  // Temperature breaches (only if any)
-  (breachRows ? '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' + breachSection + '</table>' : '') +
+    // Always-on sections
+    tempSection + divider + probeSection + divider + giSection + divider + taskSection + divider +
 
-  // Full equipment log
-  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' + tempSection + '</table>' +
+    // Footer
+    '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:0 0 12px 12px;border:1px solid #e2e8f0;border-top:none">' +
+    '<tr><td style="padding:20px 28px">' +
+    (sheetsUrl ? '<p style="margin:0;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif">Full records &nbsp;&middot;&nbsp; <a href="' + sheetsUrl + '" style="color:#3b82f6;text-decoration:none">Open in Google Sheets</a></p>' : '') +
+    '<p style="margin:6px 0 0;font-size:11px;color:#cbd5e1;font-family:Arial,sans-serif">Sent by SafeChecks &nbsp;&middot;&nbsp; To manage recipients, open Settings in the app</p>' +
+    '</td></tr></table>' +
 
-  // Food probes
-  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' + probeSection + '</table>' +
-
-  // Goods In + Tasks
-  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' + giSection + '</table>' +
-  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin-top:2px">' + taskSection + '</table>' +
-
-  // Footer
-  '<table width="100%" cellpadding="0" cellspacing="0" style="background:#1a2332;border-radius:0 0 8px 8px;margin-top:2px">' +
-  '<tr><td style="padding:16px 24px">' +
-  (sheetsUrl ? '<p style="margin:0;font-size:12px;color:#4a6080;font-family:Arial,sans-serif">Full records &nbsp;·&nbsp; <a href="' + sheetsUrl + '" style="color:#60a5fa;text-decoration:none">Open in Google Sheets</a></p>' : '') +
-  '<p style="margin:6px 0 0;font-size:11px;color:#334a60;font-family:Arial,sans-serif">Sent by SafeChecks &nbsp;·&nbsp; On-demand weekly report</p>' +
-  '</td></tr></table>' +
-
-  '</td></tr></table></div></body></html>';
+    '</div></body></html>';
 }
+
 
 // ── GET wrappers for on-demand email (called from PWA via GET) ────
 function handleSendDailyEmailGet(e, ss) {
