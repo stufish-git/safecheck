@@ -245,7 +245,7 @@ function setHistoryQuickDate(range) {
   const from = document.getElementById('history-date-from');
   const to   = document.getElementById('history-date-to');
   const today = new Date();
-  const fmt = d => d.toISOString().split('T')[0];
+  const fmt = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 
   if (range === 'today') {
     from.value = fmt(today);

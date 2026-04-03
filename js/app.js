@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.58.0';
+const APP_VERSION = '5.59.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -172,7 +172,7 @@ async function confirmWipeData() {
 }
 
 // ── Date helpers ──────────────────────────────────────
-function todayStr()     { return new Date().toISOString().split('T')[0]; }
+function todayStr()     { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
 
 // ── Trading calendar ──────────────────────────────────
 // Returns true if a given dept is expected to trade on dateStr (YYYY-MM-DD).
@@ -220,7 +220,7 @@ function getClosedWeeks(count = 8) {
   // Current week — Monday of this week
   const currentMon = new Date(now);
   currentMon.setDate(now.getDate() - ((dayOfWeek + 6) % 7));
-  currentMon.setHours(0, 0, 0, 0);
+  currentMon.setHours(12, 0, 0, 0);
   const currentSun = new Date(currentMon);
   currentSun.setDate(currentMon.getDate() + 6);
 
@@ -240,7 +240,7 @@ function getClosedWeeks(count = 8) {
   for (let i = 0; i < count; i++) {
     const mon = new Date(lastMon);
     mon.setDate(lastMon.getDate() - (i * 7));
-    mon.setHours(0, 0, 0, 0);
+    mon.setHours(12, 0, 0, 0);
     const sun = new Date(mon);
     sun.setDate(mon.getDate() + 6);
 
@@ -347,7 +347,7 @@ function prefillDates() {
   const toEl = document.getElementById('history-date-to');
   const frEl = document.getElementById('history-date-from');
   if (toEl) toEl.value = todayStr();
-  if (frEl) { const d = new Date(); d.setDate(d.getDate()-7); frEl.value = d.toISOString().split('T')[0]; }
+  if (frEl) { const d = new Date(); d.setDate(d.getDate()-7); frEl.value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
 }
 
 // ── Tab navigation ────────────────────────────────────
@@ -1066,7 +1066,7 @@ function renderWeeklyReviewHistory() {
     const dow = d.getDay();
     const diff = (dow === 0 ? -6 : 1 - dow) - (i * 7);
     d.setDate(today.getDate() + diff);
-    d.setHours(0, 0, 0, 0);
+    d.setHours(12, 0, 0, 0);
     weeks.push(d.toISOString().split('T')[0]);
   }
 

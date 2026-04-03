@@ -28,13 +28,13 @@ function getWeekStart(date = new Date()) {
   const day = d.getDay(); // 0=Sun, 1=Mon...
   const diff = (day === 0 ? -6 : 1 - day); // shift to Monday
   d.setDate(d.getDate() + diff);
-  d.setHours(0, 0, 0, 0);
+  d.setHours(12, 0, 0, 0);
   return d;
 }
 
 function getWeekStartStr(date = new Date()) {
   const d = getWeekStart(date);
-  return d.toISOString().split('T')[0];
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
 function getTodayDayName() {

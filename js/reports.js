@@ -418,7 +418,7 @@ function buildDailyTaskGrid(dateStr) {
   const dayOfWeek = d.getDay();
   const monOffset = (dayOfWeek + 6) % 7;
   const monday = new Date(d); monday.setDate(d.getDate() - monOffset);
-  const weekStart = monday.toISOString().split('T')[0];
+  const weekStart = monday.getFullYear() + '-' + String(monday.getMonth()+1).padStart(2,'0') + '-' + String(monday.getDate()).padStart(2,'0');
   const dayNames = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
   const dayName = dayNames[monOffset] || '';
 
@@ -759,7 +759,7 @@ function renderWeeklyReport() {
   const mon = new Date(weekStart + 'T12:00:00');
   for (let i = 0; i < 7; i++) {
     const d = new Date(mon); d.setDate(mon.getDate() + i);
-    weekDates.push(d.toISOString().split('T')[0]);
+    const ds = d; weekDates.push(ds.getFullYear() + '-' + String(ds.getMonth()+1).padStart(2,'0') + '-' + String(ds.getDate()).padStart(2,'0'));
   }
   const [monDate, tueDate, wedDate, thuDate, friDate, satDate, sunDate] = weekDates;
   const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
