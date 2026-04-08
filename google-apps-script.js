@@ -479,15 +479,34 @@ function sendDailySummary() {
 
   // ── Determine subject prefix ────────────────────────
   const depts = ['kitchen', 'foh'];
-  const hasAnyMissing = depts.some(d => {
-    if (!isTradingAS(d, settings)) return false;  // closed — not missing
-    const noOpen  = !opening.find(r => r.dept === d);
-    const noClose = !closing.find(r => r.dept === d);
-    return noOpen || noClose;
-  });
-  const hasAnyFail = [...temps, ...probes].some(r =>
-    r.status === 'FAIL' || r.status === 'WARNING');
-  const hasCheckFail = [...opening, ...closing].some(r => r.failCount > 0);
+
+  // Helper: calc per-dept compliance using the same model as the on-screen report
+  function calcDeptComplianceAS(dept, opRecs, clRecs, tmpRecs, prRecs, clnRecs) {
+    if (!isTradingAS(dept, settings)) return null;
+    var earned = 0, possible = 0;
+    function add(done) { possible++; if (done) earned++; }
+    add(opRecs.some(function(r) { return r.dept === dept; }));
+    add(clRecs.some(function(r) { return r.dept === dept; }));
+    if (settings.cleaningEnabled) add(clnRecs.some(function(r) { return r.dept === dept; }));
+    var deptTemps = tmpRecs.filter(function(r) { return !r.dept || r.dept === dept; });
+    var batches = {};
+    deptTemps.forEach(function(r) { var k = r.batch_id || (r.location + (r.time||'')); batches[k] = true; });
+    var batchCount = Object.keys(batches).length;
+    add(batchCount >= 1);
+    add(batchCount >= 2);
+    if (dept === 'kitchen') add(prRecs.length > 0);
+    return { earned: earned, possible: possible, pct: Math.round(earned / possible * 100) };
+  }
+
+  const kScore = calcDeptComplianceAS('kitchen', opening, closing, temps, probes, cleaning);
+  const fScore = calcDeptComplianceAS('foh',     opening, closing, temps, probes, cleaning);
+  const siteEarned   = (kScore ? kScore.earned   : 0) + (fScore ? fScore.earned   : 0);
+  const sitePossible = (kScore ? kScore.possible : 0) + (fScore ? fScore.possible : 0);
+  const sitePct      = sitePossible > 0 ? Math.round(siteEarned / sitePossible * 100) : null;
+
+  const hasAnyMissing = sitePct !== null && sitePct < 100;
+  const hasAnyFail    = [...temps, ...probes].some(function(r) { return r.status === 'FAIL' || r.status === 'WARNING'; });
+  const hasCheckFail  = [...opening, ...closing].some(function(r) { return r.failCount > 0; });
 
   const prefix = hasAnyMissing ? '⛔' : (hasAnyFail || hasCheckFail) ? '⚠' : '✓';
   const subject = prefix + ' Daily Summary — ' + name + ' — ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "EEE d MMM yyyy");
@@ -510,14 +529,30 @@ function sendDailySummary() {
 function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, goodsIn, cleaning, tasks, depts, settings) {
   const DEPT_LABELS = { kitchen: '&#x1F373; Kitchen', foh: '&#x1F37D; Front of House' };
 
-  // Compliance scoring
-  const tradingDepts       = depts.filter(d => isTradingAS(d, settings));
-  const expectedCheckCount = tradingDepts.length * 2;
-  const submittedChecks    = tradingDepts.reduce((n, d) => {
-    return n + (opening.find(r => r.dept === d) ? 1 : 0) + (closing.find(r => r.dept === d) ? 1 : 0);
-  }, 0);
-  const anyMissing = submittedChecks < expectedCheckCount;
-  const pct        = expectedCheckCount > 0 ? Math.round(submittedChecks / expectedCheckCount * 100) : null;
+  // Compliance scoring — matches on-screen model exactly
+  // Per dept: opening, closing, cleaning (if enabled), equip batch 1, equip batch 2, probe (kitchen only)
+  function calcDeptComp(dept) {
+    if (!isTradingAS(dept, settings)) return null;
+    var earned = 0, possible = 0;
+    function add(done) { possible++; if (done) earned++; }
+    add(opening.some(function(r) { return r.dept === dept; }));
+    add(closing.some(function(r) { return r.dept === dept; }));
+    if (settings.cleaningEnabled) add(cleaning.some(function(r) { return r.dept === dept; }));
+    var deptTemps = temps.filter(function(r) { return !r.dept || r.dept === dept; });
+    var batches = {};
+    deptTemps.forEach(function(r) { var k = r.batch_id || (r.location + (r.time||'')); batches[k] = true; });
+    var batchCount = Object.keys(batches).length;
+    add(batchCount >= 1);
+    add(batchCount >= 2);
+    if (dept === 'kitchen') add(probes.length > 0);
+    return { earned: earned, possible: possible, pct: Math.round(earned / possible * 100) };
+  }
+  const kComp = calcDeptComp('kitchen');
+  const fComp = calcDeptComp('foh');
+  const siteEarned2   = (kComp ? kComp.earned   : 0) + (fComp ? fComp.earned   : 0);
+  const sitePossible2 = (kComp ? kComp.possible : 0) + (fComp ? fComp.possible : 0);
+  const pct        = sitePossible2 > 0 ? Math.round(siteEarned2 / sitePossible2 * 100) : null;
+  const anyMissing = pct !== null && pct < 100;
 
   const badgeColor = anyMissing ? '#dc2626' : pct === null ? '#64748b' : pct >= 90 ? '#16a34a' : pct >= 70 ? '#d97706' : '#dc2626';
   const badgeBg    = anyMissing ? '#fef2f2' : pct === null ? '#f8fafc' : pct >= 90 ? '#f0fdf4' : pct >= 70 ? '#fffbeb' : '#fef2f2';
@@ -539,24 +574,27 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
     return dot(color) + ' <span style="font-size:12px;font-weight:600;color:' + color + ';font-family:Arial,sans-serif">' + text + '</span>';
   }
 
-  // ── Overview rows ────────────────────────────────────
+  // ── Overview rows — use full compliance model per dept ──
   const overviewRows = depts.map(function(d) {
     const trading  = isTradingAS(d, settings);
-    const op       = opening.find(r => r.dept === d);
-    const cl       = closing.find(r => r.dept === d);
-    const missing  = trading && (!op || !cl);
+    const comp     = d === 'kitchen' ? kComp : fComp;
+    const op       = opening.find(function(r) { return r.dept === d; });
+    const cl       = closing.find(function(r) { return r.dept === d; });
     const deptFail = (op && op.failCount > 0) || (cl && cl.failCount > 0);
-    const tempFail = temps.filter(r => r.dept === d).some(r => r.status === 'FAIL' || r.status === 'WARNING');
-    var deptExp = 2, deptAct = (op ? 1 : 0) + (cl ? 1 : 0);
-    var deptPct = Math.round(deptAct / deptExp * 100);
+    const tempFail = temps.some(function(r) { return (r.dept === d || !r.dept) && (r.status === 'FAIL' || r.status === 'WARNING'); });
 
     var status;
-    if (!trading)               { status = dotText('#94a3b8', 'Closed today'); }
-    else if (!op && !cl)        { status = dotText('#dc2626', 'Opening &amp; Closing missing'); }
-    else if (!op)               { status = dotText('#dc2626', 'Opening missing'); }
-    else if (!cl)               { status = dotText('#dc2626', 'Closing missing'); }
-    else if (deptFail||tempFail){ status = dotText('#d97706', deptPct + '% submitted &middot; issues recorded'); }
-    else                        { status = dotText('#16a34a', 'All clear &middot; ' + deptPct + '%'); }
+    if (!trading)             { status = dotText('#94a3b8', 'Closed today'); }
+    else if (!op && !cl)      { status = dotText('#dc2626', 'Opening &amp; Closing missing'); }
+    else if (!op)             { status = dotText('#dc2626', 'Opening missing'); }
+    else if (!cl)             { status = dotText('#dc2626', 'Closing missing'); }
+    else if (comp && comp.pct === 100 && !deptFail && !tempFail) {
+                                status = dotText('#16a34a', 'All clear &middot; 100%'); }
+    else if (comp) {
+      var c = comp.pct >= 90 ? '#16a34a' : comp.pct >= 70 ? '#d97706' : '#dc2626';
+      status = dotText(c, comp.pct + '% &middot; ' + comp.earned + '/' + comp.possible + ' checks');
+    } else {
+                                status = dotText('#94a3b8', 'No data'); }
 
     return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:10px 0;font-size:13px;color:#1e293b;font-family:Arial,sans-serif"><strong>' + DEPT_LABELS[d] + '</strong></td>' +
       '<td style="text-align:right;padding:10px 0;white-space:nowrap">' + status + '</td></tr>';
@@ -732,7 +770,7 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
     '<td style="padding:28px 28px 20px;text-align:right;vertical-align:middle">' + badgeHtml + '</td></tr>' +
     (pct !== null ? '<tr><td colspan="2" style="padding:0 28px 24px"><table width="100%" cellpadding="0" cellspacing="0"><tr>' +
     '<td style="background:#f1f5f9;border-radius:4px;height:4px"><div style="width:' + barWidth + '%;height:4px;background:' + barColor + ';border-radius:4px"></div></td>' +
-    '<td style="width:110px;padding-left:12px;font-size:11px;color:' + barColor + ';font-family:Arial,sans-serif;white-space:nowrap">' + submittedChecks + '/' + expectedCheckCount + ' submitted</td>' +
+    '<td style="width:120px;padding-left:12px;font-size:11px;color:' + barColor + ';font-family:Arial,sans-serif;white-space:nowrap">' + siteEarned2 + '/' + sitePossible2 + ' checks done</td>' +
     '</tr></table></td></tr>' : '') +
     '</table>' + divider +
 
