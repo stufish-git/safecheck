@@ -862,10 +862,11 @@ function renderChecklistEditor(editorId, path, section) {
         <div class="day-pill-row">${dayNote}${dayPills}</div>
       </div>
       <div class="check-edit-actions">
-        <button class="set-btn-info" onclick="editCheckInfo('${path}','${section}','${c.id}')" title="Edit info text">ⓘ</button>
-        <button class="set-btn-move" onclick="moveCheck('${path}','${section}','${c.id}',-1)" ${i===0?'disabled':''}>↑</button>
-        <button class="set-btn-move" onclick="moveCheck('${path}','${section}','${c.id}',1)"  ${i===checks.length-1?'disabled':''}>↓</button>
-        ${c.id.startsWith('cu_')||c.id.startsWith('sh_cu_')?`<button class="set-btn-delete" onclick="deleteCheck('${path}','${section}','${c.id}')">✕</button>`:''}
+        <button class="set-btn-info"   onclick="editCheckInfo('${path}','${section}','${c.id}')"        title="Edit info text">ⓘ</button>
+        <button class="set-btn-rename" onclick="renameCheck('${path}','${section}','${c.id}')"          title="Rename">✎</button>
+        <button class="set-btn-move"   onclick="moveCheck('${path}','${section}','${c.id}',-1)"         ${i===0?'disabled':''}>↑</button>
+        <button class="set-btn-move"   onclick="moveCheck('${path}','${section}','${c.id}',1)"          ${i===checks.length-1?'disabled':''}>↓</button>
+        <button class="set-btn-delete" onclick="deleteCheck('${path}','${section}','${c.id}')">✕</button>
       </div>
     </div>`;
   }).join('');
@@ -974,7 +975,11 @@ function moveCheck(path,section,id,dir) {
   saveSettings(); renderCheckEditors(); rebuildAllChecklists();
 }
 function deleteCheck(path,section,id) {
-  if (!confirm('Remove this check?')) return;
+  const isBuiltIn = !id.startsWith('cu_') && !id.startsWith('sh_cu_');
+  const msg = isBuiltIn
+    ? 'Delete this check permanently?\n\nNote: if you want to hide it without losing historical report data, turn it off using the toggle instead. Deleted checks cannot be recovered.'
+    : 'Remove this check?';
+  if (!confirm(msg)) return;
   const ref=getChecksRef(path); if (ref?.[section]) ref[section]=ref[section].filter(c=>c.id!==id);
   saveSettings(); syncSettingsToSheets(); renderCheckEditors(); rebuildAllChecklists();
 }
