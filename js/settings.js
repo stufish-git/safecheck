@@ -974,10 +974,33 @@ function moveCheck(path,section,id,dir) {
   [checks[idx],checks[ni]]=[checks[ni],checks[idx]];
   saveSettings(); renderCheckEditors(); rebuildAllChecklists();
 }
-function deleteCheck(path,section,id) {
-  const msg = 'Delete this check permanently?\n\nNote: historical records that reference this check will lose their label in reports. If you want to hide it without affecting history, use the toggle to turn it off instead.';
-  if (!confirm(msg)) return;
-  const ref=getChecksRef(path); if (ref?.[section]) ref[section]=ref[section].filter(c=>c.id!==id);
+function deleteCheck(path, section, id) {
+  const checks = getChecksRef(path)?.[section];
+  const c = checks?.find(c => c.id === id);
+  if (!c) return;
+  document.getElementById('delete-check-modal')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'delete-check-modal';
+  overlay.className = 'modal-overlay';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="modal-box" style="max-width:400px">
+      <h2 class="modal-title">Delete Check</h2>
+      <p class="modal-desc"><strong>${c.label}</strong></p>
+      <p class="modal-desc" style="color:var(--warning);font-size:13px">⚠ Historical records that reference this check will lose their label in reports.</p>
+      <p class="modal-desc" style="font-size:13px">If you want to hide it without affecting history, use the toggle to turn it off instead.</p>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="document.getElementById('delete-check-modal').remove()">Cancel</button>
+        <button class="btn-danger" onclick="confirmDeleteCheck('${path}','${section}','${id}')">Delete</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+function confirmDeleteCheck(path, section, id) {
+  document.getElementById('delete-check-modal')?.remove();
+  const ref = getChecksRef(path);
+  if (ref?.[section]) ref[section] = ref[section].filter(c => c.id !== id);
   saveSettings(); syncSettingsToSheets(); renderCheckEditors(); rebuildAllChecklists();
 }
 function addCustomCheck(path,section,inputId) {
