@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.60.0';
+const APP_VERSION = '5.64.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -751,10 +751,13 @@ function selectEquipStatus(equipId, status) {
   row.classList.remove('status-ok','status-warn','status-fail','needs-action');
   row.classList.add(status === 'OK' ? 'status-ok' : status === 'WARNING' ? 'status-warn' : 'status-fail');
 
-  // Show corrective action only on FAIL
+  // Show notes/corrective action for WARNING (optional) and FAIL (required)
   if (actionEl) {
-    actionEl.classList.toggle('hidden', status !== 'FAIL');
+    actionEl.classList.toggle('hidden', status === 'OK');
     actionEl.required = status === 'FAIL';
+    actionEl.placeholder = status === 'FAIL'
+      ? 'Corrective action taken — e.g. Adjusted thermostat, moved stock to backup fridge...'
+      : 'Notes (optional) — e.g. Monitoring, slight variance noted...';
   }
 
   if (!state.equipChecks[equipId]) state.equipChecks[equipId] = {};

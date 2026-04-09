@@ -856,7 +856,7 @@ function renderChecklistEditor(editorId, path, section) {
       </label>
       <div class="check-edit-label-group">
         <div class="check-edit-label-row">
-          <span class="check-edit-label">${c.label}</span>
+          <span class="check-edit-label" onclick="renameCheck('${path}','${section}','${c.id}')" title="Tap to rename">${c.label}</span>
           ${c.info ? '<span class="check-edit-has-info" title="Has info text">ⓘ</span>' : ''}
         </div>
         <div class="day-pill-row">${dayNote}${dayPills}</div>
@@ -869,6 +869,41 @@ function renderChecklistEditor(editorId, path, section) {
       </div>
     </div>`;
   }).join('');
+}
+
+function renameCheck(path, section, id) {
+  const checks = getChecksRef(path)?.[section];
+  const c = checks?.find(c => c.id === id);
+  if (!c) return;
+  // Find the label span and replace with an input inline
+  const spans = document.querySelectorAll(`[onclick*="renameCheck"][onclick*="${id}"]`);
+  if (!spans.length) return;
+  const span = spans[0];
+  if (span.querySelector('input')) return; // already editing
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = c.label;
+  input.className = 'check-edit-label-input';
+  input.style.cssText = 'width:100%;font-size:13px;font-weight:600;border:none;border-bottom:2px solid var(--accent);background:transparent;outline:none;padding:2px 0;color:var(--text)';
+  span.textContent = '';
+  span.appendChild(input);
+  input.focus();
+  input.select();
+  function commit() {
+    const newLabel = input.value.trim();
+    if (newLabel && newLabel !== c.label) {
+      c.label = newLabel;
+      saveSettings();
+      syncSettingsToSheets();
+      rebuildAllChecklists();
+    }
+    renderCheckEditors();
+  }
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { input.value = c.label; input.blur(); }
+  });
 }
 
 function editCheckInfo(path, section, id) {

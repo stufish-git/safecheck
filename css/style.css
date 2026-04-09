@@ -1758,7 +1758,7 @@ body.theme-light .week-selector-select { background: #fff; border-color: #d0d6e0
 /* Compliance breakdown grid */
 .report-breakdown-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 12px;
   padding: 0 20px 16px;
 }
@@ -1817,7 +1817,7 @@ body.theme-light .week-selector-select { background: #fff; border-color: #d0d6e0
   border-radius: 6px;
 }
 .rc-row-pass { background: transparent; color: var(--text); }
-.rc-row-fail { background: rgba(239,68,68,0.1); color: var(--danger); }
+.rc-row-fail { background: transparent; color: var(--danger); }
 .rc-icon {
   font-size: 11px;
   font-weight: 700;
@@ -2478,7 +2478,7 @@ body.theme-light .week-selector-select { background: #fff; border-color: #d0d6e0
 
   /* ── Compliance breakdown cards ─────────────────── */
   .report-breakdown-grid {
-    grid-template-columns: 1fr 1fr !important;
+    grid-template-columns: 1fr !important;
     gap: 8px !important;
     padding: 0 0 12px !important;
     break-inside: avoid;
@@ -2489,7 +2489,7 @@ body.theme-light .week-selector-select { background: #fff; border-color: #d0d6e0
   .rc-pct          { color: inherit !important; }
   .rc-bar-track    { background: #e5e5e5 !important; }
   .rc-row          { background: transparent !important; padding: 3px 4px !important; }
-  .rc-row-fail     { background: #fff0f0 !important; color: #991b1b !important; }
+  .rc-row-fail     { background: transparent !important; color: #991b1b !important; }
   .rc-row-pass     { color: #166534 !important; }
   .rc-label        { color: inherit !important; }
   .rc-note         { color: #666 !important; }

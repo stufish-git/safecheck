@@ -554,17 +554,46 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
   const pct        = sitePossible2 > 0 ? Math.round(siteEarned2 / sitePossible2 * 100) : null;
   const anyMissing = pct !== null && pct < 100;
 
-  const badgeColor = anyMissing ? '#dc2626' : pct === null ? '#64748b' : pct >= 90 ? '#16a34a' : pct >= 70 ? '#d97706' : '#dc2626';
-  const badgeBg    = anyMissing ? '#fef2f2' : pct === null ? '#f8fafc' : pct >= 90 ? '#f0fdf4' : pct >= 70 ? '#fffbeb' : '#fef2f2';
-  const badgeBorder= badgeColor;
-  const barColor   = badgeColor;
-  const barWidth   = pct !== null ? pct : 0;
+  // ── Three compliance badges — icon+name stacked, equal height ──
+  function deptBadge(comp, icon, label, trading) {
+    if (!trading || !comp) {
+      var bc = '#94a3b8';
+      return '<td style="width:33%;padding:0 3px">' +
+        '<div style="border:2px solid #e2e8f0;border-radius:10px;padding:10px 8px;text-align:center">' +
+        '<p style="margin:0;font-size:10px;font-weight:700;color:' + bc + ';font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:.04em">' + icon + '<br>' + label + '</p>' +
+        '<p style="margin:4px 0 0;font-size:18px;font-weight:700;color:' + bc + ';font-family:Arial,sans-serif;line-height:1.2">' + (trading ? '—' : 'Closed') + '</p>' +
+        '</div></td>';
+    }
+    var c  = comp.pct >= 90 ? '#16a34a' : comp.pct >= 70 ? '#d97706' : '#dc2626';
+    var bg = comp.pct >= 90 ? '#f0fdf4' : comp.pct >= 70 ? '#fffbeb' : '#fef2f2';
+    return '<td style="width:33%;padding:0 3px">' +
+      '<div style="background:' + bg + ';border:2px solid ' + c + ';border-radius:10px;padding:10px 8px;text-align:center">' +
+      '<p style="margin:0;font-size:10px;font-weight:700;color:' + c + ';font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:.04em">' + icon + '<br>' + label + '</p>' +
+      '<p style="margin:4px 0 2px;font-size:22px;font-weight:700;color:' + c + ';font-family:Arial,sans-serif;line-height:1">' + comp.pct + '%</p>' +
+      '<p style="margin:0;font-size:10px;color:' + c + ';font-family:Arial,sans-serif;opacity:.8">' + comp.earned + '/' + comp.possible + '</p>' +
+      '</div></td>';
+  }
+  function siteBadge(p, earned, possible) {
+    var c  = p === null ? '#94a3b8' : p >= 90 ? '#16a34a' : p >= 70 ? '#d97706' : '#dc2626';
+    var bg = p === null ? 'transparent' : p >= 90 ? '#f0fdf4' : p >= 70 ? '#fffbeb' : '#fef2f2';
+    return '<td style="width:33%;padding:0 3px">' +
+      '<div style="background:' + bg + ';border:2px solid ' + c + ';border-radius:10px;padding:10px 8px;text-align:center">' +
+      '<p style="margin:0;font-size:10px;font-weight:700;color:' + c + ';font-family:Arial,sans-serif;text-transform:uppercase;letter-spacing:.04em">&#x1F4CA;<br>Site Total</p>' +
+      '<p style="margin:4px 0 2px;font-size:22px;font-weight:700;color:' + c + ';font-family:Arial,sans-serif;line-height:1">' + (p !== null ? p + '%' : '—') + '</p>' +
+      '<p style="margin:0;font-size:10px;color:' + c + ';font-family:Arial,sans-serif;opacity:.8">' + (p !== null ? earned + '/' + possible : 'No data') + '</p>' +
+      '</div></td>';
+  }
 
-  const badgeHtml = anyMissing
-    ? '<div style="display:inline-block;background:' + badgeBg + ';border:2px solid ' + badgeBorder + ';border-radius:10px;padding:10px 18px;text-align:center"><p style="margin:0;font-size:14px;font-weight:700;color:' + badgeColor + ';font-family:Arial,sans-serif">Incomplete</p></div>'
-    : pct !== null
-      ? '<div style="display:inline-block;background:' + badgeBg + ';border:2px solid ' + badgeBorder + ';border-radius:10px;padding:10px 18px;text-align:center"><p style="margin:0;font-size:24px;font-weight:700;color:' + badgeColor + ';font-family:Arial,sans-serif;line-height:1">' + pct + '%</p><p style="margin:3px 0 0;font-size:10px;color:' + badgeColor + ';font-family:Arial,sans-serif;letter-spacing:.06em;text-transform:uppercase">Compliance</p></div>'
-      : '<div style="display:inline-block;background:#f8fafc;border:2px solid #cbd5e1;border-radius:10px;padding:10px 18px;text-align:center"><p style="margin:0;font-size:11px;color:#94a3b8;font-family:Arial,sans-serif">No checks<br>recorded</p></div>';
+  const kTrading  = isTradingAS('kitchen', settings);
+  const fTrading  = isTradingAS('foh',     settings);
+  const badgeHtml = '<table width="100%" cellpadding="0" cellspacing="0"><tr>' +
+    deptBadge(kComp, '&#x1F373;', 'Kitchen', kTrading) +
+    deptBadge(fComp, '&#x1F37D;', 'FOH',     fTrading) +
+    siteBadge(pct, siteEarned2, sitePossible2) +
+    '</tr></table>';
+
+  const barColor = pct === null ? '#94a3b8' : pct >= 90 ? '#16a34a' : pct >= 70 ? '#d97706' : '#dc2626';
+  const barWidth = pct !== null ? pct : 0;
 
   // ── Dot helper ───────────────────────────────────────
   function dot(color) {
@@ -574,32 +603,49 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
     return dot(color) + ' <span style="font-size:12px;font-weight:600;color:' + color + ';font-family:Arial,sans-serif">' + text + '</span>';
   }
 
-  // ── Overview rows — use full compliance model per dept ──
-  const overviewRows = depts.map(function(d) {
-    const trading  = isTradingAS(d, settings);
-    const comp     = d === 'kitchen' ? kComp : fComp;
-    const op       = opening.find(function(r) { return r.dept === d; });
-    const cl       = closing.find(function(r) { return r.dept === d; });
-    const deptFail = (op && op.failCount > 0) || (cl && cl.failCount > 0);
-    const tempFail = temps.some(function(r) { return (r.dept === d || !r.dept) && (r.status === 'FAIL' || r.status === 'WARNING'); });
+  // ── Overview — dept heading + per-check bullet points (all checks, green/red) ──
+  function overviewDeptBlock(d, isLast) {
+    var trading  = isTradingAS(d, settings);
+    var comp     = d === 'kitchen' ? kComp : fComp;
+    var icon     = d === 'kitchen' ? '&#x1F373;' : '&#x1F37D;';
+    var deptName = d === 'kitchen' ? 'Kitchen' : 'Front of House';
+    var divHtml  = isLast ? '' : '<div style="height:1px;background:#f1f5f9;margin:14px 0"></div>';
 
-    var status;
-    if (!trading)             { status = dotText('#94a3b8', 'Closed today'); }
-    else if (!op && !cl)      { status = dotText('#dc2626', 'Opening &amp; Closing missing'); }
-    else if (!op)             { status = dotText('#dc2626', 'Opening missing'); }
-    else if (!cl)             { status = dotText('#dc2626', 'Closing missing'); }
-    else if (comp && comp.pct === 100 && !deptFail && !tempFail) {
-                                status = dotText('#16a34a', 'All clear &middot; 100%'); }
-    else if (comp) {
-      var c = comp.pct >= 90 ? '#16a34a' : comp.pct >= 70 ? '#d97706' : '#dc2626';
-      status = dotText(c, comp.pct + '% &middot; ' + comp.earned + '/' + comp.possible + ' checks');
-    } else {
-                                status = dotText('#94a3b8', 'No data'); }
-
-    return '<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:10px 0;font-size:13px;color:#1e293b;font-family:Arial,sans-serif"><strong>' + DEPT_LABELS[d] + '</strong></td>' +
-      '<td style="text-align:right;padding:10px 0;white-space:nowrap">' + status + '</td></tr>';
-  }).join('');
-
+    if (!trading) {
+      return '<table width="100%" cellpadding="0" cellspacing="0"><tr>' +
+        '<td style="padding:0 0 4px;font-size:14px;font-weight:700;color:#0f172a;font-family:Arial,sans-serif">' + icon + ' ' + deptName + '</td>' +
+        '<td style="text-align:right;font-size:12px;font-weight:700;color:#94a3b8;font-family:Arial,sans-serif">Closed today</td>' +
+        '</tr></table>' + divHtml;
+    }
+    var sc = !comp ? '#94a3b8' : comp.pct >= 90 ? '#16a34a' : comp.pct >= 70 ? '#d97706' : '#dc2626';
+    var sl = !comp ? 'No data' : comp.pct === 100 ? 'All clear &middot; 100%' : comp.pct + '% &middot; ' + comp.earned + '/' + comp.possible;
+    var op = opening.find(function(r) { return r.dept === d; });
+    var cl = closing.find(function(r) { return r.dept === d; });
+    var dt = temps.filter(function(r) { return !r.dept || r.dept === d; });
+    var bt = {}; dt.forEach(function(r) { bt[r.batch_id || (r.location + (r.time||''))] = true; });
+    var bc = Object.keys(bt).length;
+    function bul(color, text) {
+      return '<p style="margin:0 0 5px;font-size:12px;font-family:Arial,sans-serif">' +
+        '<span style="font-size:8px;color:' + color + '">&#x25CF;</span> <span style="color:' + color + '">' + text + '</span></p>';
+    }
+    var bullets = '';
+    bullets += bul(op ? '#16a34a' : '#dc2626', op ? 'Opening submitted' : 'Opening not submitted');
+    bullets += bul(cl ? '#16a34a' : '#dc2626', cl ? 'Closing submitted' : 'Closing not submitted');
+    if (settings.cleaningEnabled) {
+      var cd = cleaning.some(function(r) { return r.dept === d; });
+      bullets += bul(cd ? '#16a34a' : '#dc2626', cd ? 'Cleaning recorded' : 'Cleaning not recorded');
+    }
+    bullets += bul(bc >= 1 ? '#16a34a' : '#dc2626', bc >= 1 ? 'Equipment check 1 done' : 'Equipment checks missing');
+    bullets += bul(bc >= 2 ? '#16a34a' : '#d97706', bc >= 2 ? 'Equipment check 2 done' : 'Equipment check 2 missing');
+    if (d === 'kitchen') bullets += bul(probes.length > 0 ? '#16a34a' : '#dc2626', probes.length > 0 ? 'Food probe recorded' : 'Food probe not recorded');
+    if (op && op.failCount > 0) bullets += bul('#d97706', 'Opening: ' + op.failCount + ' fail' + (op.failCount !== 1 ? 's' : ''));
+    if (cl && cl.failCount > 0) bullets += bul('#d97706', 'Closing: ' + cl.failCount + ' fail' + (cl.failCount !== 1 ? 's' : ''));
+    return '<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px"><tr>' +
+      '<td style="padding:0 0 8px;font-size:14px;font-weight:700;color:#0f172a;font-family:Arial,sans-serif">' + icon + ' ' + deptName + '</td>' +
+      '<td style="text-align:right;padding:0 0 8px;font-size:12px;font-weight:700;color:' + sc + ';font-family:Arial,sans-serif;white-space:nowrap">' + sl + '</td>' +
+      '</tr><tr><td colspan="2">' + bullets + '</td></tr></table>' + divHtml;
+  }
+  const overviewRows = depts.map(function(d, i) { return overviewDeptBlock(d, i === depts.length - 1); }).join('');
   // Cleaning overview row
   var cleaningOverviewRow = '';
   if (settings.cleaningEnabled) {
@@ -761,14 +807,15 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
     '</head><body style="margin:0;padding:24px 16px;background:#f8fafc;font-family:Arial,Helvetica,sans-serif">' +
     '<div style="max-width:600px;margin:0 auto">' +
 
-    // Header
+    // Header — name/date full width, badges below
     '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px 12px 0 0;border:1px solid #e2e8f0;border-bottom:none">' +
-    '<tr><td style="padding:28px 28px 20px">' +
+    '<tr><td style="padding:28px 28px 16px">' +
     '<p style="margin:0;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#94a3b8;font-family:Arial,sans-serif">Food Safety Report</p>' +
-    '<p style="margin:6px 0 0;font-size:22px;font-weight:700;color:#0f172a;font-family:Arial,sans-serif">' + name + '</p>' +
-    '<p style="margin:4px 0 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif">' + dayLabel + ' &nbsp;&middot;&nbsp; Generated 23:59</p></td>' +
-    '<td style="padding:28px 28px 20px;text-align:right;vertical-align:middle">' + badgeHtml + '</td></tr>' +
-    (pct !== null ? '<tr><td colspan="2" style="padding:0 28px 24px"><table width="100%" cellpadding="0" cellspacing="0"><tr>' +
+    '<p style="margin:6px 0 0;font-size:24px;font-weight:700;color:#0f172a;font-family:Arial,sans-serif">' + name + '</p>' +
+    '<p style="margin:4px 0 0;font-size:13px;color:#94a3b8;font-family:Arial,sans-serif">' + dayLabel + ' &nbsp;&middot;&nbsp; Generated 23:59</p>' +
+    '</td></tr>' +
+    '<tr><td style="padding:0 28px 20px">' + badgeHtml + '</td></tr>' +
+    (pct !== null ? '<tr><td style="padding:0 28px 20px"><table width="100%" cellpadding="0" cellspacing="0"><tr>' +
     '<td style="background:#f1f5f9;border-radius:4px;height:4px"><div style="width:' + barWidth + '%;height:4px;background:' + barColor + ';border-radius:4px"></div></td>' +
     '<td style="width:120px;padding-left:12px;font-size:11px;color:' + barColor + ';font-family:Arial,sans-serif;white-space:nowrap">' + siteEarned2 + '/' + sitePossible2 + ' checks done</td>' +
     '</tr></table></td></tr>' : '') +
@@ -777,7 +824,7 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
     // Overview
     '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">' +
     sectionHeader('Overview') +
-    '<tr><td style="padding:0 28px 20px"><table width="100%" cellpadding="0" cellspacing="0">' + overviewRows + cleaningOverviewRow + '</table></td></tr></table>' + divider +
+    '<tr><td style="padding:0 28px 20px">' + overviewRows + cleaningOverviewRow + '</td></tr></table>' + divider +
 
     // Check sections
     buildCheckSection('Opening Checks', opening) + divider +
