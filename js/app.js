@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.68.0';
+const APP_VERSION = '5.69.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -768,7 +768,10 @@ function selectEquipStatus(equipId, status) {
 function stepTemp(equipId, type, delta) {
   const input = document.getElementById(`equip-temp-${equipId}`);
   if (!input) return;
-  const current = parseFloat(input.value) || 0;
+  // Start steppers from a sensible default when field is empty
+  const STEP_DEFAULTS = { fridge: 3, freezer: -18, hothold: 70, oven: 75 };
+  const defaultStart = STEP_DEFAULTS[type] ?? 0;
+  const current = input.value !== '' ? parseFloat(input.value) : (defaultStart - delta);
   const next = Math.round((current + delta) * 10) / 10;
   input.value = next;
   autoStatusFromTemp(equipId, type, String(next));
