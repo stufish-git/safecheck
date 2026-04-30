@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.74.0';
+const APP_VERSION = '5.75.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -2002,6 +2002,14 @@ function updateGILogBadge() {
 }
 
 // ── Quick Note (Ad-hoc Log) ───────────────────────────
+function noteModalDeptChanged(dept) {
+  const list = (state.settings.staff || []).filter(s => s.enabled !== false && s.dept === dept);
+  const sl   = document.getElementById('note-staff-sel');
+  if (!sl) return;
+  sl.innerHTML = '<option value=""></option>' + list.map(s => '<option value="' + s.name + '">' + s.name + '</option>').join('');
+  if (list.length) sl.value = list[0].name;
+}
+
 function showAddNoteModal(presetDept) {
   const dept = presetDept || (isManagement() ? null : currentDept());
   const staffList = (state.settings.staff || []).filter(s => s.enabled !== false);
@@ -2014,13 +2022,7 @@ function showAddNoteModal(presetDept) {
   const deptSelector = isManagement() ? `
     <div class="modal-field">
       <label for="note-dept-sel">Department</label>
-      <select id="note-dept-sel" name="note-dept-sel" class="select-field" onchange="
-        var d=this.value;
-        var sl=document.getElementById('note-staff-sel');
-        var list=(state.settings.staff||[]).filter(s=>s.enabled!==false&&s.dept===d);
-        sl.innerHTML='<option value=\'\'></option>'+list.map(s=>'<option>'+s.name+'</option>').join('');
-        if(list.length)sl.value=list[0].name;
-      ">
+      <select id="note-dept-sel" name="note-dept-sel" class="select-field" onchange="noteModalDeptChanged(this.value)">
         <option value="kitchen">🍳 Kitchen</option>
         <option value="foh">🛎 FOH</option>
       </select>
