@@ -244,6 +244,10 @@ function setupSheets() {
       headers: ['ID','Date','Time','Department','Task ID','Week Start','Completed By','Action'],
     },
     {
+      name: 'Notes Log',
+      headers: ['ID','Date','Time','Department','Staff','Note'],
+    },
+    {
       name: 'Goods In Log',
       headers: [
         'ID','Date','Time','Department',
@@ -512,7 +516,8 @@ function sendDailySummary() {
   const subject = prefix + ' Daily Summary — ' + name + ' — ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "EEE d MMM yyyy");
 
   // ── Build HTML ──────────────────────────────────────
-  const html = buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, goodsIn, cleaning, tasks, depts, settings);
+  const notes = getTodayRecords(ss, 'Notes Log', today);
+  const html = buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, goodsIn, cleaning, tasks, notes, depts, settings);
 
   // ── Send ────────────────────────────────────────────
   recipients.forEach(addr => {
@@ -526,7 +531,7 @@ function sendDailySummary() {
 }
 
 // ── HTML builder ──────────────────────────────────────
-function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, goodsIn, cleaning, tasks, depts, settings) {
+function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, goodsIn, cleaning, tasks, notes, depts, settings) {
   const DEPT_LABELS = { kitchen: '&#x1F373; Kitchen', foh: '&#x1F37D; Front of House' };
 
   // Compliance scoring — matches on-screen model exactly
@@ -798,6 +803,27 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
     '<table width="100%" cellpadding="0" cellspacing="0">' + taskRows + '</table>'
   );
 
+  // ── Additional Notes ─────────────────────────────────────
+  function buildNotesEmailSection(dept, deptLabel) {
+    var deptNotes = (notes || []).filter(function(r) { return r.dept === dept; });
+    if (!deptNotes.length) return '';
+    var rows = deptNotes.map(function(r) {
+      var staff = r.staff || '';
+      var time  = r.time  || '';
+      var text  = r.note  || '';
+      return '<tr><td style="padding:6px 0;font-size:13px;color:#64748b;font-family:Arial,sans-serif;width:120px;white-space:nowrap">' + staff + (time ? ' · ' + time : '') + '</td>' +
+             '<td style="padding:6px 0 6px 12px;font-size:13px;color:#0f172a;font-family:Arial,sans-serif">' + text + '</td></tr>';
+    }).join('');
+    return '<tr><td colspan="2" style="padding:8px 0 2px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#cbd5e1;font-family:Arial,sans-serif">' + deptLabel + '</td></tr>' + rows;
+  }
+
+  var kNotesRows = buildNotesEmailSection('kitchen', '&#x1F373; Kitchen');
+  var fNotesRows = buildNotesEmailSection('foh', '&#x1F37D; Front of House');
+  var allNotesRows = kNotesRows + fNotesRows;
+  var notesSection = allNotesRows
+    ? sectionBlock('Additional Notes', '<table width="100%" cellpadding="0" cellspacing="0">' + allNotesRows + '</table>') + '<div style="height:1px;background:#e2e8f0"></div>'
+    : '';
+
   // ── Assemble ──────────────────────────────────────────
   const sheetsUrl = getSheetsUrl();
   const divider   = '<div style="height:1px;background:#e2e8f0"></div>';
@@ -832,7 +858,7 @@ function buildEmailHtml(name, dayLabel, today, opening, closing, temps, probes, 
     (settings.cleaningEnabled && cleaning.length ? buildCheckSection('&#x1F9F9; Cleaning Schedule', cleaning) + divider : '') +
 
     // Data sections
-    tempSection + divider + probeSection + divider + giSection + divider + taskSection + divider +
+    tempSection + divider + probeSection + divider + giSection + divider + taskSection + divider + notesSection +
 
     // Footer
     '<table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:0 0 12px 12px;border:1px solid #e2e8f0;border-top:none">' +
@@ -945,6 +971,16 @@ function getTodayRecords(ss, tabName, today) {
         staff:   String(row[staffCol]                         || ''),
         time:    String(row[timeCol]                          || ''),
       });
+    } else if (tabName === 'Notes Log') {
+      const staffNoteCol = headers.indexOf('Staff');
+      const noteTextCol  = headers.indexOf('Note');
+      results.push({
+        dept:  String(row[deptCol]      || '').toLowerCase(),
+        time:  String(row[timeCol]      || ''),
+        staff: String(row[staffNoteCol] || ''),
+        note:  String(row[noteTextCol]  || ''),
+      });
+
     } else if (tabName === 'Goods In Log') {
       // Goods In — parse Fields JSON
       let fields = {};
@@ -1116,11 +1152,12 @@ function handleSendDailyEmail(data) {
     const goodsIn = getTodayRecords(ss, 'Goods In Log',    date);
     const cleaning = settings.cleaningEnabled ? getTodayRecords(ss, 'Cleaning Schedule', date) : [];
     const tasks   = getTodayTasks(ss, date, settings);
+    const notes   = getTodayRecords(ss, 'Notes Log', date);
     const depts   = ['kitchen', 'foh'];
 
     const hasAnyFail = [...temps, ...probes].some(r => r.status === 'FAIL' || r.status === 'WARNING');
     const subject    = 'Daily Report — ' + name + ' — ' + Utilities.formatDate(dateObj, Session.getScriptTimeZone(), "EEE d MMM yyyy");
-    const html       = buildEmailHtml(name, dayLabel, date, opening, closing, temps, probes, goodsIn, cleaning, tasks, depts, settings);
+    const html       = buildEmailHtml(name, dayLabel, date, opening, closing, temps, probes, goodsIn, cleaning, tasks, notes, depts, settings);
 
     recipients.forEach(addr => {
       try { GmailApp.sendEmail(addr, subject, '', { htmlBody: html, name: name + ' · SafeChecks' }); }

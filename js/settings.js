@@ -972,7 +972,7 @@ function moveCheck(path,section,id,dir) {
   const idx=checks.findIndex(c=>c.id===id); const ni=idx+dir;
   if (ni<0||ni>=checks.length) return;
   [checks[idx],checks[ni]]=[checks[ni],checks[idx]];
-  saveSettings(); renderCheckEditors(); rebuildAllChecklists();
+  saveSettings(); syncSettingsToSheets(); renderCheckEditors(); rebuildAllChecklists();
 }
 function deleteCheck(path, section, id) {
   const checks = getChecksRef(path)?.[section];

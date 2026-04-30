@@ -77,6 +77,7 @@ const SHEET_TABS = {
   weekly:          'Weekly Review',
   task_completion: 'Task Completions',
   goods_in:         'Goods In Log',
+  quick_note:       'Notes Log',
 };
 
 // Checklist types use a compact schema + Fields JSON for full reconstruction.
@@ -103,6 +104,7 @@ const SHEET_HEADERS = {
     'Expiry Checked','Outcome','Notes','Signed By',
     'Fields JSON',
   ],
+  quick_note: ['ID','Date','Time','Department','Staff','Note'],
 };
 
 // ── PUSH ──────────────────────────────────────────────
@@ -156,6 +158,10 @@ function buildPayload(record) {
       f.weekly_rating  || '',
       f.weekly_signed_by || '',
       json];
+
+  } else if (record.type === 'quick_note') {
+    rowData = [record.id, record.date, record.timestamp, dept,
+      f.note_staff, f.note_text];
 
   } else if (record.type === 'goods_in') {
     rowData = [record.id, record.date, record.timestamp, record.dept || 'kitchen',

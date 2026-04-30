@@ -657,6 +657,38 @@ body {
 .modal-field { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
 .modal-field label { font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); }
 .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
+.note-log-entry {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.note-log-entry:last-child { border-bottom: none; }
+.note-log-meta {
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+.note-log-text {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.btn-add-note {
+  display: block;
+  width: 100%;
+  padding: 11px 16px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.15s, color 0.15s;
+  margin-bottom: 8px;
+}
+.btn-add-note:hover { border-color: var(--text-dim); color: var(--text); }
+
 .btn-cancel {
   flex: 1; padding: 14px; background: var(--bg-input);
   border: 1px solid var(--border); border-radius: var(--radius-lg);

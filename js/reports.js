@@ -236,6 +236,38 @@ function renderDailyReport() {
     </div>`;
   }
 
+  // ── Additional Notes ──────────────────────────────────
+  function buildNotesSection(dept) {
+    const deptInfo = DEPARTMENTS[dept];
+    const notes = dr.filter(r => r.type === 'quick_note' && r.dept === dept)
+      .sort((a, b) => new Date(a.iso) - new Date(b.iso));
+    if (!notes.length) return '';
+    const rows = notes.map(r => {
+      const time  = r.timestamp?.split(' ')[1]?.substring(0,5) || '';
+      const staff = r.fields?.note_staff || '';
+      const text  = r.fields?.note_text  || r.summary || '';
+      return `<div class="note-log-entry">
+        <div class="note-log-meta" style="color:${deptInfo.color}">${deptInfo.icon} ${staff} · ${time}</div>
+        <div class="note-log-text">${text}</div>
+      </div>`;
+    }).join('');
+    return `<div class="report-check-panel" style="flex:1;min-width:220px">
+      <div class="report-check-panel-header">
+        <span style="color:${deptInfo.color}">${deptInfo.icon} ${deptInfo.label}</span>
+        <span class="report-panel-meta">${notes.length} note${notes.length !== 1 ? 's' : ''}</span>
+      </div>
+      ${rows}
+    </div>`;
+  }
+
+  const kitchenNotes = buildNotesSection('kitchen');
+  const fohNotes     = buildNotesSection('foh');
+  const notesHTML    = (kitchenNotes || fohNotes) ? `
+    <div class="report-section-block">
+      <div class="report-section-title">Additional Notes</div>
+      <div class="report-two-col">${kitchenNotes || '<div class="report-check-panel report-not-recorded"><div class="report-check-panel-header"><span>🍳 Kitchen</span></div><div class="report-not-recorded-msg">— No notes</div></div>'}${fohNotes || '<div class="report-check-panel report-not-recorded"><div class="report-check-panel-header"><span>🛎 FOH</span></div><div class="report-not-recorded-msg">— No notes</div></div>'}</div>
+    </div>` : '';
+
   container.innerHTML = `
     <div class="report-doc" id="report-printable">
       <div class="report-doc-header">
@@ -303,6 +335,8 @@ function renderDailyReport() {
         <div class="report-section-title">Tasks</div>
         ${taskHTML}
       </div>
+
+      ${notesHTML}
     </div>
   `;
 }

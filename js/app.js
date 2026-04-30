@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.69.0';
+const APP_VERSION = '5.72.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -957,6 +957,8 @@ function logFoodProbe() {
   const temp   = parseFloat(tempVal);
   const passed = temp >= 75;
   const status = passed ? 'PASS' : 'FAIL';
+
+  if (!passed && !action) { showToast('Enter a corrective action for failed probe', 'error'); return; }
 
   const record = {
     id:        crypto.randomUUID ? crypto.randomUUID() : 'fp_' + Date.now(),
@@ -1985,4 +1987,97 @@ function updateGILogBadge() {
   const count = state.records.filter(r => r.type === 'goods_in' && r.date === todayStr()).length;
   badge.textContent = count > 0 ? count : '';
   badge.style.display = count > 0 ? 'inline' : 'none';
+}
+
+// ── Quick Note (Ad-hoc Log) ───────────────────────────
+function showAddNoteModal() {
+  const dept = isManagement() ? null : currentDept();
+  const staffList = (state.settings.staff || []).filter(s => s.enabled !== false);
+
+  function staffOptions(filterDept) {
+    const list = filterDept ? staffList.filter(s => s.dept === filterDept) : staffList;
+    return list.map(s => `<option value="${s.name}">${s.name}${isManagement() ? ' (' + (s.dept||'') + ')' : ''}</option>`).join('');
+  }
+
+  const deptSelector = isManagement() ? `
+    <div class="modal-field">
+      <label>Department</label>
+      <select id="note-dept-sel" class="select-field" onchange="
+        var d=this.value;
+        var sl=document.getElementById('note-staff-sel');
+        var list=(state.settings.staff||[]).filter(s=>s.enabled!==false&&s.dept===d);
+        sl.innerHTML='<option value=\'\'></option>'+list.map(s=>'<option>'+s.name+'</option>').join('');
+        if(list.length)sl.value=list[0].name;
+      ">
+        <option value="kitchen">🍳 Kitchen</option>
+        <option value="foh">🛎 FOH</option>
+      </select>
+    </div>` : '';
+
+  const initialDept = isManagement() ? 'kitchen' : dept;
+  const initialStaff = staffOptions(initialDept);
+
+  const el = document.createElement('div');
+  el.id = 'add-note-modal';
+  el.className = 'modal-overlay';
+  el.innerHTML = `<div class="modal-box" style="max-width:380px">
+    <h2 class="modal-title">Add Note</h2>
+    <p class="modal-desc">Log an action taken, observation, or any ad-hoc event not covered by standard checks.</p>
+    ${deptSelector}
+    <div class="modal-field">
+      <label>Staff member</label>
+      <select id="note-staff-sel" class="select-field">
+        <option value=""></option>
+        ${initialStaff}
+      </select>
+    </div>
+    <div class="modal-field">
+      <label>Note / Action taken</label>
+      <textarea id="note-text-input" class="notes-field" rows="4" placeholder="e.g. Oil changed in fryer, new batch dated today. Checked by manager on arrival." style="resize:vertical"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="document.getElementById('add-note-modal').remove()">Cancel</button>
+      <button class="btn-submit" onclick="logQuickNote()">Save Note</button>
+    </div>
+  </div>`;
+  document.body.appendChild(el);
+
+  // Pre-select first staff in dept
+  const staffSel = document.getElementById('note-staff-sel');
+  const initList = (state.settings.staff||[]).filter(s => s.enabled!==false && s.dept===initialDept);
+  if (initList.length) staffSel.value = initList[0].name;
+
+  setTimeout(() => document.getElementById('note-text-input')?.focus(), 100);
+}
+
+function logQuickNote() {
+  const noteDeptSel = document.getElementById('note-dept-sel');
+  const dept  = noteDeptSel ? noteDeptSel.value : currentDept();
+  const staff = document.getElementById('note-staff-sel')?.value?.trim();
+  const text  = document.getElementById('note-text-input')?.value?.trim();
+
+  if (!staff) { showToast('Select a staff member', 'error'); return; }
+  if (!text)  { showToast('Enter a note', 'error'); return; }
+
+  const record = {
+    id:        crypto.randomUUID ? crypto.randomUUID() : 'qn_' + Date.now(),
+    type:      'quick_note',
+    dept:      dept,
+    date:      todayStr(),
+    timestamp: nowTimestamp(),
+    iso:       nowISO(),
+    fields: {
+      note_staff: staff,
+      note_text:  text,
+    },
+    summary: text.substring(0, 80),
+  };
+
+  state.records.push(record);
+  saveState();
+  syncRecordToSheets(record);
+
+  document.getElementById('add-note-modal')?.remove();
+  showToast('Note saved', 'success');
+  updateDashboard();
 }
