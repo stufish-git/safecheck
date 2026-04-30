@@ -242,6 +242,8 @@ body {
 .progress-label { font-family: var(--mono); font-size: 10px; color: var(--text-muted); margin-top: 2px; }
 .dash-card-status { font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
 .dash-card-status.complete { color: var(--success); }
+.dash-card-add-note { border-style: dashed; opacity: 0.65; }
+.dash-card-add-note:hover { opacity: 1; }
 .dash-card-status.partial  { color: var(--warning); }
 .dash-card-status.overdue  { color: var(--danger); }
 
@@ -672,22 +674,6 @@ body {
   color: var(--text);
   line-height: 1.4;
 }
-
-.btn-add-note {
-  display: block;
-  width: 100%;
-  padding: 11px 16px;
-  background: transparent;
-  border: 1px dashed var(--border);
-  border-radius: 8px;
-  color: var(--text-dim);
-  font-size: 13px;
-  cursor: pointer;
-  text-align: center;
-  transition: border-color 0.15s, color 0.15s;
-  margin-bottom: 8px;
-}
-.btn-add-note:hover { border-color: var(--text-dim); color: var(--text); }
 
 .btn-cancel {
   flex: 1; padding: 14px; background: var(--bg-input);

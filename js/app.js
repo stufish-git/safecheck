@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.72.0';
+const APP_VERSION = '5.74.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -1275,6 +1275,10 @@ function renderManagerDashboard() {
         <div class="dept-col-header" style="color:${deptInfo.color}">${deptInfo.icon} ${deptInfo.label}</div>
         ${closedOverlay}
         ${cards}
+        <div class="mgr-card mgr-card-add-note" onclick="showAddNoteModal('" + deptId + "')">
+          <div class="mgr-card-header"><span class="mgr-card-icon" style="color:var(--text-dim)">✎</span><span class="mgr-card-label">Add Note</span></div>
+          <div class="mgr-card-status">Log an action or observation</div>
+        </div>
       </div>`;
   }).join('');
 }
@@ -1444,7 +1448,15 @@ function renderStaffDashboard() {
       </div>
       <div class="dash-card-status ${pct===100?'complete':'partial'}">${pct===100 ? '✓ Complete' : `${passed} / ${n} done`}</div>
     </div>`;
-  }).join('')}</div>`;
+  }).join('')}
+    <div class="dash-card dash-card-add-note" onclick="showAddNoteModal()">
+      <div class="dash-card-icon" style="color:var(--text-dim)">✎</div>
+      <div class="dash-card-body"><h3>Add Note</h3>
+        <div class="progress-label">Log an action or observation</div>
+      </div>
+      <div class="dash-card-status">—</div>
+    </div>
+  </div>`;
 }
 
 function renderDashAlerts() {
@@ -1990,8 +2002,8 @@ function updateGILogBadge() {
 }
 
 // ── Quick Note (Ad-hoc Log) ───────────────────────────
-function showAddNoteModal() {
-  const dept = isManagement() ? null : currentDept();
+function showAddNoteModal(presetDept) {
+  const dept = presetDept || (isManagement() ? null : currentDept());
   const staffList = (state.settings.staff || []).filter(s => s.enabled !== false);
 
   function staffOptions(filterDept) {
@@ -2001,8 +2013,8 @@ function showAddNoteModal() {
 
   const deptSelector = isManagement() ? `
     <div class="modal-field">
-      <label>Department</label>
-      <select id="note-dept-sel" class="select-field" onchange="
+      <label for="note-dept-sel">Department</label>
+      <select id="note-dept-sel" name="note-dept-sel" class="select-field" onchange="
         var d=this.value;
         var sl=document.getElementById('note-staff-sel');
         var list=(state.settings.staff||[]).filter(s=>s.enabled!==false&&s.dept===d);
@@ -2025,15 +2037,15 @@ function showAddNoteModal() {
     <p class="modal-desc">Log an action taken, observation, or any ad-hoc event not covered by standard checks.</p>
     ${deptSelector}
     <div class="modal-field">
-      <label>Staff member</label>
-      <select id="note-staff-sel" class="select-field">
+      <label for="note-staff-sel">Staff member</label>
+      <select id="note-staff-sel" name="note-staff-sel" class="select-field">
         <option value=""></option>
         ${initialStaff}
       </select>
     </div>
     <div class="modal-field">
-      <label>Note / Action taken</label>
-      <textarea id="note-text-input" class="notes-field" rows="4" placeholder="e.g. Oil changed in fryer, new batch dated today. Checked by manager on arrival." style="resize:vertical"></textarea>
+      <label for="note-text-input">Note / Action taken</label>
+      <textarea id="note-text-input" name="note-text-input" class="notes-field" rows="4" placeholder="e.g. Oil changed in fryer, new batch dated today. Checked by manager on arrival." style="resize:vertical"></textarea>
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="document.getElementById('add-note-modal').remove()">Cancel</button>
