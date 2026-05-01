@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.75.0';
+const APP_VERSION = '5.76.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -1275,7 +1275,7 @@ function renderManagerDashboard() {
         <div class="dept-col-header" style="color:${deptInfo.color}">${deptInfo.icon} ${deptInfo.label}</div>
         ${closedOverlay}
         ${cards}
-        <div class="mgr-card mgr-card-add-note" onclick="showAddNoteModal('" + deptId + "')">
+        <div class="mgr-card mgr-card-add-note" onclick="showAddNoteModal('${deptId}')">
           <div class="mgr-card-header"><span class="mgr-card-icon" style="color:var(--text-dim)">✎</span><span class="mgr-card-label">Add Note</span></div>
           <div class="mgr-card-status">Log an action or observation</div>
         </div>
