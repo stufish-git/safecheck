@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.76.0';
+const APP_VERSION = '5.77.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -1275,10 +1275,17 @@ function renderManagerDashboard() {
         <div class="dept-col-header" style="color:${deptInfo.color}">${deptInfo.icon} ${deptInfo.label}</div>
         ${closedOverlay}
         ${cards}
-        <div class="mgr-card mgr-card-add-note" onclick="showAddNoteModal('${deptId}')">
-          <div class="mgr-card-header"><span class="mgr-card-icon" style="color:var(--text-dim)">✎</span><span class="mgr-card-label">Add Note</span></div>
-          <div class="mgr-card-status">Log an action or observation</div>
-        </div>
+        ${(function(){
+          const nd = getNotesTileData(deptId, today);
+          const hasNotes = !!nd;
+          const sub = hasNotes
+            ? `<div class="note-tile-preview">${nd.preview}</div><div class="note-tile-meta">${nd.staff} · ${nd.count} note${nd.count!==1?'s':''} today</div>`
+            : `<div class="mgr-card-status">Log an action or observation</div>`;
+          return `<div class="mgr-card mgr-card-add-note${hasNotes?' has-notes':''}" onclick="showAddNoteModal('${deptId}')">
+            <div class="mgr-card-header"><span class="mgr-card-icon" style="color:var(--text-dim)">✎</span><span class="mgr-card-label">Add Note</span></div>
+            ${sub}
+          </div>`;
+        })()}
       </div>`;
   }).join('');
 }
@@ -1449,13 +1456,18 @@ function renderStaffDashboard() {
       <div class="dash-card-status ${pct===100?'complete':'partial'}">${pct===100 ? '✓ Complete' : `${passed} / ${n} done`}</div>
     </div>`;
   }).join('')}
-    <div class="dash-card dash-card-add-note" onclick="showAddNoteModal()">
-      <div class="dash-card-icon" style="color:var(--text-dim)">✎</div>
-      <div class="dash-card-body"><h3>Add Note</h3>
-        <div class="progress-label">Log an action or observation</div>
-      </div>
-      <div class="dash-card-status">—</div>
-    </div>
+    ${(function(){
+      const nd = getNotesTileData(dept, today);
+      const hasNotes = !!nd;
+      const body = hasNotes
+        ? `<div class="progress-label note-tile-preview">${nd.preview}</div><div class="progress-label" style="color:var(--text-dim);font-size:11px">${nd.staff} · ${nd.count} note${nd.count!==1?'s':''} today</div>`
+        : `<div class="progress-label">Log an action or observation</div>`;
+      return `<div class="dash-card dash-card-add-note${hasNotes?' has-notes':''}" onclick="showAddNoteModal()">
+        <div class="dash-card-icon" style="color:var(--text-dim)">✎</div>
+        <div class="dash-card-body"><h3>Add Note</h3>${body}</div>
+        <div class="dash-card-status${hasNotes?' complete':''}">${hasNotes ? nd.count + ' today' : '—'}</div>
+      </div>`;
+    })()}
   </div>`;
 }
 
@@ -2002,6 +2014,16 @@ function updateGILogBadge() {
 }
 
 // ── Quick Note (Ad-hoc Log) ───────────────────────────
+function getNotesTileData(dept, today) {
+  const notes = state.records.filter(r => r.type === 'quick_note' && r.dept === dept && r.date === today);
+  if (!notes.length) return null;
+  const last    = notes[notes.length - 1];
+  const text    = last.fields?.note_text || '';
+  const words   = text.split(/\s+/).slice(0, 7).join(' ');
+  const preview = words + (text.split(/\s+/).length > 7 ? '…' : '');
+  return { count: notes.length, preview, staff: last.fields?.note_staff || '' };
+}
+
 function noteModalDeptChanged(dept) {
   const list = (state.settings.staff || []).filter(s => s.enabled !== false && s.dept === dept);
   const sl   = document.getElementById('note-staff-sel');
