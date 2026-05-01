@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.77.0';
+const APP_VERSION = '5.78.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -124,8 +124,8 @@ function showWipeDataModal() {
     <h2 class="modal-title">Wipe All Data</h2>
     <p class="modal-desc" style="color:var(--danger);font-weight:600">⚠ Permanently deletes all records from this device and Google Sheets. Settings are not affected.</p>
     <div class="modal-field">
-      <label>Manager PIN</label>
-      <input type="password" id="wipe-pin-input" class="text-field" maxlength="6" inputmode="numeric" placeholder="Enter PIN"/>
+      <label for="wipe-pin-input">Manager PIN</label>
+      <input type="password" id="wipe-pin-input" name="wipe-pin-input" class="text-field" maxlength="6" inputmode="numeric" placeholder="Enter PIN"/>
     </div>
     <p id="wipe-pin-error" style="color:var(--danger);font-size:12px;min-height:18px"></p>
     <div class="modal-actions">
@@ -717,12 +717,12 @@ function buildEquipmentCheckUI(dept) {
                 <div class="equip-temp-row">
                   <button class="equip-stepper" type="button" onclick="stepTemp('${e.id}','${t}',-1)">−</button>
                   <input type="number" step="0.1" class="equip-temp-input"
-                    id="equip-temp-${e.id}" placeholder="°C"
+                    id="equip-temp-${e.id}" name="equip-temp-${e.id}" placeholder="°C"
                     oninput="autoStatusFromTemp('${e.id}','${t}',this.value)"/>
                   <button class="equip-stepper" type="button" onclick="stepTemp('${e.id}','${t}',+1)">+</button>
                 </div>
                 <textarea class="equip-action-input hidden"
-                  id="equip-action-${e.id}"
+                  id="equip-action-${e.id}" name="equip-action-${e.id}"
                   placeholder="Corrective action taken — e.g. Adjusted thermostat, moved stock to backup fridge..." rows="2"></textarea>
               </div>
             </div>`).join('')}
@@ -1279,7 +1279,8 @@ function renderManagerDashboard() {
           const nd = getNotesTileData(deptId, today);
           const hasNotes = !!nd;
           const sub = hasNotes
-            ? `<div class="note-tile-preview">${nd.preview}</div><div class="note-tile-meta">${nd.staff} · ${nd.count} note${nd.count!==1?'s':''} today</div>`
+            ? nd.items.map(n => `<div class="note-tile-row"><span class="note-tile-bullet">–</span><span class="note-tile-preview">${n.preview}</span></div>`).join('') +
+              `<div class="note-tile-meta">${nd.count} note${nd.count!==1?'s':''} today</div>`
             : `<div class="mgr-card-status">Log an action or observation</div>`;
           return `<div class="mgr-card mgr-card-add-note${hasNotes?' has-notes':''}" onclick="showAddNoteModal('${deptId}')">
             <div class="mgr-card-header"><span class="mgr-card-icon" style="color:var(--text-dim)">✎</span><span class="mgr-card-label">Add Note</span></div>
@@ -1460,7 +1461,8 @@ function renderStaffDashboard() {
       const nd = getNotesTileData(dept, today);
       const hasNotes = !!nd;
       const body = hasNotes
-        ? `<div class="progress-label note-tile-preview">${nd.preview}</div><div class="progress-label" style="color:var(--text-dim);font-size:11px">${nd.staff} · ${nd.count} note${nd.count!==1?'s':''} today</div>`
+        ? nd.items.map(n => `<div class="note-tile-row"><span class="note-tile-bullet">–</span><span class="note-tile-preview">${n.preview}</span></div>`).join('') +
+          `<div class="note-tile-meta">${nd.count} note${nd.count!==1?'s':''} today</div>`
         : `<div class="progress-label">Log an action or observation</div>`;
       return `<div class="dash-card dash-card-add-note${hasNotes?' has-notes':''}" onclick="showAddNoteModal()">
         <div class="dash-card-icon" style="color:var(--text-dim)">✎</div>
@@ -2017,11 +2019,15 @@ function updateGILogBadge() {
 function getNotesTileData(dept, today) {
   const notes = state.records.filter(r => r.type === 'quick_note' && r.dept === dept && r.date === today);
   if (!notes.length) return null;
-  const last    = notes[notes.length - 1];
-  const text    = last.fields?.note_text || '';
-  const words   = text.split(/\s+/).slice(0, 7).join(' ');
-  const preview = words + (text.split(/\s+/).length > 7 ? '…' : '');
-  return { count: notes.length, preview, staff: last.fields?.note_staff || '' };
+  const items = notes.map(r => {
+    const text  = r.fields?.note_text || '';
+    const words = text.split(/\s+/);
+    return {
+      staff:   r.fields?.note_staff || '',
+      preview: words.slice(0, 7).join(' ') + (words.length > 7 ? '…' : ''),
+    };
+  });
+  return { count: notes.length, items };
 }
 
 function noteModalDeptChanged(dept) {
