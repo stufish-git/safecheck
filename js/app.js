@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.84.0';
+const APP_VERSION = '5.85.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -586,6 +586,17 @@ function updateChecklistProgress(type, dept) {
   const bannerEl = document.getElementById(`${type}-banner`);
   const formEl   = document.getElementById(`form-${type}`);
   if (!progEl) return;
+
+  // In backdate mode — hide banner, hide progress, unlock form, return early
+  if (formEl?.dataset.backdateMode) {
+    progEl.style.display = 'none';
+    if (bannerEl) bannerEl.style.display = 'none';
+    if (formEl) {
+      formEl.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.disabled = false);
+      formEl.classList.remove('form-submitted');
+    }
+    return;
+  }
 
   // Check if formally submitted today
   const submitted = isChecklistSubmittedToday(type, dept);
