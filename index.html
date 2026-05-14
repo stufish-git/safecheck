@@ -82,6 +82,10 @@
           <button class="dept-bar-btn active" data-dept="kitchen" onclick="setFormDept('opening','kitchen')">🍳 Kitchen</button>
           <button class="dept-bar-btn" data-dept="foh" onclick="setFormDept('opening','foh')">🍽 FOH</button>
         </div>
+      <div id="opening-backdate-row" class="backdate-date-row" style="display:none">
+        <span class="backdate-date-label">📅 Recording for</span>
+        <input type="date" id="opening-backdate-date" name="opening-backdate-date" class="backdate-date-input"/>
+      </div>
         <div class="signed-by-group signed-by-top">
           <label class="notes-label">Signed off by</label>
           <select class="select-field signed-by-select" data-key="open_signed_by">
@@ -117,6 +121,10 @@
         <button class="dept-bar-btn" data-dept="foh" onclick="setFormDept('equipment','foh')">🍽 FOH</button>
       </div>
 
+      <div id="equipment-backdate-row" class="backdate-date-row" style="display:none">
+        <span class="backdate-date-label">📅 Recording for</span>
+        <input type="date" id="equipment-backdate-date" name="equipment-backdate-date" class="backdate-date-input"/>
+      </div>
       <div class="temp-targets" style="margin:0 0 16px">
         <span class="target-chip">🧊 Fridge ≤5°C</span>
         <span class="target-chip">❄ Freezer ≤-18°C</span>
@@ -166,6 +174,10 @@
         <button class="gi-vt-btn" id="gi-vt-log" onclick="showGoodsInView('log')">Today's Log <span id="gi-log-count" class="gi-count-badge"></span></button>
       </div>
 
+      <div id="goods-in-backdate-row" class="backdate-date-row" style="display:none">
+        <span class="backdate-date-label">📅 Recording for</span>
+        <input type="date" id="goods-in-backdate-date" name="goods-in-backdate-date" class="backdate-date-input"/>
+      </div>
       <!-- New delivery form -->
       <div id="gi-view-new">
 
@@ -266,6 +278,10 @@
       </div>
 
       <div class="temp-entry-form">
+      <div id="probe-backdate-row" class="backdate-date-row" style="display:none">
+        <span class="backdate-date-label">📅 Recording for</span>
+        <input type="date" id="probe-backdate-date" name="probe-backdate-date" class="backdate-date-input"/>
+      </div>
         <div class="signed-by-group signed-by-top">
           <label class="notes-label">Logged by</label>
           <select class="select-field" id="probe-staff">
@@ -345,6 +361,10 @@
           <button class="dept-bar-btn active" data-dept="kitchen" onclick="setFormDept('cleaning','kitchen')">🍳 Kitchen</button>
           <button class="dept-bar-btn" data-dept="foh" onclick="setFormDept('cleaning','foh')">🍽 FOH</button>
         </div>
+        <div id="cleaning-backdate-row" class="backdate-date-row" style="display:none">
+        <span class="backdate-date-label">📅 Recording for</span>
+        <input type="date" id="cleaning-backdate-date" name="cleaning-backdate-date" class="backdate-date-input"/>
+      </div>
         <div class="signed-by-group signed-by-top">
           <label class="notes-label">Signed off by</label>
           <select class="select-field signed-by-select" data-key="clean_signed_by">
@@ -379,6 +399,10 @@
           <button class="dept-bar-btn active" data-dept="kitchen" onclick="setFormDept('closing','kitchen')">🍳 Kitchen</button>
           <button class="dept-bar-btn" data-dept="foh" onclick="setFormDept('closing','foh')">🍽 FOH</button>
         </div>
+      <div id="closing-backdate-row" class="backdate-date-row" style="display:none">
+        <span class="backdate-date-label">📅 Recording for</span>
+        <input type="date" id="closing-backdate-date" name="closing-backdate-date" class="backdate-date-input"/>
+      </div>
         <div class="signed-by-group signed-by-top">
           <label class="notes-label">Signed off by</label>
           <select class="select-field signed-by-select" data-key="close_signed_by">

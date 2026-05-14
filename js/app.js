@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.80.0';
+const APP_VERSION = '5.81.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -43,7 +43,6 @@ const state = {
   weeklyRating: '',
   tabDept:      {},   // active dept per tab for management
   equipChecks:  {},   // current equipment check UI state
-  backdateDate: null,  // null = today; set = management backdate mode active
 };
 
 // ── Init ──────────────────────────────────────────────
@@ -174,7 +173,6 @@ async function confirmWipeData() {
 
 // ── Date helpers ──────────────────────────────────────
 function todayStr()     { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
-function recordDate()    { return state.backdateDate || todayStr(); }  // use active backdate if set, else today
 
 // ── Trading calendar ──────────────────────────────────
 // Returns true if a given dept is expected to trade on dateStr (YYYY-MM-DD).
@@ -493,24 +491,29 @@ function submitChecklist(type) {
 
   // Backdate duplicate check — block for single-submission types
   const singleSubmitTypes = ['opening', 'closing', 'cleaning'];
-  if (state.backdateDate && singleSubmitTypes.includes(type)) {
-    const exists = state.records.some(r => r.type === type && r.dept === dept && r.date === state.backdateDate);
+
+
+  // For weekly review, use selected week; for backdated forms, read date input; else today
+  const formDateInput = document.getElementById(type + '-backdate-date');
+  const submissionDate = (type === 'weekly' && getSelectedWeekStart())
+    ? getSelectedWeekStart()
+    : (formDateInput?.value || todayStr());
+
+  // Duplicate block for single-submission types on backdated dates
+  const singleSubmitTypes = ['opening', 'closing', 'cleaning'];
+  if (submissionDate !== todayStr() && singleSubmitTypes.includes(type)) {
+    const exists = state.records.some(r => r.type === type && r.dept === dept && r.date === submissionDate);
     if (exists) {
-      const dateLabel = new Date(state.backdateDate + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' });
+      const dateLabel = new Date(submissionDate + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' });
       showToast(`${labelFor(type)} already recorded for ${dateLabel}`, 'error');
       return;
     }
   }
 
-  // For weekly review, file the record under the selected week's start date
-  const recordDate = (type === 'weekly' && getSelectedWeekStart())
-    ? getSelectedWeekStart()
-    : recordDate();
-
   const record = {
     id:        crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
     type, dept,
-    date:      recordDate,
+    date:      submissionDate,
     timestamp: nowTimestamp(),
     iso:       nowISO(),
     fields:    {},
@@ -532,13 +535,13 @@ function submitChecklist(type) {
 
   record.summary = `${checked}/${total} checks passed · Signed: ${signed}`;
 
-  // Backdate audit trail
-  if (state.backdateDate) {
-    record.fields._backdated    = 'true';
-    record.fields._backdated_by = signed;
-  }
-
-  state.records.push(record);
+  function _doSubmitChecklist() {
+    // Backdate audit trail
+    if (submissionDate !== todayStr()) {
+      record.fields._backdated    = 'true';
+      record.fields._backdated_by = signed;
+    }
+    state.records.push(record);
   saveState();
   syncRecordToSheets(record);
 
@@ -557,13 +560,20 @@ function submitChecklist(type) {
   // Clear draft — checks are now formally submitted
   clearDraft(type, dept);
 
-  // Auto-clear backdate after submission
-  const wasBackdated = !!state.backdateDate;
-  state.backdateDate = null;
+  // Reset date input to today
+  const wasBackdated = submissionDate !== todayStr();
+  if (formDateInput) formDateInput.value = todayStr();
 
   updateDashboard();
   showToast(`${labelFor(type)} submitted${wasBackdated ? ' (backdated)' : ''} ✓`, 'success');
   setTimeout(() => showTab('dashboard'), 1200);
+  }  // end _doSubmitChecklist
+
+  if (submissionDate !== todayStr()) {
+    requireBackdatePin(submissionDate, _doSubmitChecklist);
+  } else {
+    _doSubmitChecklist();
+  }
 }
 
 // ── Checklist state: progress bar + banner ───────────
@@ -869,7 +879,7 @@ function submitAllEquipment() {
       id:        crypto.randomUUID ? crypto.randomUUID() : `eq_${Date.now()}_${submitted}`,
       type:      'temperature',
       dept,
-      date:      recordDate(),
+      date:      (document.getElementById('equipment-backdate-date')?.value || todayStr()),
       timestamp: nowTimestamp(),
       iso:       nowISO(),
       fields: {
@@ -883,7 +893,8 @@ function submitAllEquipment() {
       },
       summary: `${equip.name}: ${tempVal ? tempVal+'°C ' : ''}${status} · ${staff}`,
     };
-    if (state.backdateDate) {
+    const eqDate = document.getElementById('equipment-backdate-date')?.value || todayStr();
+    if (eqDate !== todayStr()) {
       record.fields._backdated    = 'true';
       record.fields._backdated_by = staff;
     }
@@ -894,6 +905,7 @@ function submitAllEquipment() {
 
   saveState();
 
+  function _doSubmitEquipment() {
   // Send to Sheets sequentially — avoids Apps Script concurrent execution limits
   (async () => {
     for (const record of tempRecords) {
@@ -917,10 +929,19 @@ function submitAllEquipment() {
   renderEquipmentLog(dept);
   updateEquipDayStatus();
   updateDashboard();
-  const wasBackdatedEq = !!state.backdateDate;
-  state.backdateDate = null;
+  const eqDateInput = document.getElementById('equipment-backdate-date');
+  const wasBackdatedEq = eqDateInput?.value && eqDateInput.value !== todayStr();
+  if (eqDateInput) eqDateInput.value = todayStr();
   showToast(`${submitted} equipment check${submitted!==1?'s':''} submitted${wasBackdatedEq?' (backdated)':''} ✓`, 'success');
   setTimeout(() => showTab('dashboard'), 1200);
+  } // end _doSubmitEquipment
+
+  const eqDateVal = document.getElementById('equipment-backdate-date')?.value || todayStr();
+  if (eqDateVal !== todayStr()) {
+    requireBackdatePin(eqDateVal, _doSubmitEquipment);
+  } else {
+    _doSubmitEquipment();
+  }
 }
 
 // ── Equipment log (today's entries) ──────────────────
@@ -994,7 +1015,7 @@ function logFoodProbe() {
     id:        crypto.randomUUID ? crypto.randomUUID() : 'fp_' + Date.now(),
     type:      'food_probe',
     dept:      'kitchen',
-    date:      recordDate(),
+    date:      (document.getElementById('probe-backdate-date')?.value || todayStr()),
     timestamp: nowTimestamp(),
     iso:       nowISO(),
     fields: {
@@ -1009,28 +1030,40 @@ function logFoodProbe() {
     summary: `${product}: ${temp}°C (${status})${cooling ? ' · ❄️ ' + cooling : ''} · ${staff}`,
   };
 
-  if (state.backdateDate) {
-    record.fields._backdated    = 'true';
-    record.fields._backdated_by = staff;
+  const probeDate = document.getElementById('probe-backdate-date')?.value || todayStr();
+
+  function _doLogProbe() {
+    if (probeDate !== todayStr()) {
+      record.fields._backdated    = 'true';
+      record.fields._backdated_by = staff;
+    }
+    state.records.push(record);
+    saveState();
+    syncRecordToSheets(record);
+
+    const probeDateInput = document.getElementById('probe-backdate-date');
+    if (probeDateInput) probeDateInput.value = todayStr();
+
+    document.getElementById('probe-product').value       = '';
+    document.getElementById('probe-temp').value          = '';
+    document.getElementById('probe-action').value        = '';
+    document.getElementById('probe-cooling-time').value  = '';
+
+    const actionGroup = document.getElementById('probe-action-group');
+    if (actionGroup) actionGroup.style.display = passed ? 'none' : 'block';
+
+    renderFoodProbeLog();
+    updateFoodProbeDayStatus();
+    updateDashboard();
+    showToast(passed ? `${product}: ${temp}°C ✓ PASS` : `${product}: ${temp}°C ⚠ FAIL — below 75°C`, passed ? 'success' : 'error');
+    setTimeout(() => showTab('dashboard'), 1200);
   }
-  state.records.push(record);
-  saveState();
-  syncRecordToSheets(record);
 
-  document.getElementById('probe-product').value       = '';
-  document.getElementById('probe-temp').value          = '';
-  document.getElementById('probe-action').value        = '';
-  document.getElementById('probe-cooling-time').value  = '';
-
-  const actionGroup = document.getElementById('probe-action-group');
-  if (actionGroup) actionGroup.style.display = passed ? 'none' : 'block';
-
-  renderFoodProbeLog();
-  updateFoodProbeDayStatus();
-  updateDashboard();
-  state.backdateDate = null;
-  showToast(passed ? `${product}: ${temp}°C ✓ PASS` : `${product}: ${temp}°C ⚠ FAIL — below 75°C`, passed ? 'success' : 'error');
-  setTimeout(() => showTab('dashboard'), 1200);
+  if (probeDate !== todayStr()) {
+    requireBackdatePin(probeDate, _doLogProbe);
+  } else {
+    _doLogProbe();
+  }
 }
 
 function renderFoodProbeLog() {
@@ -1178,11 +1211,7 @@ function renderManagerDashboard() {
   // Kitchen and FOH only — weekly review moved to full-width panel below
   const depts = Object.entries(DEPARTMENTS).filter(([id]) => id !== 'mgmt');
 
-  const backdateRow = `<div class="mgr-backdate-row">
-    <button class="btn-backdate" onclick="showBackdateModal()">📅 Enter past record</button>
-  </div>`;
-
-  grid.innerHTML = backdateRow + depts.map(([deptId, deptInfo]) => {
+  grid.innerHTML = depts.map(([deptId, deptInfo]) => {
     const deptRecords = state.records.filter(r => r.date===today && r.dept===deptId);
 
     const sections = [
@@ -1568,12 +1597,7 @@ function renderDashAlerts() {
   const breaches = dr.filter(r=>r.type==='temperature'&&r.fields?.temp_status==='FAIL');
   if (breaches.length) alerts.push(`⚠ ${breaches.length} temperature breach${breaches.length>1?'es':''} today`);
 
-  // Backdate banner — shown when backdate mode is active
-  const backdateBanner = state.backdateDate
-    ? `<div class="dash-alert dash-alert-backdate">📅 Backdate mode active — recording for ${new Date(state.backdateDate + 'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})} &nbsp;<button class="backdate-cancel-btn" onclick="state.backdateDate=null;updateDashboard()">✕ Cancel</button></div>`
-    : '';
-
-  el.innerHTML = backdateBanner + alerts.map(a=>`<div class="dash-alert">${a}</div>`).join('');
+  el.innerHTML = alerts.map(a=>`<div class="dash-alert">${a}</div>`).join('');
 }
 
 function updateLastRefreshed() {
@@ -1985,23 +2009,27 @@ function submitGoodsIn() {
     id:        crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
     type:      'goods_in',
     dept:      'kitchen',
-    date:      recordDate(),
+    date:      (document.getElementById('goods-in-backdate-date')?.value || todayStr()),
     timestamp: nowTimestamp(),
     iso:       nowISO(),
     fields,
     summary,
   };
 
-  if (state.backdateDate) {
-    record.fields._backdated    = 'true';
-    record.fields._backdated_by = record.fields.gi_signed_by || '';
-  }
-  state.records.push(record);
-  saveState();
-  syncRecordToSheets(record);
+  const giDate = document.getElementById('goods-in-backdate-date')?.value || todayStr();
 
-  state.backdateDate = null;
-  showToast(`Delivery logged ✓`, 'success');
+  function _doSubmitGoodsIn() {
+    if (giDate !== todayStr()) {
+      record.fields._backdated    = 'true';
+      record.fields._backdated_by = record.fields.gi_signed_by || '';
+    }
+    state.records.push(record);
+    saveState();
+    syncRecordToSheets(record);
+
+    const giDateInput = document.getElementById('goods-in-backdate-date');
+    if (giDateInput) giDateInput.value = todayStr();
+    showToast(`Delivery logged ✓`, 'success');
 
   // Reset form
   document.getElementById('gi-temp').value = '';
@@ -2016,6 +2044,13 @@ function submitGoodsIn() {
   updateGILogBadge();
   showGoodsInView('log');
   setTimeout(() => showTab('dashboard'), 1200);
+  } // end _doSubmitGoodsIn
+
+  if (giDate !== todayStr()) {
+    requireBackdatePin(giDate, _doSubmitGoodsIn);
+  } else {
+    _doSubmitGoodsIn();
+  }
 }
 
 function renderGoodsInLog() {
@@ -2174,53 +2209,45 @@ function logQuickNote() {
   updateDashboard();
 }
 
-// ── Backdate Mode ─────────────────────────────────────
-function showBackdateModal() {
-  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-  const yStr = yesterday.getFullYear() + '-' + String(yesterday.getMonth()+1).padStart(2,'0') + '-' + String(yesterday.getDate()).padStart(2,'0');
-  // Max date is yesterday — cannot backdate to today (use normal flow)
-  const todayVal = todayStr();
-
+// ── Backdate PIN Gate ─────────────────────────────────
+// Call before proceeding with any backdated submission.
+// Shows a PIN modal; calls onConfirm() if PIN is correct.
+function requireBackdatePin(dateStr, onConfirm) {
+  const dateLabel = new Date(dateStr + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long' });
   const el = document.createElement('div');
-  el.id = 'backdate-modal';
+  el.id = 'backdate-pin-modal';
   el.className = 'modal-overlay';
-  el.innerHTML = `<div class="modal-box" style="max-width:360px">
-    <h2 class="modal-title">📅 Enter Past Record</h2>
-    <p class="modal-desc">Select the date you want to record for. You will then complete the relevant form as normal.</p>
+  el.innerHTML = `<div class="modal-box" style="max-width:340px">
+    <h2 class="modal-title">📅 Backdated Entry</h2>
+    <p class="modal-desc">You are recording for <strong>${dateLabel}</strong>. Enter your manager PIN to confirm.</p>
     <div class="modal-field">
-      <label for="backdate-date-input">Date</label>
-      <input type="date" id="backdate-date-input" name="backdate-date-input" class="text-field"
-        value="${yStr}" max="${ new Date(new Date() - 86400000).toISOString().split('T')[0] }"
-        style="font-size:16px"/>
-    </div>
-    <div class="modal-field">
-      <label for="backdate-pin-input">Manager PIN</label>
-      <input type="password" id="backdate-pin-input" name="backdate-pin-input" class="text-field"
+      <label for="bdpin-input">Manager PIN</label>
+      <input type="password" id="bdpin-input" name="bdpin-input" class="text-field"
         maxlength="6" inputmode="numeric" placeholder="Enter PIN"/>
     </div>
-    <p id="backdate-pin-error" style="color:var(--danger);font-size:12px;min-height:18px"></p>
+    <p id="bdpin-error" style="color:var(--danger);font-size:12px;min-height:18px"></p>
     <div class="modal-actions">
-      <button class="btn-cancel" onclick="document.getElementById('backdate-modal').remove()">Cancel</button>
-      <button class="btn-submit" onclick="confirmBackdate()">Activate</button>
+      <button class="btn-cancel" onclick="document.getElementById('backdate-pin-modal').remove()">Cancel</button>
+      <button class="btn-submit" onclick="confirmBackdatePin()">Confirm</button>
     </div>
   </div>`;
   document.body.appendChild(el);
-  setTimeout(() => document.getElementById('backdate-pin-input')?.focus(), 100);
+
+  // Store callback for confirmBackdatePin to call
+  window._backdatePinCallback = onConfirm;
+  setTimeout(() => document.getElementById('bdpin-input')?.focus(), 100);
 }
 
-function confirmBackdate() {
-  const pin     = document.getElementById('backdate-pin-input')?.value;
-  const dateVal = document.getElementById('backdate-date-input')?.value;
-  const err     = document.getElementById('backdate-pin-error');
-
-  if (!dateVal) { if (err) err.textContent = 'Select a date'; return; }
-  if (dateVal >= todayStr()) { if (err) err.textContent = 'Date must be before today'; return; }
-  if (!verifyPin(pin)) { if (err) err.textContent = 'Incorrect PIN'; return; }
-
-  state.backdateDate = dateVal;
-  document.getElementById('backdate-modal')?.remove();
-
-  const label = new Date(dateVal + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long' });
-  showToast(`Backdate active — recording for ${label}`, 'info');
-  updateDashboard();
+function confirmBackdatePin() {
+  const pin = document.getElementById('bdpin-input')?.value;
+  const err = document.getElementById('bdpin-error');
+  if (!verifyPin(pin)) {
+    if (err) err.textContent = 'Incorrect PIN';
+    return;
+  }
+  document.getElementById('backdate-pin-modal')?.remove();
+  if (typeof window._backdatePinCallback === 'function') {
+    window._backdatePinCallback();
+    window._backdatePinCallback = null;
+  }
 }

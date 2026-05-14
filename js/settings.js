@@ -580,6 +580,19 @@ function applyDeviceIdentity() {
   if (cleanSel) cleanSel.style.display = (isMgmt && state.settings.cleaningEnabled) ? 'flex' : 'none';
 
   applyCleaningTabVisibility();
+
+  // Backdate rows — management only
+  const backdateIds = ['opening','closing','cleaning','equipment','goods-in','probe'];
+  backdateIds.forEach(id => {
+    const row = document.getElementById(id + '-backdate-row');
+    if (!row) return;
+    row.style.display = isMgmt ? 'flex' : 'none';
+    const input = document.getElementById(id + '-backdate-date');
+    if (input) {
+      input.value = typeof todayStr === 'function' ? todayStr() : new Date().toISOString().split('T')[0];
+      input.max   = new Date(Date.now() - 86400000).toISOString().split('T')[0]; // max = yesterday
+    }
+  });
 }
 
 // ── Cleaning tab visibility ───────────────────────────
