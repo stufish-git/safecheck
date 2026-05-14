@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.81.0';
+const APP_VERSION = '5.82.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -488,10 +488,6 @@ function submitChecklist(type) {
 
   // Use active dept for this form (management may have switched)
   const dept = getFormDept(type);
-
-  // Backdate duplicate check — block for single-submission types
-  const singleSubmitTypes = ['opening', 'closing', 'cleaning'];
-
 
   // For weekly review, use selected week; for backdated forms, read date input; else today
   const formDateInput = document.getElementById(type + '-backdate-date');
