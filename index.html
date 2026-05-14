@@ -84,7 +84,7 @@
         </div>
       <div id="opening-backdate-row" class="backdate-date-row" style="display:none">
         <span class="backdate-date-label">📅 Recording for</span><span class="backdate-date-badge">Backdated entry</span>
-        <input type="date" id="opening-backdate-date" name="opening-backdate-date" class="backdate-date-input" autocomplete="off" onchange="backdateChecklistDateChange('opening', this)"/>
+        <input type="date" id="opening-backdate-date" name="opening-backdate-date" class="backdate-date-input" autocomplete="off" onchange="onBackdateDateChange('opening', this)"/>
       </div>
         <div class="signed-by-group signed-by-top">
           <label class="notes-label">Signed off by</label>
@@ -123,7 +123,7 @@
 
       <div id="equipment-backdate-row" class="backdate-date-row" style="display:none">
         <span class="backdate-date-label">📅 Recording for</span><span class="backdate-date-badge">Backdated entry</span>
-        <input type="date" id="equipment-backdate-date" name="equipment-backdate-date" class="backdate-date-input" autocomplete="off"/>
+        <input type="date" id="equipment-backdate-date" name="equipment-backdate-date" class="backdate-date-input" autocomplete="off" onchange="onBackdateDateChange('equipment', this)"/>
       </div>
       <div class="temp-targets" style="margin:0 0 16px">
         <span class="target-chip">🧊 Fridge ≤5°C</span>
@@ -176,7 +176,7 @@
 
       <div id="goods-in-backdate-row" class="backdate-date-row" style="display:none">
         <span class="backdate-date-label">📅 Recording for</span><span class="backdate-date-badge">Backdated entry</span>
-        <input type="date" id="goods-in-backdate-date" name="goods-in-backdate-date" class="backdate-date-input" autocomplete="off"/>
+        <input type="date" id="goods-in-backdate-date" name="goods-in-backdate-date" class="backdate-date-input" autocomplete="off" onchange="onBackdateDateChange('goods-in', this)"/>
       </div>
       <!-- New delivery form -->
       <div id="gi-view-new">
@@ -280,7 +280,7 @@
       <div class="temp-entry-form">
       <div id="probe-backdate-row" class="backdate-date-row" style="display:none">
         <span class="backdate-date-label">📅 Recording for</span><span class="backdate-date-badge">Backdated entry</span>
-        <input type="date" id="probe-backdate-date" name="probe-backdate-date" class="backdate-date-input" autocomplete="off"/>
+        <input type="date" id="probe-backdate-date" name="probe-backdate-date" class="backdate-date-input" autocomplete="off" onchange="onBackdateDateChange('probe', this)"/>
       </div>
         <div class="signed-by-group signed-by-top">
           <label class="notes-label">Logged by</label>
@@ -363,7 +363,7 @@
         </div>
         <div id="cleaning-backdate-row" class="backdate-date-row" style="display:none">
         <span class="backdate-date-label">📅 Recording for</span><span class="backdate-date-badge">Backdated entry</span>
-        <input type="date" id="cleaning-backdate-date" name="cleaning-backdate-date" class="backdate-date-input" autocomplete="off"/>
+        <input type="date" id="cleaning-backdate-date" name="cleaning-backdate-date" class="backdate-date-input" autocomplete="off" onchange="onBackdateDateChange('cleaning', this)"/>
       </div>
         <div class="signed-by-group signed-by-top">
           <label class="notes-label">Signed off by</label>
@@ -401,7 +401,7 @@
         </div>
       <div id="closing-backdate-row" class="backdate-date-row" style="display:none">
         <span class="backdate-date-label">📅 Recording for</span><span class="backdate-date-badge">Backdated entry</span>
-        <input type="date" id="closing-backdate-date" name="closing-backdate-date" class="backdate-date-input" autocomplete="off" onchange="backdateChecklistDateChange('closing', this)"/>
+        <input type="date" id="closing-backdate-date" name="closing-backdate-date" class="backdate-date-input" autocomplete="off" onchange="onBackdateDateChange('closing', this)"/>
       </div>
         <div class="signed-by-group signed-by-top">
           <label class="notes-label">Signed off by</label>

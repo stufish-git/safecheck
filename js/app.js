@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.87.0';
+const APP_VERSION = '5.88.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -947,6 +947,7 @@ function submitAllEquipment() {
   const eqDateInput = document.getElementById('equipment-backdate-date');
   const wasBackdatedEq = eqDateInput?.value && eqDateInput.value !== todayStr();
   if (eqDateInput) eqDateInput.value = todayStr();
+  setBackdateVisual('equipment', false);
   showToast(`${submitted} equipment check${submitted!==1?'s':''} submitted${wasBackdatedEq?' (backdated)':''} ✓`, 'success');
   setTimeout(() => showTab('dashboard'), 1200);
   } // end _doSubmitEquipment
@@ -1058,6 +1059,7 @@ function logFoodProbe() {
 
     const probeDateInput = document.getElementById('probe-backdate-date');
     if (probeDateInput) probeDateInput.value = todayStr();
+    setBackdateVisual('probe', false);
 
     document.getElementById('probe-product').value       = '';
     document.getElementById('probe-temp').value          = '';
@@ -2048,6 +2050,7 @@ function submitGoodsIn() {
 
     const giDateInput = document.getElementById('goods-in-backdate-date');
     if (giDateInput) giDateInput.value = todayStr();
+    setBackdateVisual('goods-in', false);
     showToast(`Delivery logged ✓`, 'success');
 
   // Reset form
@@ -2123,10 +2126,24 @@ function updateGILogBadge() {
 // Lock the date field if today's record already submitted.
 
 function setBackdateVisual(type, active) {
-  const row      = document.getElementById(type + '-backdate-row');
-  const submitBtn = document.querySelector('#form-' + type + ' .btn-submit, #tab-' + type + ' .btn-submit');
+  const row = document.getElementById(type + '-backdate-row');
   if (row) row.classList.toggle('is-backdated', active);
+  // Submit button — search in both form and tab containers
+  const container = document.getElementById('form-' + type) || document.getElementById('tab-' + type);
+  const submitBtn = container?.querySelector('.btn-submit');
   if (submitBtn) submitBtn.classList.toggle('btn-submit-backdate', active);
+}
+
+// Generic onchange handler for all backdate date inputs
+// For opening/closing: delegates to the full backdateChecklistDateChange logic
+// For other tabs: just toggles the visual state
+function onBackdateDateChange(type, inputEl) {
+  if (type === 'opening' || type === 'closing') {
+    backdateChecklistDateChange(type, inputEl);
+    return;
+  }
+  const isBackdate = inputEl.value && inputEl.value !== todayStr();
+  setBackdateVisual(type, isBackdate);
 }
 
 function initChecklistBackdateRow(type, dept) {
@@ -2182,6 +2199,7 @@ function backdateChecklistDateChange(type, inputEl) {
     // Block — revert to today and show warning
     inputEl.value = today;
     formEl.dataset.backdateMode = '';
+    setBackdateVisual(type, false);
     const dateLabel = new Date(dateVal + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' });
     const warn = document.createElement('p');
     warn.id = type + '-backdate-warn';
