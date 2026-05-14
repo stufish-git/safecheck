@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.85.0';
+const APP_VERSION = '5.87.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -566,6 +566,7 @@ function submitChecklist(type) {
   // Reset date input to today
   const wasBackdated = submissionDate !== todayStr();
   if (formDateInput) formDateInput.value = todayStr();
+  setBackdateVisual(type, false);
 
   updateDashboard();
   showToast(`${labelFor(type)} submitted${wasBackdated ? ' (backdated)' : ''} ✓`, 'success');
@@ -2120,6 +2121,14 @@ function updateGILogBadge() {
 
 // Initialise backdate date row state when tab loads:
 // Lock the date field if today's record already submitted.
+
+function setBackdateVisual(type, active) {
+  const row      = document.getElementById(type + '-backdate-row');
+  const submitBtn = document.querySelector('#form-' + type + ' .btn-submit, #tab-' + type + ' .btn-submit');
+  if (row) row.classList.toggle('is-backdated', active);
+  if (submitBtn) submitBtn.classList.toggle('btn-submit-backdate', active);
+}
+
 function initChecklistBackdateRow(type, dept) {
   const inputEl = document.getElementById(type + '-backdate-date');
   if (!inputEl) return;
@@ -2138,6 +2147,7 @@ function initChecklistBackdateRow(type, dept) {
   inputEl.disabled = false;
   inputEl.title    = '';
   if (formEl) formEl.dataset.backdateMode = '';
+  setBackdateVisual(type, false);
 }
 
 // ── Backdate: opening/closing date field behaviour ────
@@ -2160,6 +2170,7 @@ function backdateChecklistDateChange(type, inputEl) {
   if (dateVal === today || !dateVal) {
     // Snap back to normal — restore today's draft
     formEl.dataset.backdateMode = '';
+    setBackdateVisual(type, false);
     restoreDraft(type, dept);
     updateChecklistProgress(type, dept);
     return;
@@ -2182,6 +2193,7 @@ function backdateChecklistDateChange(type, inputEl) {
 
   // Past date, no existing record — clear form, enter backdate mode
   formEl.dataset.backdateMode = dateVal;
+  setBackdateVisual(type, true);
   // Clear all checkboxes
   formEl.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; });
   // Clear signed-by and notes
