@@ -84,7 +84,7 @@
         </div>
       <div id="opening-backdate-row" class="backdate-date-row" style="display:none">
         <span class="backdate-date-label">📅 Recording for</span>
-        <input type="date" id="opening-backdate-date" name="opening-backdate-date" class="backdate-date-input"/>
+        <input type="date" id="opening-backdate-date" name="opening-backdate-date" class="backdate-date-input" onchange="backdateChecklistDateChange('opening', this)"/>
       </div>
         <div class="signed-by-group signed-by-top">
           <label class="notes-label">Signed off by</label>
@@ -401,7 +401,7 @@
         </div>
       <div id="closing-backdate-row" class="backdate-date-row" style="display:none">
         <span class="backdate-date-label">📅 Recording for</span>
-        <input type="date" id="closing-backdate-date" name="closing-backdate-date" class="backdate-date-input"/>
+        <input type="date" id="closing-backdate-date" name="closing-backdate-date" class="backdate-date-input" onchange="backdateChecklistDateChange('closing', this)"/>
       </div>
         <div class="signed-by-group signed-by-top">
           <label class="notes-label">Signed off by</label>

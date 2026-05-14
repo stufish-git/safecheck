@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.82.0';
+const APP_VERSION = '5.84.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -371,9 +371,16 @@ function showTab(tabId) {
   // Restore draft tick state when opening a checklist tab + pull latest from Sheets
   if (['opening','closing','cleaning'].includes(tabId)) {
     const dept = getFormDept(tabId);
+
+    // Lock or unlock date input based on whether today's record already exists
+    if (['opening','closing'].includes(tabId)) {
+      initChecklistBackdateRow(tabId, dept);
+    }
+
     restoreDraft(tabId, dept);
     updateChecklistProgress(tabId, dept);
     if (state.config.sheetsUrl) pullAllRecords(true).then(() => {
+      if (['opening','closing'].includes(tabId)) initChecklistBackdateRow(tabId, dept);
       restoreDraft(tabId, dept);
       updateChecklistProgress(tabId, dept);
     });
@@ -1763,6 +1770,8 @@ function mergeDrafts(local, remote) {
 
 // Called when user ticks/unticks a box — saves locally and pushes to Sheets
 function onCheckboxChange(type, dept, checkId, checked) {
+  const formEl = document.getElementById('form-' + type);
+  if (formEl?.dataset.backdateMode) return; // backdate mode — no draft saving
   const draft = loadDraft(type, dept);
   if (checked) draft[checkId] = true;
   else delete draft[checkId];   // unticking removes it — allows correction before submit
@@ -1773,9 +1782,11 @@ function onCheckboxChange(type, dept, checkId, checked) {
 
 // Restore draft ticks into the form after rebuild
 function restoreDraft(type, dept) {
-  const draft  = loadDraft(type, dept);
   const formEl = document.getElementById('form-' + type);
-  if (!formEl || !Object.keys(draft).length) return;
+  if (!formEl) return;
+  if (formEl.dataset.backdateMode) return; // backdate mode — never restore today's draft
+  const draft  = loadDraft(type, dept);
+  if (!Object.keys(draft).length) return;
   formEl.querySelectorAll('input[type="checkbox"]').forEach(cb => {
     if (draft[cb.dataset.key] === true) cb.checked = true;
   });
@@ -2095,6 +2106,79 @@ function updateGILogBadge() {
   badge.style.display = count > 0 ? 'inline' : 'none';
 }
 
+
+// Initialise backdate date row state when tab loads:
+// Lock the date field if today's record already submitted.
+function initChecklistBackdateRow(type, dept) {
+  const inputEl = document.getElementById(type + '-backdate-date');
+  if (!inputEl) return;
+
+  const today  = todayStr();
+  const formEl = document.getElementById('form-' + type);
+
+  // Remove any stale warning
+  const existingWarn = document.getElementById(type + '-backdate-warn');
+  if (existingWarn) existingWarn.remove();
+
+  // Always unlock — date field is never locked by today's submission.
+  // The duplicate check in backdateChecklistDateChange and submitChecklist
+  // handles blocking if the selected date already has a record.
+  inputEl.value    = today;
+  inputEl.disabled = false;
+  inputEl.title    = '';
+  if (formEl) formEl.dataset.backdateMode = '';
+}
+
+// ── Backdate: opening/closing date field behaviour ────
+// Called onchange of the date input on opening and closing forms.
+// Rules:
+//   1. If date == today: restore normal draft behaviour, re-restore ticks.
+//   2. If date != today AND record already exists: warn inline, revert to today.
+//   3. If date != today AND no record exists: clear all ticks, suppress draft restore.
+function backdateChecklistDateChange(type, inputEl) {
+  const dept    = getFormDept(type);
+  const dateVal = inputEl.value;
+  const today   = todayStr();
+  const formEl  = document.getElementById('form-' + type);
+  if (!formEl) return;
+
+  // Remove any previous inline warning
+  const existingWarn = document.getElementById(type + '-backdate-warn');
+  if (existingWarn) existingWarn.remove();
+
+  if (dateVal === today || !dateVal) {
+    // Snap back to normal — restore today's draft
+    formEl.dataset.backdateMode = '';
+    restoreDraft(type, dept);
+    updateChecklistProgress(type, dept);
+    return;
+  }
+
+  // Past date selected — check for existing record
+  const exists = state.records.some(r => r.type === type && r.dept === dept && r.date === dateVal);
+  if (exists) {
+    // Block — revert to today and show warning
+    inputEl.value = today;
+    formEl.dataset.backdateMode = '';
+    const dateLabel = new Date(dateVal + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' });
+    const warn = document.createElement('p');
+    warn.id = type + '-backdate-warn';
+    warn.style.cssText = 'color:var(--danger);font-size:12px;margin:0 16px 8px;font-weight:600';
+    warn.textContent = `⚠ ${labelFor(type)} already recorded for ${dateLabel} — cannot be changed.`;
+    inputEl.closest('.backdate-date-row')?.after(warn);
+    return;
+  }
+
+  // Past date, no existing record — clear form, enter backdate mode
+  formEl.dataset.backdateMode = dateVal;
+  // Clear all checkboxes
+  formEl.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+  // Clear signed-by and notes
+  formEl.querySelector('.signed-by-select').value = '';
+  const notesEl = formEl.querySelector('.notes-field');
+  if (notesEl) notesEl.value = '';
+  updateChecklistProgress(type, dept);
+}
 // ── Quick Note (Ad-hoc Log) ───────────────────────────
 function getNotesTileData(dept, today) {
   const notes = state.records.filter(r => r.type === 'quick_note' && r.dept === dept && r.date === today);
