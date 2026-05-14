@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.78.0';
+const APP_VERSION = '5.80.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -43,6 +43,7 @@ const state = {
   weeklyRating: '',
   tabDept:      {},   // active dept per tab for management
   equipChecks:  {},   // current equipment check UI state
+  backdateDate: null,  // null = today; set = management backdate mode active
 };
 
 // ── Init ──────────────────────────────────────────────
@@ -173,6 +174,7 @@ async function confirmWipeData() {
 
 // ── Date helpers ──────────────────────────────────────
 function todayStr()     { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function recordDate()    { return state.backdateDate || todayStr(); }  // use active backdate if set, else today
 
 // ── Trading calendar ──────────────────────────────────
 // Returns true if a given dept is expected to trade on dateStr (YYYY-MM-DD).
@@ -489,10 +491,21 @@ function submitChecklist(type) {
   // Use active dept for this form (management may have switched)
   const dept = getFormDept(type);
 
+  // Backdate duplicate check — block for single-submission types
+  const singleSubmitTypes = ['opening', 'closing', 'cleaning'];
+  if (state.backdateDate && singleSubmitTypes.includes(type)) {
+    const exists = state.records.some(r => r.type === type && r.dept === dept && r.date === state.backdateDate);
+    if (exists) {
+      const dateLabel = new Date(state.backdateDate + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' });
+      showToast(`${labelFor(type)} already recorded for ${dateLabel}`, 'error');
+      return;
+    }
+  }
+
   // For weekly review, file the record under the selected week's start date
   const recordDate = (type === 'weekly' && getSelectedWeekStart())
     ? getSelectedWeekStart()
-    : todayStr();
+    : recordDate();
 
   const record = {
     id:        crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
@@ -518,6 +531,13 @@ function submitChecklist(type) {
   }
 
   record.summary = `${checked}/${total} checks passed · Signed: ${signed}`;
+
+  // Backdate audit trail
+  if (state.backdateDate) {
+    record.fields._backdated    = 'true';
+    record.fields._backdated_by = signed;
+  }
+
   state.records.push(record);
   saveState();
   syncRecordToSheets(record);
@@ -537,8 +557,12 @@ function submitChecklist(type) {
   // Clear draft — checks are now formally submitted
   clearDraft(type, dept);
 
+  // Auto-clear backdate after submission
+  const wasBackdated = !!state.backdateDate;
+  state.backdateDate = null;
+
   updateDashboard();
-  showToast(`${labelFor(type)} submitted ✓`, 'success');
+  showToast(`${labelFor(type)} submitted${wasBackdated ? ' (backdated)' : ''} ✓`, 'success');
   setTimeout(() => showTab('dashboard'), 1200);
 }
 
@@ -845,7 +869,7 @@ function submitAllEquipment() {
       id:        crypto.randomUUID ? crypto.randomUUID() : `eq_${Date.now()}_${submitted}`,
       type:      'temperature',
       dept,
-      date:      todayStr(),
+      date:      recordDate(),
       timestamp: nowTimestamp(),
       iso:       nowISO(),
       fields: {
@@ -859,6 +883,10 @@ function submitAllEquipment() {
       },
       summary: `${equip.name}: ${tempVal ? tempVal+'°C ' : ''}${status} · ${staff}`,
     };
+    if (state.backdateDate) {
+      record.fields._backdated    = 'true';
+      record.fields._backdated_by = staff;
+    }
     state.records.push(record);
     tempRecords.push(record);
     submitted++;
@@ -889,7 +917,9 @@ function submitAllEquipment() {
   renderEquipmentLog(dept);
   updateEquipDayStatus();
   updateDashboard();
-  showToast(`${submitted} equipment check${submitted!==1?'s':''} submitted ✓`, 'success');
+  const wasBackdatedEq = !!state.backdateDate;
+  state.backdateDate = null;
+  showToast(`${submitted} equipment check${submitted!==1?'s':''} submitted${wasBackdatedEq?' (backdated)':''} ✓`, 'success');
   setTimeout(() => showTab('dashboard'), 1200);
 }
 
@@ -964,7 +994,7 @@ function logFoodProbe() {
     id:        crypto.randomUUID ? crypto.randomUUID() : 'fp_' + Date.now(),
     type:      'food_probe',
     dept:      'kitchen',
-    date:      todayStr(),
+    date:      recordDate(),
     timestamp: nowTimestamp(),
     iso:       nowISO(),
     fields: {
@@ -979,6 +1009,10 @@ function logFoodProbe() {
     summary: `${product}: ${temp}°C (${status})${cooling ? ' · ❄️ ' + cooling : ''} · ${staff}`,
   };
 
+  if (state.backdateDate) {
+    record.fields._backdated    = 'true';
+    record.fields._backdated_by = staff;
+  }
   state.records.push(record);
   saveState();
   syncRecordToSheets(record);
@@ -994,6 +1028,7 @@ function logFoodProbe() {
   renderFoodProbeLog();
   updateFoodProbeDayStatus();
   updateDashboard();
+  state.backdateDate = null;
   showToast(passed ? `${product}: ${temp}°C ✓ PASS` : `${product}: ${temp}°C ⚠ FAIL — below 75°C`, passed ? 'success' : 'error');
   setTimeout(() => showTab('dashboard'), 1200);
 }
@@ -1143,7 +1178,11 @@ function renderManagerDashboard() {
   // Kitchen and FOH only — weekly review moved to full-width panel below
   const depts = Object.entries(DEPARTMENTS).filter(([id]) => id !== 'mgmt');
 
-  grid.innerHTML = depts.map(([deptId, deptInfo]) => {
+  const backdateRow = `<div class="mgr-backdate-row">
+    <button class="btn-backdate" onclick="showBackdateModal()">📅 Enter past record</button>
+  </div>`;
+
+  grid.innerHTML = backdateRow + depts.map(([deptId, deptInfo]) => {
     const deptRecords = state.records.filter(r => r.date===today && r.dept===deptId);
 
     const sections = [
@@ -1529,7 +1568,12 @@ function renderDashAlerts() {
   const breaches = dr.filter(r=>r.type==='temperature'&&r.fields?.temp_status==='FAIL');
   if (breaches.length) alerts.push(`⚠ ${breaches.length} temperature breach${breaches.length>1?'es':''} today`);
 
-  el.innerHTML = alerts.map(a=>`<div class="dash-alert">${a}</div>`).join('');
+  // Backdate banner — shown when backdate mode is active
+  const backdateBanner = state.backdateDate
+    ? `<div class="dash-alert dash-alert-backdate">📅 Backdate mode active — recording for ${new Date(state.backdateDate + 'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})} &nbsp;<button class="backdate-cancel-btn" onclick="state.backdateDate=null;updateDashboard()">✕ Cancel</button></div>`
+    : '';
+
+  el.innerHTML = backdateBanner + alerts.map(a=>`<div class="dash-alert">${a}</div>`).join('');
 }
 
 function updateLastRefreshed() {
@@ -1941,17 +1985,22 @@ function submitGoodsIn() {
     id:        crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
     type:      'goods_in',
     dept:      'kitchen',
-    date:      todayStr(),
+    date:      recordDate(),
     timestamp: nowTimestamp(),
     iso:       nowISO(),
     fields,
     summary,
   };
 
+  if (state.backdateDate) {
+    record.fields._backdated    = 'true';
+    record.fields._backdated_by = record.fields.gi_signed_by || '';
+  }
   state.records.push(record);
   saveState();
   syncRecordToSheets(record);
 
+  state.backdateDate = null;
   showToast(`Delivery logged ✓`, 'success');
 
   // Reset form
@@ -2105,7 +2154,7 @@ function logQuickNote() {
     id:        crypto.randomUUID ? crypto.randomUUID() : 'qn_' + Date.now(),
     type:      'quick_note',
     dept:      dept,
-    date:      todayStr(),
+    date:      recordDate(),
     timestamp: nowTimestamp(),
     iso:       nowISO(),
     fields: {
@@ -2120,6 +2169,58 @@ function logQuickNote() {
   syncRecordToSheets(record);
 
   document.getElementById('add-note-modal')?.remove();
+  state.backdateDate = null;
   showToast('Note saved', 'success');
+  updateDashboard();
+}
+
+// ── Backdate Mode ─────────────────────────────────────
+function showBackdateModal() {
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  const yStr = yesterday.getFullYear() + '-' + String(yesterday.getMonth()+1).padStart(2,'0') + '-' + String(yesterday.getDate()).padStart(2,'0');
+  // Max date is yesterday — cannot backdate to today (use normal flow)
+  const todayVal = todayStr();
+
+  const el = document.createElement('div');
+  el.id = 'backdate-modal';
+  el.className = 'modal-overlay';
+  el.innerHTML = `<div class="modal-box" style="max-width:360px">
+    <h2 class="modal-title">📅 Enter Past Record</h2>
+    <p class="modal-desc">Select the date you want to record for. You will then complete the relevant form as normal.</p>
+    <div class="modal-field">
+      <label for="backdate-date-input">Date</label>
+      <input type="date" id="backdate-date-input" name="backdate-date-input" class="text-field"
+        value="${yStr}" max="${ new Date(new Date() - 86400000).toISOString().split('T')[0] }"
+        style="font-size:16px"/>
+    </div>
+    <div class="modal-field">
+      <label for="backdate-pin-input">Manager PIN</label>
+      <input type="password" id="backdate-pin-input" name="backdate-pin-input" class="text-field"
+        maxlength="6" inputmode="numeric" placeholder="Enter PIN"/>
+    </div>
+    <p id="backdate-pin-error" style="color:var(--danger);font-size:12px;min-height:18px"></p>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="document.getElementById('backdate-modal').remove()">Cancel</button>
+      <button class="btn-submit" onclick="confirmBackdate()">Activate</button>
+    </div>
+  </div>`;
+  document.body.appendChild(el);
+  setTimeout(() => document.getElementById('backdate-pin-input')?.focus(), 100);
+}
+
+function confirmBackdate() {
+  const pin     = document.getElementById('backdate-pin-input')?.value;
+  const dateVal = document.getElementById('backdate-date-input')?.value;
+  const err     = document.getElementById('backdate-pin-error');
+
+  if (!dateVal) { if (err) err.textContent = 'Select a date'; return; }
+  if (dateVal >= todayStr()) { if (err) err.textContent = 'Date must be before today'; return; }
+  if (!verifyPin(pin)) { if (err) err.textContent = 'Incorrect PIN'; return; }
+
+  state.backdateDate = dateVal;
+  document.getElementById('backdate-modal')?.remove();
+
+  const label = new Date(dateVal + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long' });
+  showToast(`Backdate active — recording for ${label}`, 'info');
   updateDashboard();
 }

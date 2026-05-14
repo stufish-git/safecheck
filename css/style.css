@@ -242,6 +242,44 @@ body {
 .progress-label { font-family: var(--mono); font-size: 10px; color: var(--text-muted); margin-top: 2px; }
 .dash-card-status { font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
 .dash-card-status.complete { color: var(--success); }
+.mgr-backdate-row {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 4px;
+}
+.btn-backdate {
+  padding: 7px 14px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.btn-backdate:hover { border-color: var(--text-dim); color: var(--text); }
+.dash-alert-backdate {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #92400e;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.backdate-cancel-btn {
+  background: none;
+  border: 1px solid #f59e0b;
+  border-radius: 6px;
+  color: #92400e;
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.backdate-cancel-btn:hover { background: #f59e0b22; }
+
 .dash-card-add-note { border-style: dashed; opacity: 0.65; }
 .dash-card-add-note:hover { opacity: 1; }
 .dash-card-add-note.has-notes { border-style: solid; opacity: 1; }

@@ -335,6 +335,14 @@ function parseSheetRow(row, type) {
       };
     }
 
+    // Fallback for quick_note (no Fields JSON — use named columns)
+    if (!Object.keys(fields).length && type === 'quick_note') {
+      fields = {
+        note_staff: row['Staff'] || '',
+        note_text:  row['Note']  || '',
+      };
+    }
+
     // Fallback for task_completion (no Fields JSON column — use named columns)
     if (type === 'task_completion') {
       fields = {
