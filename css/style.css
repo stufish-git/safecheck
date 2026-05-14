@@ -272,6 +272,11 @@ body {
   outline: none;
   border-color: #ef4444;
 }
+.backdate-date-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: #fef2f2;
+}
 
 .dash-card-add-note { border-style: dashed; opacity: 0.65; }
 .dash-card-add-note:hover { opacity: 1; }
