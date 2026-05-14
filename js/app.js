@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.88.0';
+const APP_VERSION = '5.89.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -367,6 +367,14 @@ function showTab(tabId) {
     if (state.config.sheetsUrl) pullAllRecords(true).then(renderTasksTab);
   }
   if (tabId === 'closing') renderUndoneTasksSection();
+
+  // Reset backdate date inputs to today on any tab switch (except opening/closing which have their own init)
+  const backdateTabs = ['equipment', 'probe', 'goods-in', 'cleaning'];
+  if (backdateTabs.includes(tabId)) {
+    const inputEl = document.getElementById(tabId + '-backdate-date');
+    if (inputEl) { inputEl.value = todayStr(); }
+    setBackdateVisual(tabId, false);
+  }
 
   // Restore draft tick state when opening a checklist tab + pull latest from Sheets
   if (['opening','closing','cleaning'].includes(tabId)) {
