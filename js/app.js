@@ -3,7 +3,7 @@
 //  Equipment Checks · Food Probe · Dept-aware management
 // ═══════════════════════════════════════════════════════
 
-const APP_VERSION = '5.89.0';
+const APP_VERSION = '5.93.0';
 const STORAGE_KEY = 'safechecks_records';
 const CONFIG_KEY  = 'safechecks_config';
 
@@ -436,6 +436,8 @@ function showTab(tabId) {
   }
   if (tabId === 'goods-in') {
     initGoodsInTab();
+    renderGoodsInLog();
+    updateGILogBadge();
     if (state.config.sheetsUrl) pullAllRecords(true).then(() => { renderGoodsInLog(); updateGILogBadge(); });
   }
 }
@@ -1927,13 +1929,7 @@ function initGoodsInTab() {
   updateGILogBadge();
 }
 
-function showGoodsInView(view) {
-  document.getElementById('gi-view-new').style.display = view === 'new' ? '' : 'none';
-  document.getElementById('gi-view-log').style.display = view === 'log' ? '' : 'none';
-  document.getElementById('gi-vt-new').classList.toggle('active', view === 'new');
-  document.getElementById('gi-vt-log').classList.toggle('active', view === 'log');
-  if (view === 'log') renderGoodsInLog();
-}
+// showGoodsInView removed — log now always visible below form
 
 function setGIType(type) {
   giType = type;
@@ -2071,8 +2067,8 @@ function submitGoodsIn() {
   document.getElementById('gi-temp-hint').className = 'gi-temp-hint';
   setGIOutcome('accepted');
 
+  renderGoodsInLog();
   updateGILogBadge();
-  showGoodsInView('log');
   setTimeout(() => showTab('dashboard'), 1200);
   } // end _doSubmitGoodsIn
 
@@ -2318,7 +2314,7 @@ function logQuickNote() {
     id:        crypto.randomUUID ? crypto.randomUUID() : 'qn_' + Date.now(),
     type:      'quick_note',
     dept:      dept,
-    date:      recordDate(),
+    date:      todayStr(),
     timestamp: nowTimestamp(),
     iso:       nowISO(),
     fields: {
@@ -2333,50 +2329,13 @@ function logQuickNote() {
   syncRecordToSheets(record);
 
   document.getElementById('add-note-modal')?.remove();
-  state.backdateDate = null;
   showToast('Note saved', 'success');
   updateDashboard();
 }
 
 // ── Backdate PIN Gate ─────────────────────────────────
-// Call before proceeding with any backdated submission.
-// Shows a PIN modal; calls onConfirm() if PIN is correct.
+// Reuses the standard showPinModal with backdate-specific title/subtitle.
 function requireBackdatePin(dateStr, onConfirm) {
   const dateLabel = new Date(dateStr + 'T12:00:00').toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long' });
-  const el = document.createElement('div');
-  el.id = 'backdate-pin-modal';
-  el.className = 'modal-overlay';
-  el.innerHTML = `<div class="modal-box" style="max-width:340px">
-    <h2 class="modal-title">📅 Backdated Entry</h2>
-    <p class="modal-desc">You are recording for <strong>${dateLabel}</strong>. Enter your manager PIN to confirm.</p>
-    <div class="modal-field">
-      <label for="bdpin-input">Manager PIN</label>
-      <input type="password" id="bdpin-input" name="bdpin-input" class="text-field"
-        maxlength="6" inputmode="numeric" placeholder="Enter PIN"/>
-    </div>
-    <p id="bdpin-error" style="color:var(--danger);font-size:12px;min-height:18px"></p>
-    <div class="modal-actions">
-      <button class="btn-cancel" onclick="document.getElementById('backdate-pin-modal').remove()">Cancel</button>
-      <button class="btn-submit" onclick="confirmBackdatePin()">Confirm</button>
-    </div>
-  </div>`;
-  document.body.appendChild(el);
-
-  // Store callback for confirmBackdatePin to call
-  window._backdatePinCallback = onConfirm;
-  setTimeout(() => document.getElementById('bdpin-input')?.focus(), 100);
-}
-
-function confirmBackdatePin() {
-  const pin = document.getElementById('bdpin-input')?.value;
-  const err = document.getElementById('bdpin-error');
-  if (!verifyPin(pin)) {
-    if (err) err.textContent = 'Incorrect PIN';
-    return;
-  }
-  document.getElementById('backdate-pin-modal')?.remove();
-  if (typeof window._backdatePinCallback === 'function') {
-    window._backdatePinCallback();
-    window._backdatePinCallback = null;
-  }
+  showPinModal(onConfirm, '📅 Backdated Entry', `Recording for ${dateLabel} — enter your PIN to confirm`);
 }

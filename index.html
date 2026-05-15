@@ -169,11 +169,6 @@
         <p class="section-subtitle">Log deliveries and record temperatures</p>
       </div>
 
-      <div class="gi-view-toggle">
-        <button class="gi-vt-btn active" id="gi-vt-new" onclick="showGoodsInView('new')">+ New Delivery</button>
-        <button class="gi-vt-btn" id="gi-vt-log" onclick="showGoodsInView('log')">Today's Log <span id="gi-log-count" class="gi-count-badge"></span></button>
-      </div>
-
       <div id="goods-in-backdate-row" class="backdate-date-row" style="display:none">
         <span class="backdate-date-label">📅 Recording for</span><span class="backdate-date-badge">Backdated entry</span>
         <input type="date" id="goods-in-backdate-date" name="goods-in-backdate-date" class="backdate-date-input" autocomplete="off" onchange="onBackdateDateChange('goods-in', this)"/>
@@ -262,8 +257,9 @@
 
       </div>
 
-      <!-- Today's log -->
-      <div id="gi-view-log" style="display:none">
+      <!-- Today's log — always visible below form -->
+      <div class="temp-log-display" style="margin-top:24px">
+        <h3 class="group-title">Today's Deliveries <span id="gi-log-count" class="gi-count-badge" style="margin-left:6px"></span></h3>
         <div id="gi-log-list"></div>
       </div>
 

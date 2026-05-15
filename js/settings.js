@@ -633,15 +633,17 @@ function showSettingsTab() {
   });
 }
 
-function showPinModal(onSuccess) {
+function showPinModal(onSuccess, title, subtitle) {
   document.getElementById('pin-modal')?.remove();
+  const modalTitle    = title    || 'Manager Settings';
+  const modalSubtitle = subtitle || 'Enter your PIN to access settings';
   const el = document.createElement('div');
   el.id = 'pin-modal'; el.className = 'modal-overlay';
   el.innerHTML = `
     <div class="modal-box" style="max-width:340px;text-align:center">
       <div style="font-size:32px;margin-bottom:12px">🔒</div>
-      <h2 class="modal-title">Manager Settings</h2>
-      <p class="modal-desc" style="margin-bottom:20px">Enter your PIN to access settings</p>
+      <h2 class="modal-title">${modalTitle}</h2>
+      <p class="modal-desc" style="margin-bottom:20px">${modalSubtitle}</p>
       <div style="display:flex;gap:10px;justify-content:center;margin-bottom:20px" id="pin-dots">
         <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
       </div>
